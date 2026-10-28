@@ -1,0 +1,73 @@
+{
+  "format": "DHP1. + base64url without padding of: 0x01, url length, url, grant id (8), code (10), CA fingerprint (32 bytes), check (first 4 bytes of SHA-256 of everything before it)",
+  "ca_fingerprint_source": "SHA-256 of the bytes 'deskhub pairing test vector CA' (a test value, not a real certificate)",
+  "valid": [
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQ",
+      "url": "https://10.10.10.5:8765",
+      "grant_id": "ABCD2345",
+      "code": "KM7QWXYZ09",
+      "ca_fingerprint_hex": "1281f490f16c47205c96c19fbd4a74f1ab0b48078e85968ba6dde86a6123b5d7"
+    },
+    {
+      "package": "DHP1.ARZodHRwczovL2Rlc2stbWFjLmxvY2FsMFo5WThYN1dBQkNERUZHSEpLEoH0kPFsRyBclsGfvUp08asLSAeOhZaLpt3oamEjtdfG4SnW",
+      "url": "https://desk-mac.local",
+      "grant_id": "0Z9Y8X7W",
+      "code": "ABCDEFGHJK",
+      "ca_fingerprint_hex": "1281f490f16c47205c96c19fbd4a74f1ab0b48078e85968ba6dde86a6123b5d7"
+    },
+    {
+      "package": "DHP1.ARZodHRwczovL1tmZDAwOjo1XTo4NzY1MjM0NTY3ODlQUVJTVFZXWFlaEoH0kPFsRyBclsGfvUp08asLSAeOhZaLpt3oamEjtdcRI_aB",
+      "url": "https://[fd00::5]:8765",
+      "grant_id": "23456789",
+      "code": "PQRSTVWXYZ",
+      "ca_fingerprint_hex": "1281f490f16c47205c96c19fbd4a74f1ab0b48078e85968ba6dde86a6123b5d7"
+    }
+  ],
+  "invalid": [
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhm",
+      "why": "truncated"
+    },
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQA",
+      "why": "extra character"
+    },
+    {
+      "package": "DHP2.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQ",
+      "why": "wrong prefix"
+    },
+    {
+      "package": "ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQ",
+      "why": "no prefix"
+    },
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLAU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQ",
+      "why": "one character changed, the check fails"
+    },
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmR",
+      "why": "spare bits of the last character are not zero"
+    },
+    {
+      "package": "DHP1.ARdodHRwczovLzE wLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXfvRhmQ",
+      "why": "white space inside"
+    },
+    {
+      "package": "DHP1.ARZodHRwOi8vMTAuMTAuMTAuNTo4NzY1QUJDRDIzNDVLTTdRV1hZWjA5EoH0kPFsRyBclsGfvUp08asLSAeOhZaLpt3oamEjtdfjB3fB",
+      "why": "http is not accepted"
+    },
+    {
+      "package": "DHP1.ARtodHRwczovLzEwLjEwLjEwLjU6ODc2NS9hcGlBQkNEMjM0NUtNN1FXWFlaMDkSgfSQ8WxHIFyWwZ-9SnTxqwtIB46Floum3ehqYSO119LH_Wk",
+      "why": "a path is not accepted"
+    },
+    {
+      "package": "DHP1.AhdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzQ1S003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXSwlnuQ",
+      "why": "unknown version"
+    },
+    {
+      "package": "DHP1.ARdodHRwczovLzEwLjEwLjEwLjU6ODc2NUFCQ0QyMzRJS003UVdYWVowORKB9JDxbEcgXJbBn71KdPGrC0gHjoWWi6bd6GphI7XXV-TPgQ",
+      "why": "I is not in the alphabet"
+    }
+  ]
+}

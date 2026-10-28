@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
@@ -85,6 +87,20 @@ class DisplayConfig(BaseModel):
     return_path_verified: bool = False
 
 
+_PUBLIC_URL = re.compile(r"https://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,98}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]{2,45}\])(?::([0-9]{1,5}))?\Z")
+
+
+def valid_public_url(value) -> bool:
+    """An https origin a device can connect to: host and optional port, nothing else."""
+    if not isinstance(value, str) or len(value) > 120:
+        return False
+    match = _PUBLIC_URL.fullmatch(value)
+    if not match:
+        return False
+    port = match.group(1)
+    return port is None or 1 <= int(port) <= 65535
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal[1] = 1
@@ -98,6 +114,9 @@ class Settings(BaseModel):
     tls_cert: str | None = None
     tls_key: str | None = None
     firmware_public_key: str | None = None
+    # Hotspot pairing (docs/pairing-design.md): the CA certificate that devices pin, and the address devices connect to.
+    pairing_ca: str | None = None
+    public_url: str | None = None
     allowed_networks: list[str] = Field(default_factory=lambda: ["127.0.0.0/8", "::1/128"], max_length=16)
     backend: Literal["disabled", "betterdisplay"] = "disabled"
     backend_path: str | None = None
@@ -105,6 +124,13 @@ class Settings(BaseModel):
     displays: list[DisplayConfig] = Field(default_factory=list, max_length=4)
     actions: list[ActionConfig] = Field(default_factory=list, max_length=12)
     retention_hours: int = Field(default=24, ge=24, le=720)
+
+    @field_validator("public_url")
+    @classmethod
+    def check_public_url(cls, value):
+        if value is not None and not valid_public_url(value):
+            raise ValueError("public_url must be https://host or https://host:port, nothing else")
+        return value
 
     @model_validator(mode="after")
     def validate_graph(self) -> Settings:

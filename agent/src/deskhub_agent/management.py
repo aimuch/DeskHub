@@ -453,6 +453,9 @@ def install_management(app, settings, database, identity, rates):
         path = management.image(device, package_id)
         return FileResponse(path, media_type="application/octet-stream", filename="app.bin")
 
+    from .pairing import install_pairing  # imported here: pairing imports management_models, and this file imports the admin dependency
+    install_pairing(app, settings, database, rates, admin)
+
     # Only this checked-in package directory is served; no user-configured path.
     directory = Path(__file__).with_name("web")
     if directory.is_dir():

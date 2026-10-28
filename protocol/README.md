@@ -24,3 +24,7 @@ USB 证书最多 8 KiB，SSID 最多 32 UTF-8 字节，Wi-Fi 密码为空或 8�
 `device-report` 的 `power` 对象：`vbus`、`battery`、`charging`、`fault` 沿用旧含义。固件 0.3.0 起另有 `soc_percent`（电源芯片自己的电量估算，未对照电芯验证）、`battery_mv`、`vbus_mv`、`chip_temp_c`（电源芯片的温度，不是电池温度）和 `measurement`（`ok`、`adc_enable_failed`、`adc_read_failed`、`adc_out_of_range`、`not_measured`）。旧固件不带这些字段，Agent 按“未测量”处理。
 
 数值必须在合理范围内（电池 2500–4600 mV，USB 3000–6500 mV，芯片温度 −40 到 150 °C，电量 0–100），超出范围的整份上报被拒绝，Agent 不截断、不保存。测量失败时不能带电压和温度；没有电池时不能带电量和电池电压；没有 USB 时不能带 USB 电压。管理接口的设备记录另有 `power_state`（`unreported`、`fresh`、`stale`）和 `power_reported_at`：只有设备在线（最近 30 秒有上报）时才是 `fresh`；`stale` 时数值全部为空，只保留最后一次上报的时间。
+
+热点配网的 Agent 接口见 `docs/pairing-design.md`。管理员接口（需要管理员会话、CSRF 和同源）：`POST /api/v1/admin/pairing-grants` 生成授权，响应里的 `package` 只出现这一次；`GET` 列出授权的状态和剩余尝试次数，不含任何秘密；`DELETE /api/v1/admin/pairing-grants/{grant_id}` 取消。设备接口 `POST /api/v1/pairing/redeem` 不需要凭据，只接受 HTTPS：请求带 `grant_id`、`code`、`device_id`，成功返回 `agent_id`、`token`、`ca_pem`、`scopes`、`targets`。授权编号不存在、授权码错、过期、已用、已取消、已烧毁、设备编号与授权指定的不符，都返回同一个 403 `PAIRING_REJECTED`。同一来源每分钟最多 10 次，全部来源每分钟最多 30 次；限流器自己出错时返回 503，不放行。
+
+配对包 `DHP1.…` 的格式和测试向量在 `examples/pairing-package.json`，Agent 的解码器和设备的实现都要通过它们。Agent 配置新增 `public_url`（设备连 Agent 的 `https://主机[:端口]`）和 `pairing_ca`（CA 证书文件，只含公开证书）；缺任一项，生成授权返回 409。

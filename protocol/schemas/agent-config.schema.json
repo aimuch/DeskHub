@@ -239,12 +239,36 @@
       "title": "Name",
       "type": "string"
     },
+    "pairing_ca": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pairing Ca"
+    },
     "port": {
       "default": 8765,
       "maximum": 65535,
       "minimum": 1,
       "title": "Port",
       "type": "integer"
+    },
+    "public_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Public Url"
     },
     "retention_hours": {
       "default": 24,

@@ -177,7 +177,19 @@ def validate_examples() -> int:
     DeviceConfiguration.model_validate_json((ROOT / "protocol/examples/device-configuration.json").read_text())
     DeviceReport.model_validate_json((ROOT / "protocol/examples/device-report.json").read_text())
     DeviceReport.model_validate_json((ROOT / "protocol/examples/device-report-power.json").read_text())
-    return len(examples) + 5
+    # The pairing package vectors are shared with the device implementation: the Agent's decoder must agree with them.
+    from deskhub_agent.pairing import decode_package
+    vectors = json.loads((ROOT / "protocol/examples/pairing-package.json").read_text())
+    for item in vectors["valid"]:
+        decoded = decode_package(item["package"])
+        assert (decoded["url"], decoded["grant_id"], decoded["code"], decoded["fingerprint"].hex()) == (item["url"], item["grant_id"], item["code"], item["ca_fingerprint_hex"])
+    for item in vectors["invalid"]:
+        try:
+            decode_package(item["package"])
+        except ValueError:
+            continue
+        raise AssertionError("an invalid pairing package was accepted: " + item["why"])
+    return len(examples) + 6
 
 
 def main(argv=None) -> int:

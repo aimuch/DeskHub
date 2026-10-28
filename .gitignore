@@ -20,6 +20,7 @@ scripts/ui_preview/build/
 *credentials*.json
 *pairing*.json
 !protocol/samples/*
+!protocol/examples/pairing-package.json
 *.log
 dist/
 build/

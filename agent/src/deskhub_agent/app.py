@@ -241,5 +241,6 @@ def create_app(settings: Settings, *, backend: Backend | None = None, store: Sto
     async def command(command_id: str, value=Depends(identity)):
         return database.query(value, command_id=command_id)
 
+    app.state.rates = rates
     install_management(app, settings, database, identity, rates)
     return app
