@@ -47,6 +47,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | --- | --- |
 | `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
 | `firmware/tests/CMakeLists.txt` | 加入新设备界面的模型测试目标 `ui_view_models`，其余目标不变 |
+| `firmware/CMakeLists.txt` | 版本号 0.2.6 改为 0.3.0，两处 |
+| `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
