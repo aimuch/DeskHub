@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 if(NOT DEFINED PROJECT_VER)
-    set(PROJECT_VER "0.2.6")
+    set(PROJECT_VER "0.3.0")
 endif()
-project(deskhub VERSION 0.2.6)
+project(deskhub VERSION 0.3.0)
