@@ -41,6 +41,11 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 
 输出为空，就表示这些文件与归档逐字节相同。
 
+## 文档
+
+- [产品范围](docs/product-scope.md)：做什么、不做什么、每个功能的状态，以及 9 条决策记录。
+- [规则](docs/rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
+
 ## 现状
 
 - 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
