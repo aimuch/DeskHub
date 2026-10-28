@@ -16,7 +16,12 @@
       "size_bytes": 2668250,
       "sha256": "5640ccf01b62ffd7a601d5026e6a5acbedbb8583ed7b4c4fb2c1876aa6a3829c",
       "made_by": "scripts/package_firmware.py --build firmware/build-0.3.0",
-      "images": ["0x0 bootloader.bin", "0x8000 partition-table.bin", "0xf000 ota_data_initial.bin", "0x20000 deskhub.bin"]
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
     },
     "signed_ota": {
       "file": "dist/deskhub-0.3.0.dhfw",
@@ -24,7 +29,10 @@
       "sha256": "0065302e323d6e59b0b4b272bf7ece9c6e9394e64f10af5bf8e76a3fae82e91e",
       "made_by": "tools/firmware_package.py sign（密钥在 .state/signing，未读取、未复制）",
       "signing_key_fingerprint": "7b5b100669d6c4752e9db65d3e946e11a97bd67ef02ce6991387892e3339294a",
-      "contents": ["app.bin", "manifest.json"]
+      "contents": [
+        "app.bin",
+        "manifest.json"
+      ]
     }
   },
   "checks_done": [
@@ -38,14 +46,22 @@
     "device_id": "deskhub-44bd8d60c598",
     "port": "/dev/cu.usbmodem20101",
     "method": "USB 包里的 flash.py（esptool 5.3.1，--no-stub），先只读识别 ESP32-S3 / 16 MiB 再写入 4 个镜像",
-    "before": {"firmware_version": "0.2.6", "config_revision": 34, "theme": "ocean", "rotation": 180},
+    "before": {
+      "firmware_version": "0.2.6",
+      "config_revision": 34,
+      "theme": "ocean",
+      "rotation": 180
+    },
     "esptool_verify": "Hash of data verified（4 个镜像）",
     "after_boot": {
       "firmware_version": "0.3.0",
       "config_revision": 34,
       "ui_alive": true,
       "error": "",
-      "battery_soc": {"availability": "ready", "reason_code": "PMIC_ESTIMATE_UNVERIFIED"},
+      "battery_soc": {
+        "availability": "ready",
+        "reason_code": "PMIC_ESTIMATE_UNVERIFIED"
+      },
       "wifi": "未配置",
       "agent": "未配对",
       "note": "NVS 没有被改：设备编号、配置版本、主题、旋转保持不变。读状态要等开机 12 秒后；刚开机几秒内 ui_alive 为 false，是界面还没启动，不是故障。"
@@ -62,5 +78,23 @@
     "text": "屏幕显示正常，新界面已经出来",
     "scope": "用户在设备旁看了屏幕；只确认了“显示正常、新界面出现”，没有逐页检查，也没有记录触摸或具体数值"
   },
-  "hardware_verified": false
+  "hardware_verified": false,
+  "observed_photos": [
+    {
+      "file": "IMG_6257.HEIC（用户在 2026-10-28 提供，不在仓库里）",
+      "what_is_visible": [
+        "设备屏幕上是“电池与电源”页，“保护”分段被选中，照片是横着拍的",
+        "页眉：“电脑离线”“未配置网络”；“电量 100%”和满格电池图标；“USB接入 · 已充满”",
+        "保护页：“实验功能”标签；“此版本还不能限制充电。”；“达到上限后停止充电，低于回充线再恢复。”；“读不到电量或温度过高时，恢复正常充电。”；“开启…”按钮是禁用的样子",
+        "底部导航：总览、动作、电脑、设置",
+        "背景是蓝色渐变，能看到几条竖向的色带"
+      ],
+      "limits": [
+        "一张照片：只能说明这些文字和布局确实显示在真机上，不能证明触摸、旋转或其他页面",
+        "“电量 100%”是电源芯片的估算，没有对照电芯；“已充满”是电源芯片报的充电状态",
+        "色带可能是 16 位色渐变的常见现象，也可能是拍照造成的，没法从一张照片确定",
+        "不能从照片确定存储的外观设置是什么"
+      ]
+    }
+  ]
 }
