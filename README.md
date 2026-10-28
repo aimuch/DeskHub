@@ -51,6 +51,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/components/management/`（`management.cpp`、`CMakeLists.txt`）、`firmware/main/app_main.cpp` | 设备上报和 USB 状态带电源对象；新增纯函数 `power_wire.cpp/.hpp` 和 `firmware/tests/power_wire_test.cpp` |
 | `agent/src/deskhub_agent/management_models.py`、`management.py`；`protocol/`（`openapi.json`、`schemas/device-report.schema.json`、`export_openapi.py`、`README.md`、新示例） | Agent 接收并校验电源读数，设备记录带 `power_state`（未上报、新鲜、过期）；新增 `agent/tests/test_power_report.py` |
 | `agent/src/deskhub_agent/models.py`、`management.py`、`app.py`；`protocol/`（`schemas/agent-config.schema.json`、新示例 `examples/pairing-package.json`） | 热点配网的 Agent 端：Settings 新增 `public_url` 和 `pairing_ca`；新增 `pairing.py`（授权、配对包、兑换）和 `agent/tests/test_pairing_grants.py` |
+| `agent/src/deskhub_agent/pairing.py`；`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`、`examples/pairing-package.json`） | 配对包升到版本 2，直接带 CA 证书，删除 `GET /api/v1/pairing/ca`：固件里不留不验证的 TLS 连接，也不改 `sdkconfig.defaults`（见 `docs/pairing-design.md` 第 11 节）；向量重新生成，`export_openapi.py` 的实现校验同步 |
 | `tools/provision.py` | `--status` 只打印检查过的电源对象；新增 `tools/tests/test_provision_power.py` |
 | `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
@@ -70,8 +71,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
 - 界面里已做好但设备上看不到的两处：配网页（后端 R7 还没做，没有代码调用它），充电保护确认框（充电控制 N1 还没做；保护页的开启按钮是禁用的，并写明原因）。
 - 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。这些改动还没有刷到设备（设备上跑的仍是 0.3.0 的第一个构建），也没有用真实设备的上报验证过。
-- 有：热点配网的 Agent 端（授权、配对包、无凭据兑换、公开的 CA 下载接口）和设备端的纯逻辑（配对包解码、指纹核对、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
-- **设备端的接线还没有做**：热点、配网页的 HTTP、取 CA 与兑换的 TLS 客户端、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](docs/pairing-design.md) 第 10 节。
+- 有：热点配网的 Agent 端（授权、配对包版本 2 带 CA、无凭据兑换；没有 CA 下载接口）和设备端的纯逻辑（配对包解码、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
+- **设备端的接线还没有做**：热点、配网页的 HTTP、兑换的 TLS 客户端（用配对包里的 CA 验证）、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](docs/pairing-design.md) 第 10 节。
 - 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
 - 固件版本 0.3.0。USB 刷机包和签名 OTA 包已生成在 `dist/`（不在 git 里），哈希和做过的检查记在 [docs/evidence/firmware-0.3.0.json](docs/evidence/firmware-0.3.0.json)。0.3.0 已用 USB 包刷到设备 deskhub-44bd8d60c598：写入校验通过，开机后界面心跳正常、没有错误。用户在设备旁确认“屏幕显示正常，新界面已经出来”。逐页显示、触摸、真实电量数值和 OTA 回滚都没验证。
 
