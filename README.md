@@ -65,7 +65,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
 - 界面里已做好但设备上看不到的两处：配网页（后端 R7 还没做，没有代码调用它），充电保护确认框（充电控制 N1 还没做；保护页的开启按钮是禁用的，并写明原因）。
 - 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
-- 固件版本 0.3.0。USB 刷机包和签名 OTA 包已生成在 `dist/`（不在 git 里），哈希和做过的检查记在 [docs/evidence/firmware-0.3.0.json](docs/evidence/firmware-0.3.0.json)。0.3.0 已用 USB 包刷到设备 deskhub-44bd8d60c598：写入校验通过，开机后界面心跳正常、没有错误。但**还没有人看过屏幕**，触摸、真实电量数值和 OTA 回滚都没验证。
+- 固件版本 0.3.0。USB 刷机包和签名 OTA 包已生成在 `dist/`（不在 git 里），哈希和做过的检查记在 [docs/evidence/firmware-0.3.0.json](docs/evidence/firmware-0.3.0.json)。0.3.0 已用 USB 包刷到设备 deskhub-44bd8d60c598：写入校验通过，开机后界面心跳正常、没有错误。用户在设备旁确认“屏幕显示正常，新界面已经出来”。逐页显示、触摸、真实电量数值和 OTA 回滚都没验证。
 
 运行基线测试：
 
