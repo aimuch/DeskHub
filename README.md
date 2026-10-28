@@ -36,7 +36,7 @@ Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_m
 检查“原样”：
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp'
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview'
 ```
 
 输出为空，就表示这些文件与归档逐字节相同。
@@ -46,6 +46,9 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | 文件 | 改动 |
 | --- | --- |
 | `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
+| `firmware/tests/CMakeLists.txt` | 加入新设备界面的模型测试目标 `ui_view_models`，其余目标不变 |
+
+`firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
 ## 文档
 
@@ -56,8 +59,11 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 ## 现状
 
 - 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
-- 没有：设备界面（`firmware/components/ui`）。新界面就位前，固件不能完整构建。
+- 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.1 MiB，应用分区 6 MiB）。
+- 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
+- 界面里已做好但设备上看不到的两处：配网页（后端 R7 还没做，没有代码调用它），充电保护确认框（充电控制 N1 还没做；保护页的开启按钮是禁用的，并写明原因）。
 - 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
+- 版本号还是 0.2.6。发布前要按规则 K7 单独提交升版。
 
 运行基线测试：
 
@@ -66,6 +72,17 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 .venv/bin/python -m unittest discover -s tools/tests
 .venv/bin/python protocol/export_openapi.py --check
 cmake -S firmware/tests -B firmware/build-host && cmake --build firmware/build-host && ctest --test-dir firmware/build-host --output-on-failure
+python3 firmware/tests/ui_preview/render.py
+```
+
+最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
+
+完整构建固件（独立目录，不碰别的构建）：
+
+```sh
+source ~/.espressif/tools/activate_idf_v6.0.2.sh
+unset IDF_COMPONENT_LOCAL_STORAGE_URL
+cd firmware && idf.py -B build-0.3.0 build
 ```
 
 ## 不在 git 里的东西
