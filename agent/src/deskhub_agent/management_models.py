@@ -77,11 +77,36 @@ class ConfigurationWrite(StrictModel):
     configuration: DeviceConfiguration
 
 
+# Plausible ranges of the AXP2101 readings (docs/rules.md R3). A number outside them is a device bug: the report is
+# rejected, never clamped, so the console cannot show an invented value.
+BATTERY_MV = (2500, 4600)
+VBUS_MV = (3000, 6500)
+CHIP_TEMP_C = (-40, 150)
+
+
 class PowerReport(StrictModel):
     vbus: Literal["present", "absent", "unknown"] = "unknown"
     battery: Literal["present", "absent", "unknown"] = "unknown"
     charging: Literal["charging", "full", "idle", "fault", "unknown"] = "unknown"
     fault: bool = False
+    # Added in firmware 0.3.0. Older firmware omits them: they stay null and the state is "not_measured".
+    soc_percent: int | None = Field(default=None, ge=0, le=100, description="The power chip's own battery level estimate, not validated against the cell.")
+    battery_mv: int | None = Field(default=None, ge=BATTERY_MV[0], le=BATTERY_MV[1])
+    vbus_mv: int | None = Field(default=None, ge=VBUS_MV[0], le=VBUS_MV[1])
+    chip_temp_c: float | None = Field(default=None, ge=CHIP_TEMP_C[0], le=CHIP_TEMP_C[1], allow_inf_nan=False,
+                                      description="The power chip's die temperature. It is never the battery temperature.")
+    measurement: Literal["ok", "adc_enable_failed", "adc_read_failed", "adc_out_of_range", "not_measured"] = "not_measured"
+
+    @model_validator(mode="after")
+    def consistent(self):
+        # A failed measurement carries no numbers; nothing is measured about a battery or USB that is not there.
+        if self.measurement != "ok" and any(value is not None for value in (self.battery_mv, self.vbus_mv, self.chip_temp_c)):
+            raise ValueError("a failed or missing measurement cannot carry voltages or a temperature")
+        if self.battery != "present" and (self.soc_percent is not None or self.battery_mv is not None):
+            raise ValueError("without a present battery there is no level and no battery voltage")
+        if self.vbus != "present" and self.vbus_mv is not None:
+            raise ValueError("without present USB power there is no USB voltage")
+        return self
 
 
 class UpdateReport(StrictModel):

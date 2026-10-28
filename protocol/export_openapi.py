@@ -176,7 +176,8 @@ def validate_examples() -> int:
     assert result.verification.result == "matched"
     DeviceConfiguration.model_validate_json((ROOT / "protocol/examples/device-configuration.json").read_text())
     DeviceReport.model_validate_json((ROOT / "protocol/examples/device-report.json").read_text())
-    return len(examples) + 4
+    DeviceReport.model_validate_json((ROOT / "protocol/examples/device-report-power.json").read_text())
+    return len(examples) + 5
 
 
 def main(argv=None) -> int:

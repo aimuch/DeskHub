@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .errors import AgentError
 from .firmware_packages import MAX_PACKAGE_BYTES, key_fingerprint, trusted_key, validate_package, write_image
-from .management_models import AdminLogin, ConfigurationWrite, DeviceConfiguration, DeviceReport, TERMINAL_UPDATE_STATES, UpdateCreate
+from .management_models import AdminLogin, ConfigurationWrite, DeviceConfiguration, DeviceReport, PowerReport, TERMINAL_UPDATE_STATES, UpdateCreate
 from .models import stamp, utcnow
 
 COOKIE = "deskhub_session"
@@ -138,6 +138,12 @@ class Management:
             elif applied > revision:
                 configuration_state = "unavailable"
                 error = error or "REMOTE_REVISION_AHEAD"
+        online = not row["revoked"] and time.monotonic() - self.seen.get(device_id, -1e9) <= 30
+        # Readings only count while the device is online. A stale record keeps when it was last heard from, never numbers.
+        power = report["power"] if report else PowerReport().model_dump()
+        power_state = "unreported" if report is None else "fresh" if online else "stale"
+        if power_state == "stale":
+            power = {**power, "soc_percent": None, "battery_mv": None, "vbus_mv": None, "chip_temp_c": None, "measurement": "not_measured"}
         targets = json.loads(row["targets"])
         writable = "control:displays" in json.loads(row["scopes"])
         allowed_actions = [{"action_id": action.action_id, "label": action.label, "target_id": action.target_id}
@@ -145,14 +151,14 @@ class Management:
         return {
             "device_id": device_id, "revoked": bool(row["revoked"]),
             "scopes": json.loads(row["scopes"]), "targets": targets, "paired_at": row["created_at"],
-            "online": not row["revoked"] and time.monotonic() - self.seen.get(device_id, -1e9) <= 30,
+            "online": online,
             "last_seen": report_row["last_seen"] if report_row else None,
             "firmware_version": report["firmware_version"] if report else None,
             "board_model": report["board_model"] if report else None,
             "boot_id": report["boot_id"] if report else None,
             "uptime_seconds": report["uptime_seconds"] if report else None,
             "free_heap_bytes": report["free_heap_bytes"] if report else None,
-            "power": report["power"] if report else {"vbus": "unknown", "battery": "unknown", "charging": "unknown", "fault": False},
+            "power": power, "power_state": power_state, "power_reported_at": report_row["last_seen"] if report_row else None,
             "capabilities": report["capabilities"] if report else None,
             "reported_configuration": report["configuration"] if report else None,
             "desired_revision": revision, "applied_revision": applied,

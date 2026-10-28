@@ -200,6 +200,20 @@
           "title": "Battery",
           "type": "string"
         },
+        "battery_mv": {
+          "anyOf": [
+            {
+              "maximum": 4600,
+              "minimum": 2500,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Battery Mv"
+        },
         "charging": {
           "default": "unknown",
           "enum": [
@@ -212,10 +226,52 @@
           "title": "Charging",
           "type": "string"
         },
+        "chip_temp_c": {
+          "anyOf": [
+            {
+              "maximum": 150,
+              "minimum": -40,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The power chip's die temperature. It is never the battery temperature.",
+          "title": "Chip Temp C"
+        },
         "fault": {
           "default": false,
           "title": "Fault",
           "type": "boolean"
+        },
+        "measurement": {
+          "default": "not_measured",
+          "enum": [
+            "ok",
+            "adc_enable_failed",
+            "adc_read_failed",
+            "adc_out_of_range",
+            "not_measured"
+          ],
+          "title": "Measurement",
+          "type": "string"
+        },
+        "soc_percent": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The power chip's own battery level estimate, not validated against the cell.",
+          "title": "Soc Percent"
         },
         "vbus": {
           "default": "unknown",
@@ -226,6 +282,20 @@
           ],
           "title": "Vbus",
           "type": "string"
+        },
+        "vbus_mv": {
+          "anyOf": [
+            {
+              "maximum": 6500,
+              "minimum": 3000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vbus Mv"
         }
       },
       "title": "PowerReport",

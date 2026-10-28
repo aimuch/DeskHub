@@ -20,3 +20,7 @@ USB 使用 ESP32-S3 原生 USB Serial/JTAG，UTF-8 JSON Lines，每条帧连同�
 USB 证书最多 8 KiB，SSID 最多 32 UTF-8 字节，Wi-Fi 密码为空或 8–63 UTF-8 字节，Token 为 32–256 个可打印 ASCII 字符。JSON Schema 的长度约束以字符为单位，固件和配置工具还检查实际 UTF-8 字节数、PEM 解析、日历与 HTTPS 根地址语义。时间格式为 `YYYY-MM-DDTHH:MM:SSZ`，范围 2024–2099 年。私有配置信息不作为命令行参数或普通日志输出。
 
 `provision` 的 `config.time.ntp_server` 可选，默认 `pool.ntp.org`；可使用局域网 NTP 主机名或 IPv4 地址，禁止 URL、路径和端口。工具也支持 `--ntp-server ntp.home.local`。单独 `set_time` 只设时，不改变已保存 NTP 地址。
+
+`device-report` 的 `power` 对象：`vbus`、`battery`、`charging`、`fault` 沿用旧含义。固件 0.3.0 起另有 `soc_percent`（电源芯片自己的电量估算，未对照电芯验证）、`battery_mv`、`vbus_mv`、`chip_temp_c`（电源芯片的温度，不是电池温度）和 `measurement`（`ok`、`adc_enable_failed`、`adc_read_failed`、`adc_out_of_range`、`not_measured`）。旧固件不带这些字段，Agent 按“未测量”处理。
+
+数值必须在合理范围内（电池 2500–4600 mV，USB 3000–6500 mV，芯片温度 −40 到 150 °C，电量 0–100），超出范围的整份上报被拒绝，Agent 不截断、不保存。测量失败时不能带电压和温度；没有电池时不能带电量和电池电压；没有 USB 时不能带 USB 电压。管理接口的设备记录另有 `power_state`（`unreported`、`fresh`、`stale`）和 `power_reported_at`：只有设备在线（最近 30 秒有上报）时才是 `fresh`；`stale` 时数值全部为空，只保留最后一次上报的时间。

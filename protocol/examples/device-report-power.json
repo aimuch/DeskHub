@@ -1,0 +1,44 @@
+{
+  "firmware_version": "0.3.0",
+  "board_model": "ESP32-S3-Touch-AMOLED-2.16",
+  "boot_id": "sample-boot-id",
+  "uptime_seconds": 123,
+  "free_heap_bytes": 100000,
+  "applied_revision": 0,
+  "configuration": {
+    "schema_version": 1,
+    "display": {
+      "brightness": 50,
+      "rotation": 0,
+      "clock_s": 60,
+      "dim_s": 120,
+      "off_s": 300,
+      "night_enabled": true,
+      "night_start": 1320,
+      "night_end": 420,
+      "night_cap": 15,
+      "protection": true
+    },
+    "layout": {
+      "preset": "desk",
+      "theme": "mint",
+      "action_ids": [],
+      "show_seconds": false,
+      "show_cpu": true
+    }
+  },
+  "config_error": null,
+  "power": {
+    "vbus": "present",
+    "battery": "present",
+    "charging": "charging",
+    "fault": false,
+    "soc_percent": 67,
+    "battery_mv": 3921,
+    "vbus_mv": 5120,
+    "chip_temp_c": 41.3,
+    "measurement": "ok"
+  },
+  "capabilities": {"management": true, "signed_ota": false, "layouts": ["desk", "clock", "focus"], "update_key_fingerprint": null},
+  "update": null
+}
