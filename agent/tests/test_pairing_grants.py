@@ -694,3 +694,67 @@ def test_the_compare_is_constant_time_even_for_an_id_that_does_not_exist(world, 
     before = len(calls)
     world.wrong(known["grant_id"], kv["code"])
     assert len(calls) > before
+
+
+# ---------------------------------------------------------------- C: the CA a device pins before it sends a secret
+# The device has only the CA fingerprint from the package. It first fetches the CA certificate here, over TLS it cannot
+# verify yet, checks that the fingerprint matches the package, and only then talks to the Agent over verified TLS.
+# So nothing secret may be asked for or answered here, and the answer must not depend on any grant.
+def test_the_ca_is_public_and_needs_no_credential(world):
+    response = world.client.get("/api/v1/pairing/ca", headers={"Authorization": "Bearer not-a-token-at-all-xxxxxxxxxx"})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"ca_pem": CA.read_text(), "ca_fingerprint": FINGERPRINT.hex()}
+    assert len(response.content) < 4096
+    anonymous = TestClient(world.app, base_url=ORIGIN)
+    assert anonymous.get("/api/v1/pairing/ca").json() == response.json()
+
+
+def test_the_ca_answer_does_not_depend_on_grants(world):
+    before = world.client.get("/api/v1/pairing/ca").content
+    world.grant()
+    world.grant(replace=True)
+    assert world.client.get("/api/v1/pairing/ca").content == before
+
+
+def test_the_ca_is_only_served_over_https(factory):
+    with factory() as w:
+        plain = TestClient(w.app, base_url="http://testserver")
+        response = plain.get("/api/v1/pairing/ca")
+        assert response.status_code == 400 and response.json()["error"]["code"] == "HTTPS_REQUIRED"
+
+
+@pytest.mark.parametrize("overrides", [{"pairing_ca": None}, {"public_url": None}, {"pairing_ca": "/nonexistent/ca.pem"}])
+def test_no_ca_without_the_configuration(factory, overrides):
+    with factory(**overrides) as w:
+        response = w.client.get("/api/v1/pairing/ca")
+        assert response.status_code == 409 and response.json()["error"]["code"] == "PAIRING_NOT_CONFIGURED"
+
+
+def test_a_private_key_is_never_served_as_the_ca(factory, tmp_path):
+    path = tmp_path / "key.pem"
+    path.write_text("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")
+    with factory(pairing_ca=str(path)) as w:
+        response = w.client.get("/api/v1/pairing/ca")
+        assert response.status_code == 409 and "PRIVATE" not in response.text
+
+
+def test_the_ca_endpoint_is_limited_like_the_rest_of_pairing(world):
+    busy = TestClient(world.app, base_url=ORIGIN, client=("203.0.113.9", 50000))
+    statuses = [busy.get("/api/v1/pairing/ca").status_code for _ in range(12)]
+    assert statuses[:10] == [200] * 10 and statuses[10:] == [429, 429]
+
+
+def test_a_broken_limiter_stops_the_ca_endpoint_too(world):
+    original = world.app.state.rates.check
+
+    def broken(key, maximum=120):
+        if key.startswith("pairing"):
+            raise RuntimeError("limiter fault")
+        return original(key, maximum)
+
+    world.app.state.rates.check = broken
+    try:
+        response = world.client.get("/api/v1/pairing/ca")
+    finally:
+        world.app.state.rates.check = original
+    assert response.status_code == 503 and response.json()["error"]["code"] == "PAIRING_UNAVAILABLE"

@@ -28,3 +28,5 @@ USB 证书最多 8 KiB，SSID 最多 32 UTF-8 字节，Wi-Fi 密码为空或 8�
 热点配网的 Agent 接口见 `docs/pairing-design.md`。管理员接口（需要管理员会话、CSRF 和同源）：`POST /api/v1/admin/pairing-grants` 生成授权，响应里的 `package` 只出现这一次；`GET` 列出授权的状态和剩余尝试次数，不含任何秘密；`DELETE /api/v1/admin/pairing-grants/{grant_id}` 取消。设备接口 `POST /api/v1/pairing/redeem` 不需要凭据，只接受 HTTPS：请求带 `grant_id`、`code`、`device_id`，成功返回 `agent_id`、`token`、`ca_pem`、`scopes`、`targets`。授权编号不存在、授权码错、过期、已用、已取消、已烧毁、设备编号与授权指定的不符，都返回同一个 403 `PAIRING_REJECTED`。同一来源每分钟最多 10 次，全部来源每分钟最多 30 次；限流器自己出错时返回 503，不放行。
 
 配对包 `DHP1.…` 的格式和测试向量在 `examples/pairing-package.json`，Agent 的解码器和设备的实现都要通过它们。Agent 配置新增 `public_url`（设备连 Agent 的 `https://主机[:端口]`）和 `pairing_ca`（CA 证书文件，只含公开证书）；缺任一项，生成授权返回 409。
+
+设备在提交授权码之前，先用 `GET /api/v1/pairing/ca` 取 CA 证书（公开数据，只接受 HTTPS，与兑换共用限流）：响应是 `ca_pem` 和 `ca_fingerprint`。设备核对它的 SHA-256 等于配对包里的指纹，才把它当作唯一信任根去建立验证过的 TLS 连接。

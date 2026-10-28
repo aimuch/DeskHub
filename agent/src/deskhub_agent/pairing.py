@@ -291,8 +291,7 @@ def install_pairing(app, settings, database, rates, admin) -> Pairing:
     async def cancel_grant(grant_id: str, session=Depends(admin)):
         return pairing.cancel(grant_id)
 
-    @app.post("/api/v1/pairing/redeem")
-    async def redeem(request: Request, value: Redeem):
+    def guard(request: Request) -> None:
         if request.url.scheme != "https":
             raise AgentError("HTTPS_REQUIRED", "Pairing is only served over HTTPS", 400)
         try:
@@ -302,6 +301,18 @@ def install_pairing(app, settings, database, rates, admin) -> Pairing:
             raise
         except Exception as error:  # a broken limiter refuses; it never lets a request through
             raise AgentError("PAIRING_UNAVAILABLE", "Pairing is unavailable", 503) from error
+
+    @app.get("/api/v1/pairing/ca")
+    async def pairing_ca(request: Request):
+        # Public data. The device fetches it over TLS it cannot verify yet and checks the fingerprint against its package,
+        # so nothing secret is asked for or answered here, and the answer does not depend on any grant.
+        guard(request)
+        _, fingerprint, pem = pairing._configuration()
+        return {"ca_pem": pem, "ca_fingerprint": fingerprint.hex()}
+
+    @app.post("/api/v1/pairing/redeem")
+    async def redeem(request: Request, value: Redeem):
+        guard(request)
         return pairing.redeem(value.grant_id, value.code, value.device_id)
 
     return pairing
