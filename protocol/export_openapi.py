@@ -182,7 +182,7 @@ def validate_examples() -> int:
     vectors = json.loads((ROOT / "protocol/examples/pairing-package.json").read_text())
     for item in vectors["valid"]:
         decoded = decode_package(item["package"])
-        assert (decoded["url"], decoded["grant_id"], decoded["code"], decoded["fingerprint"].hex()) == (item["url"], item["grant_id"], item["code"], item["ca_fingerprint_hex"])
+        assert (decoded["url"], decoded["grant_id"], decoded["code"], decoded["ca_der"].hex()) == (item["url"], item["grant_id"], item["code"], item["ca_der_hex"])
     for item in vectors["invalid"]:
         try:
             decode_package(item["package"])

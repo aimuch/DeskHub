@@ -1,11 +1,14 @@
 """Failure modes of the Agent side of hotspot pairing (docs/pairing-design.md), written before the code.
 
-Rules: K1 (trust chain: TLS, per-device token, the CA is pinned by fingerprint), K4 (secrets: a token or a code is
-never logged, never stored in clear, never shown twice), R7 (one-time, time-limited, the device is next to the person).
+Rules: K1 (trust chain: TLS, per-device token, the device trusts the CA that the package carries), K4 (secrets: a token
+or a code is never logged, never stored in clear, never shown twice), R7 (one-time, time-limited, the device is next to
+the person).
 
 S1  public_url and pairing_ca are validated; grants need both.
-K1  The pairing package is DHP1. plus base64url of: version, url, grant id, code, CA fingerprint, check. It matches an
-    independent encoder. Tampering, truncation, wrong prefix, wrong alphabet, whitespace inside, padding: all rejected.
+K1  The pairing package (version 2) is DHP2. plus base64url of: version, url, grant id, code, CA certificate (DER), check.
+    It matches an independent encoder. Tampering, truncation, the old prefix, wrong alphabet, whitespace inside, padding,
+    and a certificate that is not exactly one DER sequence of at most 2048 bytes: all rejected.
+C1  There is no endpoint that hands out the CA: the package carries it, so no unverified TLS connection is ever needed.
 G1  Creating, listing and cancelling grants needs an admin session, a CSRF token and the same origin.
 G2  A grant has validated scopes (never admin:config), configured display targets (never "*"), a lifetime of 1..300 s.
 G3  The grant is shown once, inside the package. The database keeps a salted hash, never the code or the package.
@@ -52,27 +55,42 @@ URL = "https://10.10.10.5:8765"
 ALPHABET = set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 SCOPES = ["read:status", "control:displays", "device:sync"]
 DEVICE = "deskhub-aabbccddeeff"
-FINGERPRINT = hashlib.sha256(x509.load_pem_x509_certificate(CA.read_bytes()).public_bytes(serialization.Encoding.DER)).digest()
+CA_DER = x509.load_pem_x509_certificate(CA.read_bytes()).public_bytes(serialization.Encoding.DER)
+FINGERPRINT = hashlib.sha256(CA_DER).digest()
+TINY = bytes([0x30, 0x03, 0x02, 0x01, 0x05])  # the smallest DER sequence these tests use
+
+
+def fake_der(total: int) -> bytes:
+    """A DER SEQUENCE of exactly `total` bytes: a valid header with the shortest length form, zero bytes inside."""
+    content = total - 2
+    if content < 128:
+        return bytes([0x30, content]) + bytes(content)
+    content = total - 3
+    if content < 256:
+        return bytes([0x30, 0x81, content]) + bytes(content)
+    content = total - 4
+    return bytes([0x30, 0x82, content >> 8, content & 255]) + bytes(content)
 
 
 # ---- an independent encoder and decoder of the package, the oracle of the format ----
-def oracle_encode(url: str, grant_id: str, code: str, fingerprint: bytes) -> str:
+def oracle_encode(url: str, grant_id: str, code: str, der: bytes, version: int = 2, ca_len: int | None = None) -> str:
     raw = url.encode()
-    body = bytes([1, len(raw)]) + raw + grant_id.encode() + code.encode() + fingerprint
-    return "DHP1." + base64.urlsafe_b64encode(body + hashlib.sha256(body).digest()[:4]).rstrip(b"=").decode()
+    body = bytes([version, len(raw)]) + raw + grant_id.encode() + code.encode() + (len(der) if ca_len is None else ca_len).to_bytes(2, "big") + der
+    return "DHP2." + base64.urlsafe_b64encode(body + hashlib.sha256(body).digest()[:4]).rstrip(b"=").decode()
 
 
 def oracle_decode(text: str) -> dict:
-    assert text.startswith("DHP1.")
+    assert text.startswith("DHP2.")
     payload = text[5:]
     raw = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
     body, check = raw[:-4], raw[-4:]
     assert hashlib.sha256(body).digest()[:4] == check
-    assert body[0] == 1
+    assert body[0] == 2
     size = body[1]
     rest = body[2 + size:]
-    assert len(rest) == 8 + 10 + 32
-    return {"url": body[2:2 + size].decode(), "grant_id": rest[:8].decode(), "code": rest[8:18].decode(), "fingerprint": rest[18:]}
+    length = int.from_bytes(rest[18:20], "big")
+    assert len(rest) == 20 + length
+    return {"url": body[2:2 + size].decode(), "grant_id": rest[:8].decode(), "code": rest[8:18].decode(), "ca_der": rest[20:]}
 
 
 class Clock:
@@ -178,44 +196,45 @@ def test_pairing_is_off_by_default():
 # ---------------------------------------------------------------- K1 package
 def test_package_matches_the_independent_encoder(clock):
     from deskhub_agent.pairing import decode_package, encode_package
-    text = encode_package(URL, "ABCD2345", "KM7QWXYZ09", FINGERPRINT)
-    assert text == oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", FINGERPRINT)
-    assert text.startswith("DHP1.") and 100 <= len(text) <= 160
-    assert decode_package(text) == {"url": URL, "grant_id": "ABCD2345", "code": "KM7QWXYZ09", "fingerprint": FINGERPRINT}
+    text = encode_package(URL, "ABCD2345", "KM7QWXYZ09", CA_DER)
+    assert text == oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", CA_DER)
+    assert text.startswith("DHP2.") and 1000 <= len(text) <= 1200
+    assert decode_package(text) == {"url": URL, "grant_id": "ABCD2345", "code": "KM7QWXYZ09", "ca_der": CA_DER}
     assert decode_package("  " + text + "\r\n") == decode_package(text)  # copy and paste adds white space around it
 
 
 def test_package_decoder_rejects_every_single_character_change(clock):
     from deskhub_agent.pairing import decode_package
-    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", FINGERPRINT)
+    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", CA_DER)
     for index in range(5, len(text)):
         changed = text[:index] + ("A" if text[index] != "A" else "B") + text[index + 1:]
         with pytest.raises(ValueError):
             decode_package(changed)
 
 
-def test_the_unused_bits_of_the_last_character_must_be_zero(clock):
+@pytest.mark.parametrize("size", [300, 301])
+def test_the_unused_bits_of_the_last_character_must_be_zero(clock, size):
     from deskhub_agent.pairing import decode_package
-    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", FINGERPRINT)
+    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", fake_der(size))
     table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     raw_length = len(base64.urlsafe_b64decode(text[5:] + "=" * (-len(text[5:]) % 4)))
-    assert raw_length % 3 == 1                                   # the last character carries four spare bits
+    spare = {1: 4, 2: 2}[raw_length % 3]                          # the last character carries two or four spare bits
     last = table.index(text[-1])
-    assert last % 16 == 0
-    for extra in range(1, 16):                                   # the same bytes, spelled with other spare bits
+    assert last % (1 << spare) == 0
+    for extra in range(1, 1 << spare):                            # the same bytes, spelled with other spare bits
         with pytest.raises(ValueError):
             decode_package(text[:-1] + table[last + extra])
 
 
 @pytest.mark.parametrize("make", [
-    lambda t: t[:-1], lambda t: t[:-4], lambda t: t + "A", lambda t: t + "AAAA", lambda t: "DHP2." + t[5:], lambda t: "dhp1." + t[5:],
-    lambda t: t[5:], lambda t: "DHP1.", lambda t: "", lambda t: t[:20] + "\n" + t[20:], lambda t: t[:20] + " " + t[20:],
-    lambda t: t.replace("-", "+").replace("_", "/") if ("-" in t or "_" in t) else t + "+", lambda t: t + "=", lambda t: "DHP1." + t[5:].lower(),
-    lambda t: "DHP1." + "A" * 120,
+    lambda t: t[:-1], lambda t: t[:-4], lambda t: t + "A", lambda t: t + "AAAA", lambda t: "DHP1." + t[5:], lambda t: "dhp2." + t[5:],
+    lambda t: t[5:], lambda t: "DHP2.", lambda t: "", lambda t: t[:20] + "\n" + t[20:], lambda t: t[:20] + " " + t[20:],
+    lambda t: t.replace("-", "+").replace("_", "/") if ("-" in t or "_" in t) else t + "+", lambda t: t + "=", lambda t: "DHP2." + t[5:].lower(),
+    lambda t: "DHP2." + "A" * 120, lambda t: "DHP2." + t[5:300],
 ])
 def test_package_decoder_rejects_malformed_text(clock, make):
     from deskhub_agent.pairing import decode_package
-    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", FINGERPRINT)
+    text = oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", CA_DER)
     with pytest.raises(ValueError):
         decode_package(make(text))
 
@@ -223,28 +242,76 @@ def test_package_decoder_rejects_malformed_text(clock, make):
 @pytest.mark.parametrize("url", ["http://10.10.10.5:8765", "https://x/api", "https://u:p@x", "https://x?q=1", "https://x#f", "", "https://" + "a" * 130])
 def test_package_decoder_rejects_a_bad_url_even_with_a_valid_check(clock, url):
     from deskhub_agent.pairing import decode_package
-    body = bytes([1, len(url.encode())]) + url.encode() + b"ABCD2345" + b"KM7QWXYZ09" + FINGERPRINT
-    text = "DHP1." + base64.urlsafe_b64encode(body + hashlib.sha256(body).digest()[:4]).rstrip(b"=").decode()
     with pytest.raises(ValueError):
-        decode_package(text)
+        decode_package(oracle_encode(url, "ABCD2345", "KM7QWXYZ09", CA_DER))
 
 
-@pytest.mark.parametrize("grant_id,code,fingerprint", [
-    ("ABCD234", "KM7QWXYZ09", FINGERPRINT), ("ABCD23456", "KM7QWXYZ09", FINGERPRINT), ("ABCD2345", "KM7QWXYZ0", FINGERPRINT),
-    ("ABCD2345", "KM7QWXYZ090", FINGERPRINT), ("abcd2345", "KM7QWXYZ09", FINGERPRINT), ("ABCD2345", "km7qwxyz09", FINGERPRINT),
-    ("ABCI2345", "KM7QWXYZ09", FINGERPRINT), ("ABCD2345", "KM7QWXYZ0L", FINGERPRINT), ("ABCD2345", "KM7QWXYZ0O", FINGERPRINT),
-    ("ABCD2345", "KM7QWXYZ0U", FINGERPRINT), ("ABCD2345", "KM7QWXYZ09", FINGERPRINT[:31]), ("ABCD2345", "KM7QWXYZ09", FINGERPRINT + b"x"),
+@pytest.mark.parametrize("version", [0, 1, 3, 255])
+def test_package_decoder_rejects_another_version(clock, version):
+    from deskhub_agent.pairing import decode_package
+    with pytest.raises(ValueError):
+        decode_package(oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", CA_DER, version=version))
+
+
+BAD_DER = {
+    "empty": b"", "not a sequence": b"\x31\x03\x02\x01\x05", "an integer": b"\x02\x01\x05", "length longer than the data": bytes([0x30, 0x09, 0x02, 0x01, 0x05]),
+    "bytes after the sequence": TINY + b"\x00\x00", "length shorter than the data": bytes([0x30, 0x01, 0x02, 0x01, 0x05]),
+    "indefinite length": bytes([0x30, 0x80, 0x02, 0x01, 0x05, 0x00, 0x00]), "a long form for a short length": bytes([0x30, 0x81, 0x03, 0x02, 0x01, 0x05]),
+    "a two byte length for a one byte length": bytes([0x30, 0x82, 0x00, 0xC8]) + bytes(200), "three length bytes": bytes([0x30, 0x83, 0x00, 0x00, 0x03, 0x02, 0x01, 0x05]),
+    "only a tag": b"\x30", "tag and a half length": b"\x30\x82\x01", "above 2048 bytes": fake_der(2049), "far above 2048 bytes": fake_der(5000),
+}
+
+
+@pytest.mark.parametrize("name", list(BAD_DER))
+def test_package_decoder_and_encoder_refuse_a_certificate_that_is_not_one_der_sequence(clock, name):
+    from deskhub_agent.pairing import decode_package, encode_package
+    with pytest.raises(ValueError):
+        decode_package(oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", BAD_DER[name], ca_len=len(BAD_DER[name]) if len(BAD_DER[name]) < 65536 else 65535))
+    with pytest.raises(ValueError):
+        encode_package(URL, "ABCD2345", "KM7QWXYZ09", BAD_DER[name])
+
+
+@pytest.mark.parametrize("stated", [0, 1, 4, 6, 100, 65535])
+def test_package_decoder_refuses_a_stated_certificate_length_that_is_wrong(clock, stated):
+    from deskhub_agent.pairing import decode_package
+    with pytest.raises(ValueError):
+        decode_package(oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", TINY, ca_len=stated))
+
+
+def test_package_decoder_refuses_bytes_after_the_stated_certificate_length(clock):
+    from deskhub_agent.pairing import decode_package
+    # the first five bytes are a good certificate of exactly the stated length; two more bytes follow it inside the package
+    with pytest.raises(ValueError):
+        decode_package(oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", TINY + b"\x00\x00", ca_len=len(TINY)))
+
+
+@pytest.mark.parametrize("size", [5, 129, 131, 200, 258, 260, 764, 1500, 2048])
+def test_every_der_length_form_up_to_2048_bytes_is_accepted(clock, size):
+    from deskhub_agent.pairing import decode_package, encode_package
+    der = fake_der(size)
+    text = encode_package(URL, "ABCD2345", "KM7QWXYZ09", der)
+    assert text == oracle_encode(URL, "ABCD2345", "KM7QWXYZ09", der)
+    assert decode_package(text)["ca_der"] == der
+
+
+@pytest.mark.parametrize("grant_id,code", [
+    ("ABCD234", "KM7QWXYZ09"), ("ABCD23456", "KM7QWXYZ09"), ("ABCD2345", "KM7QWXYZ0"),
+    ("ABCD2345", "KM7QWXYZ090"), ("abcd2345", "KM7QWXYZ09"), ("ABCD2345", "km7qwxyz09"),
+    ("ABCI2345", "KM7QWXYZ09"), ("ABCD2345", "KM7QWXYZ0L"), ("ABCD2345", "KM7QWXYZ0O"),
+    ("ABCD2345", "KM7QWXYZ0U"),
 ])
-def test_package_encoder_refuses_bad_fields(clock, grant_id, code, fingerprint):
+def test_package_encoder_refuses_bad_fields(clock, grant_id, code):
     from deskhub_agent.pairing import encode_package
     with pytest.raises(ValueError):
-        encode_package(URL, grant_id, code, fingerprint)
+        encode_package(URL, grant_id, code, CA_DER)
 
 
-def test_fingerprint_is_the_sha256_of_the_ca_certificate(clock):
-    from deskhub_agent.pairing import ca_fingerprint
-    assert ca_fingerprint(CA.read_text()) == FINGERPRINT
+def test_the_certificate_of_the_package_is_the_configured_ca(clock):
+    from deskhub_agent.pairing import ca_der_of, ca_fingerprint
+    assert ca_der_of(CA.read_text()) == CA_DER and ca_fingerprint(CA.read_text()) == FINGERPRINT
     for bad in ("", "garbage", "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n"):
+        with pytest.raises(ValueError):
+            ca_der_of(bad)
         with pytest.raises(ValueError):
             ca_fingerprint(bad)
 
@@ -278,7 +345,7 @@ def test_a_grant_is_shown_once_inside_the_package(world):
     data, package = world.grant()
     assert set(data) == {"grant_id", "package", "expires_at", "ca_fingerprint", "url", "scopes", "targets", "replace", "device_id"}
     assert package["url"] == URL == data["url"] and package["grant_id"] == data["grant_id"]
-    assert package["fingerprint"] == FINGERPRINT and data["ca_fingerprint"] == FINGERPRINT.hex()
+    assert package["ca_der"] == CA_DER and data["ca_fingerprint"] == FINGERPRINT.hex()   # the fingerprint is only for a person to compare
     assert data["expires_at"] == stamp(world.clock.now + timedelta(seconds=300))
     assert data["scopes"] == SCOPES and data["targets"] == ["monitor-desk-01"] and data["replace"] is False and data["device_id"] is None
     assert package["code"] not in json.dumps({key: value for key, value in data.items() if key != "package"})
@@ -344,6 +411,27 @@ def test_a_private_key_or_garbage_is_not_a_ca(factory, tmp_path):
         path.write_text(content)
         with factory(pairing_ca=str(path), db_path=str(tmp_path / (name + ".sqlite3"))) as w:
             assert w.create().status_code == 409
+
+
+def test_a_ca_too_large_for_the_package_gives_no_grant(factory, tmp_path):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "big test ca")])
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    builder = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key()).serial_number(1)
+               .not_valid_before(now).not_valid_after(now + timedelta(days=30)).add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True))
+    big = builder.add_extension(x509.SubjectAlternativeName([x509.DNSName(f"host{i:03d}.example.test") for i in range(120)]), critical=False).sign(key, hashes.SHA256())
+    der = big.public_bytes(serialization.Encoding.DER)
+    assert len(der) > 2048                                       # the test certificate really is too large
+    path = tmp_path / "big.pem"
+    path.write_bytes(big.public_bytes(serialization.Encoding.PEM))
+    with factory(pairing_ca=str(path), db_path=str(tmp_path / "big.sqlite3")) as w:
+        response = w.create()
+        assert response.status_code == 409 and response.json()["error"]["code"] == "PAIRING_NOT_CONFIGURED"
+        assert w.listing() == {}                                 # nothing was stored for a package that cannot exist
 
 
 def test_at_most_eight_grants_wait_at_once(world):
@@ -696,65 +784,16 @@ def test_the_compare_is_constant_time_even_for_an_id_that_does_not_exist(world, 
     assert len(calls) > before
 
 
-# ---------------------------------------------------------------- C: the CA a device pins before it sends a secret
-# The device has only the CA fingerprint from the package. It first fetches the CA certificate here, over TLS it cannot
-# verify yet, checks that the fingerprint matches the package, and only then talks to the Agent over verified TLS.
-# So nothing secret may be asked for or answered here, and the answer must not depend on any grant.
-def test_the_ca_is_public_and_needs_no_credential(world):
-    response = world.client.get("/api/v1/pairing/ca", headers={"Authorization": "Bearer not-a-token-at-all-xxxxxxxxxx"})
-    assert response.status_code == 200, response.text
-    assert response.json() == {"ca_pem": CA.read_text(), "ca_fingerprint": FINGERPRINT.hex()}
-    assert len(response.content) < 4096
-    anonymous = TestClient(world.app, base_url=ORIGIN)
-    assert anonymous.get("/api/v1/pairing/ca").json() == response.json()
+# ---------------------------------------------------------------- C1: nothing hands out the CA
+# The package carries the CA, so the device never needs an unverified TLS connection to fetch it. The endpoint that did
+# that was removed; nothing should answer there, and nothing about it should be in the contract.
+def test_there_is_no_endpoint_that_hands_out_the_ca(world):
+    for method in ("get", "post", "put"):
+        assert getattr(world.client, method)("/api/v1/pairing/ca").status_code in {404, 405}
+    assert not any("pairing/ca" in path for path in world.app.openapi()["paths"])
+    assert world.client.get("/api/v1/pairing/ca").text.find("BEGIN CERTIFICATE") == -1
 
 
-def test_the_ca_answer_does_not_depend_on_grants(world):
-    before = world.client.get("/api/v1/pairing/ca").content
-    world.grant()
-    world.grant(replace=True)
-    assert world.client.get("/api/v1/pairing/ca").content == before
-
-
-def test_the_ca_is_only_served_over_https(factory):
-    with factory() as w:
-        plain = TestClient(w.app, base_url="http://testserver")
-        response = plain.get("/api/v1/pairing/ca")
-        assert response.status_code == 400 and response.json()["error"]["code"] == "HTTPS_REQUIRED"
-
-
-@pytest.mark.parametrize("overrides", [{"pairing_ca": None}, {"public_url": None}, {"pairing_ca": "/nonexistent/ca.pem"}])
-def test_no_ca_without_the_configuration(factory, overrides):
-    with factory(**overrides) as w:
-        response = w.client.get("/api/v1/pairing/ca")
-        assert response.status_code == 409 and response.json()["error"]["code"] == "PAIRING_NOT_CONFIGURED"
-
-
-def test_a_private_key_is_never_served_as_the_ca(factory, tmp_path):
-    path = tmp_path / "key.pem"
-    path.write_text("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")
-    with factory(pairing_ca=str(path)) as w:
-        response = w.client.get("/api/v1/pairing/ca")
-        assert response.status_code == 409 and "PRIVATE" not in response.text
-
-
-def test_the_ca_endpoint_is_limited_like_the_rest_of_pairing(world):
-    busy = TestClient(world.app, base_url=ORIGIN, client=("203.0.113.9", 50000))
-    statuses = [busy.get("/api/v1/pairing/ca").status_code for _ in range(12)]
-    assert statuses[:10] == [200] * 10 and statuses[10:] == [429, 429]
-
-
-def test_a_broken_limiter_stops_the_ca_endpoint_too(world):
-    original = world.app.state.rates.check
-
-    def broken(key, maximum=120):
-        if key.startswith("pairing"):
-            raise RuntimeError("limiter fault")
-        return original(key, maximum)
-
-    world.app.state.rates.check = broken
-    try:
-        response = world.client.get("/api/v1/pairing/ca")
-    finally:
-        world.app.state.rates.check = original
-    assert response.status_code == 503 and response.json()["error"]["code"] == "PAIRING_UNAVAILABLE"
+def test_the_only_unauthenticated_pairing_route_is_the_redemption(world):
+    paths = {path: sorted(methods) for path, methods in world.app.openapi()["paths"].items() if "pairing" in path and "admin" not in path}
+    assert paths == {"/api/v1/pairing/redeem": ["post"]}

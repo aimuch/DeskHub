@@ -1,9 +1,10 @@
 """Hotspot pairing, the Agent side (docs/pairing-design.md).
 
 An admin creates a grant; the console shows a pairing package once. A person pastes the package into the device's
-setup page. The device pins this Agent by the CA fingerprint inside the package and redeems the grant here for a
-per-device token. Rules: K1 (the CA is pinned, one token per device), K4 (a code or token is never logged, never
-stored in clear, never shown twice), R7 (one-time, time-limited).
+setup page. The package carries this Agent's CA certificate, so the device verifies its TLS connection to the Agent
+against it from the first byte and redeems the grant here for a per-device token. There is no unverified connection and
+no endpoint that hands out the CA. Rules: K1 (the CA comes by the person's hand, one token per device), K4 (a code or
+token is never logged, never stored in clear, never shown twice), R7 (one-time, time-limited).
 """
 from __future__ import annotations
 
@@ -28,7 +29,9 @@ from .errors import AgentError
 from .management_models import StrictModel
 from .models import Identifier, SCOPES, stamp, utcnow, valid_public_url
 
-PREFIX = "DHP1."
+PREFIX = "DHP2."
+VERSION = 2
+MAX_CA_BYTES = 2048  # one DER certificate; RSA-4096 fits
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # Crockford base32 without I, L, O, U
 GRANT_ID_LENGTH, CODE_LENGTH = 8, 10
 ID_PATTERN = r"^[0-9A-HJKMNP-TV-Z]{8}$"
@@ -47,15 +50,35 @@ def _reject() -> AgentError:
 
 
 # ---------------------------------------------------------------- package
-def encode_package(url: str, grant_id: str, code: str, fingerprint: bytes) -> str:
+def der_sequence_ok(der: bytes) -> bool:
+    """Exactly one DER SEQUENCE and nothing else: tag 0x30, a minimal definite length (short form, 0x81 or 0x82), no bytes after it."""
+    if not isinstance(der, bytes) or not 2 <= len(der) <= MAX_CA_BYTES or der[0] != 0x30:
+        return False
+    first = der[1]
+    if first < 0x80:
+        header, length = 2, first
+    elif first == 0x81 and len(der) >= 3:
+        header, length = 3, der[2]
+        if length < 0x80:
+            return False  # not minimal
+    elif first == 0x82 and len(der) >= 4:
+        header, length = 4, (der[2] << 8) | der[3]
+        if length < 0x100:
+            return False  # not minimal
+    else:
+        return False  # indefinite length, three length bytes, or a truncated header
+    return header + length == len(der)
+
+
+def encode_package(url: str, grant_id: str, code: str, ca_der: bytes) -> str:
     if not valid_public_url(url):
         raise ValueError("the Agent address must be an https origin")
     if not re.fullmatch(ID_PATTERN, grant_id) or not re.fullmatch(CODE_PATTERN, code):
         raise ValueError("grant id and code use the 32-character alphabet and fixed lengths")
-    if not isinstance(fingerprint, bytes) or len(fingerprint) != 32:
-        raise ValueError("the CA fingerprint is 32 bytes")
+    if not der_sequence_ok(ca_der):
+        raise ValueError("the CA certificate must be one DER sequence of at most 2048 bytes")
     raw_url = url.encode()
-    body = bytes([1, len(raw_url)]) + raw_url + grant_id.encode() + code.encode() + fingerprint
+    body = bytes([VERSION, len(raw_url)]) + raw_url + grant_id.encode() + code.encode() + len(ca_der).to_bytes(2, "big") + ca_der
     return PREFIX + base64.urlsafe_b64encode(body + hashlib.sha256(body).digest()[:4]).rstrip(b"=").decode()
 
 
@@ -73,33 +96,44 @@ def decode_package(text: str) -> dict:
         raise ValueError("the package is not base64") from error
     if base64.urlsafe_b64encode(raw).rstrip(b"=").decode() != payload:
         raise ValueError("the package is not in its canonical form")  # a changed last character is not accepted
-    if len(raw) < 2 + 8 + 10 + 32 + 4:
+    if len(raw) < 2 + 8 + 10 + 2 + 2 + 4:
         raise ValueError("the package is too short")
     body, check = raw[:-4], raw[-4:]
     if not hmac.compare_digest(hashlib.sha256(body).digest()[:4], check):
         raise ValueError("the package was damaged while copying")
-    if body[0] != 1:
+    if body[0] != VERSION:
         raise ValueError("unknown package version")
     size = body[1]
-    rest = body[2 + size:]
-    if size == 0 or len(body) != 2 + size + 8 + 10 + 32:
+    if size == 0 or len(body) < 2 + size + 8 + 10 + 2:
         raise ValueError("the package has the wrong length")
+    rest = body[2 + size:]
+    ca_length = int.from_bytes(rest[18:20], "big")
+    if len(rest) != 20 + ca_length:
+        raise ValueError("the stated certificate length does not match the package")
     try:
         url, grant_id, code = body[2:2 + size].decode("ascii"), rest[:8].decode("ascii"), rest[8:18].decode("ascii")
     except UnicodeDecodeError as error:
         raise ValueError("the package has bytes it cannot have") from error
+    ca_der = rest[20:]
     if not valid_public_url(url) or not re.fullmatch(ID_PATTERN, grant_id) or not re.fullmatch(CODE_PATTERN, code):
         raise ValueError("the package carries an invalid address, id or code")
-    return {"url": url, "grant_id": grant_id, "code": code, "fingerprint": rest[18:]}
+    if not der_sequence_ok(ca_der):
+        raise ValueError("the certificate in the package is not one DER sequence")
+    return {"url": url, "grant_id": grant_id, "code": code, "ca_der": ca_der}
 
 
-def ca_fingerprint(pem: str) -> bytes:
-    """SHA-256 of the CA certificate in DER form. A private key or anything else is not a CA."""
+def ca_der_of(pem: str) -> bytes:
+    """The CA certificate in DER form. A private key or anything else is not a CA."""
     try:
         certificate = x509.load_pem_x509_certificate(pem.encode())
     except (ValueError, TypeError) as error:
         raise ValueError("not a certificate") from error
-    return hashlib.sha256(certificate.public_bytes(serialization.Encoding.DER)).digest()
+    return certificate.public_bytes(serialization.Encoding.DER)
+
+
+def ca_fingerprint(pem: str) -> bytes:
+    """SHA-256 of the CA certificate. Only for a person to compare; the device does not need it."""
+    return hashlib.sha256(ca_der_of(pem)).digest()
 
 
 def _random(length: int) -> str:
@@ -179,12 +213,15 @@ class Pairing:
             raise AgentError("PAIRING_NOT_CONFIGURED", "Pairing needs public_url and pairing_ca in the Agent configuration", 409)
         try:
             pem = Path(settings.pairing_ca).read_text()
-            return settings.public_url, ca_fingerprint(pem), pem
+            der = ca_der_of(pem)
         except (OSError, UnicodeDecodeError, ValueError) as error:
             raise AgentError("PAIRING_NOT_CONFIGURED", "pairing_ca is not a readable CA certificate", 409) from error
+        if not der_sequence_ok(der):
+            raise AgentError("PAIRING_NOT_CONFIGURED", "The CA certificate is too large for a pairing package (2048 bytes at most)", 409)
+        return settings.public_url, der, pem
 
     def create(self, scopes: list[str], targets: list[str], ttl_seconds: int = MAX_TTL_SECONDS, replace: bool = False, device_id: str | None = None) -> dict:
-        url, fingerprint, _ = self._configuration()
+        url, ca_der, _ = self._configuration()
         if not scopes or not set(scopes) <= set(GRANT_SCOPES) or len(set(scopes)) != len(scopes):
             raise AgentError("INVALID_ARGUMENT", "A grant carries read:status, control:displays or device:sync, never admin:config", 400)
         known = {display.monitor_id for display in self.settings.displays}
@@ -213,8 +250,8 @@ class Pairing:
                     continue
             else:
                 raise AgentError("PAIRING_UNAVAILABLE", "Could not create a grant", 503)
-        return {"grant_id": grant_id, "package": encode_package(url, grant_id, code, fingerprint), "expires_at": stamp(expires),
-                "ca_fingerprint": fingerprint.hex(), "url": url, "scopes": scopes, "targets": targets, "replace": replace, "device_id": device_id}
+        return {"grant_id": grant_id, "package": encode_package(url, grant_id, code, ca_der), "expires_at": stamp(expires),
+                "ca_fingerprint": hashlib.sha256(ca_der).hexdigest(), "url": url, "scopes": scopes, "targets": targets, "replace": replace, "device_id": device_id}
 
     def list(self) -> list[dict]:
         with self.store.lock:
@@ -301,14 +338,6 @@ def install_pairing(app, settings, database, rates, admin) -> Pairing:
             raise
         except Exception as error:  # a broken limiter refuses; it never lets a request through
             raise AgentError("PAIRING_UNAVAILABLE", "Pairing is unavailable", 503) from error
-
-    @app.get("/api/v1/pairing/ca")
-    async def pairing_ca(request: Request):
-        # Public data. The device fetches it over TLS it cannot verify yet and checks the fingerprint against its package,
-        # so nothing secret is asked for or answered here, and the answer does not depend on any grant.
-        guard(request)
-        _, fingerprint, pem = pairing._configuration()
-        return {"ca_pem": pem, "ca_fingerprint": fingerprint.hex()}
 
     @app.post("/api/v1/pairing/redeem")
     async def redeem(request: Request, value: Redeem):
