@@ -36,15 +36,22 @@ Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_m
 检查“原样”：
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/components/board_support firmware/main firmware/tests
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp'
 ```
 
 输出为空，就表示这些文件与归档逐字节相同。
 
+已按规则 K7 单独提交改动的基线文件（所以上面的命令不含它们）：
+
+| 文件 | 改动 |
+| --- | --- |
+| `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
+
 ## 文档
 
-- [产品范围](docs/product-scope.md)：做什么、不做什么、每个功能的状态，以及 9 条决策记录。
+- [产品范围](docs/product-scope.md)：做什么、不做什么、每个功能的状态，以及 14 条决策记录。
 - [规则](docs/rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
+- [设计稿](docs/design/README.md)：设计稿源文件、画板清单和设计变量。
 
 ## 现状
 
