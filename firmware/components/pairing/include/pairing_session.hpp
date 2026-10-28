@@ -33,10 +33,10 @@ struct Sink {
     virtual bool readback(Secrets &out) = 0;    // what is stored after the commit
 };
 
-enum class Phase { Closed, Open, Joining, FetchingCa, Redeeming, SaveFailed, Done };
+enum class Phase { Closed, Open, Joining, Redeeming, SaveFailed, Done };
 enum class Why {
     None, NotAllowed, RandomFailed, WrongPhase, WrongCode, TooManyWrongCodes, CodeRequired, Timeout, Cancelled, InvalidInput, TooManyAttempts,
-    WifiFailed, AgentUnreachable, PinMismatch, CertificateExpired, HostnameMismatch, ChainInvalid, RedeemRefused, BadReply, SaveFailed, ReadbackMismatch
+    WifiFailed, AgentUnreachable, CertificateExpired, HostnameMismatch, ChainInvalid, RedeemRefused, BadReply, SaveFailed, ReadbackMismatch
 };
 enum class Tls { Ok, Unreachable, CertificateExpired, HostnameMismatch, ChainInvalid };
 
@@ -76,13 +76,12 @@ public:
     bool code_accepted() const { return code_ok_; }
     bool holds_secrets() const;  // a form, a token or a CA in RAM
     const Package &package() const { return package_; }
-    const std::string &ca_pem() const { return ca_pem_; }
+    const std::string &ca_pem() const { return ca_pem_; }  // the CA of the package as PEM: what the TLS client trusts
 
     Why tick(int64_t now_ms);                                                                           // closes the session when the window is over
     Why enter_code(int64_t now_ms, const std::string &code);                                            // the code on the screen
     Why submit(int64_t now_ms, const SetupForm &);                                                      // Wi-Fi and package; nothing is stored yet
     Why joined(int64_t now_ms, bool ok);                                                                // the device joined the Wi-Fi
-    Why ca_fetched(int64_t now_ms, bool ok, const std::vector<uint8_t> &der, const std::string &pem);   // GET /pairing/ca
     Why redeemed(int64_t now_ms, Tls tls, int http_status, const std::string &body);                    // POST /pairing/redeem
     Why retry_save(int64_t now_ms);                                                                     // after SaveFailed
 
@@ -103,7 +102,6 @@ private:
     SetupForm form_;
     Package package_;
     std::string ca_pem_;
-    std::vector<uint8_t> ca_der_;
     Reply reply_;
     bool have_reply_ = false;
 };

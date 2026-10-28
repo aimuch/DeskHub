@@ -67,10 +67,9 @@ Session::~Session() { clear_form(); }
 void Session::clear_form() {
     wipe(form_.ssid); wipe(form_.wifi_password); wipe(form_.package); wipe(form_.utc);
     wipe(package_.url); wipe(package_.grant_id); wipe(package_.code);
-    package_.fingerprint.fill(0);
+    package_.ca_der.assign(package_.ca_der.size(), 0);
+    package_.ca_der.clear();
     wipe(ca_pem_);
-    ca_der_.assign(ca_der_.size(), 0);
-    ca_der_.clear();
     wipe(reply_.agent_id); wipe(reply_.token); wipe(reply_.ca_pem);
     have_reply_ = false;
 }
@@ -153,9 +152,13 @@ Why Session::submit(int64_t now_ms, const SetupForm &form) {
     Package package;
     int64_t epoch;
     if (!valid_ssid(form.ssid) || !valid_wifi_password(form.wifi_password) || !parse_utc(form.utc, epoch) || !decode_package(form.package, package)) return Why::InvalidInput;
+    // The TLS client trusts exactly the CA of the package. The PEM it takes is made from those bytes and nothing else.
+    const std::string pem = der_to_pem(package.ca_der);
+    if (!valid_ca_pem(pem)) return Why::InvalidInput;
     if (!sink_.set_time(form.utc)) return Why::InvalidInput;  // the clock decides whether the certificate is valid
     form_ = form;
     package_ = package;
+    ca_pem_ = pem;
     phase_ = Phase::Joining;
     return Why::None;
 }
@@ -164,19 +167,6 @@ Why Session::joined(int64_t now_ms, bool ok) {
     if (Why w = expire(now_ms); w != Why::None) return w;
     if (phase_ != Phase::Joining) return Why::WrongPhase;
     if (!ok) return fail_attempt(Why::WifiFailed);
-    phase_ = Phase::FetchingCa;
-    return Why::None;
-}
-
-Why Session::ca_fetched(int64_t now_ms, bool ok, const std::vector<uint8_t> &der, const std::string &pem) {
-    if (Why w = expire(now_ms); w != Why::None) return w;
-    if (phase_ != Phase::FetchingCa) return Why::WrongPhase;
-    if (!ok) return fail_attempt(Why::AgentUnreachable);
-    std::vector<uint8_t> from_pem;
-    // The CA is the trust root only if it is the one in the package, and the PEM the TLS stack will use is that same certificate.
-    if (!pin_matches(package_.fingerprint, der) || !pem_to_der(pem, from_pem) || from_pem != der) return fail_attempt(Why::PinMismatch);
-    ca_der_ = der;
-    ca_pem_ = pem;
     phase_ = Phase::Redeeming;
     return Why::None;
 }
@@ -194,7 +184,7 @@ Why Session::redeemed(int64_t now_ms, Tls tls, int http_status, const std::strin
     if (http_status == 403) return fail_attempt(Why::RedeemRefused);
     if (http_status != 200) return fail_attempt(Why::AgentUnreachable);
     Reply reply;
-    if (!parse_redeem_reply(body, package_.fingerprint, reply)) return fail_attempt(Why::BadReply);
+    if (!parse_redeem_reply(body, package_.ca_der, reply)) return fail_attempt(Why::BadReply);
     reply_ = reply;
     have_reply_ = true;
     return save();

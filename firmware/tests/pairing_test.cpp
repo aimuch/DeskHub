@@ -1,14 +1,16 @@
 // Failure modes of the device side of hotspot pairing, written before the code (docs/pairing-design.md section 7,
 // items 10 to 15, plus the pieces they rest on). All pure logic: no hotspot, no TLS, no flash.
 //
-// V1  Every valid vector of protocol/examples/pairing-package.json decodes to its fields; every invalid one is refused.
-// V2  Any single changed character, any truncation, any extension, white space inside, a wrong prefix, padding, the
-//     non-canonical spelling of the last character, and a package whose check is right but whose address is not
-//     an https origin, are refused. Random garbage never decodes.
-// H1  SHA-256 matches the published answers (empty, "abc", 56 bytes, a million "a") and the vectors' fingerprint.
-// N1  Fingerprint check (item 12): a CA is the trust root only if its DER hashes to the pinned fingerprint. One flipped
-//     bit, an appended byte, an empty certificate, a different CA: refused. A private key is never a certificate.
-// N2  The redeem reply must carry exactly the five members, valid values, and the pinned CA.
+// V1  Every valid vector of protocol/examples/pairing-package.json (version 2: the package carries the CA) decodes to
+//     its fields; every invalid one is refused.
+// V2  Any single changed character, any truncation, any extension, white space inside, the old prefix, padding, the
+//     non-canonical spelling of the last character, a package whose check is right but whose address is not an https
+//     origin, another version, and a certificate that is not exactly one DER sequence of at most 2048 bytes (wrong
+//     tag, wrong or non-minimal or indefinite length, bytes after it, a stated length that is wrong): refused.
+//     Random garbage never decodes.
+// H1  SHA-256 matches the published answers (empty, "abc", 56 bytes, a million "a").
+// N1  The CA of the package: DER to PEM and back, a private key is never a certificate.
+// N2  The redeem reply must carry exactly the five members, valid values, and the very CA of the package.
 // I1  Input validation: the same limits as USB provisioning, and a strict clock and setup code.
 // R1  Random secrets: digits without modulo bias, a password from the 32-character alphabet, a failing RNG makes
 //     no secret and opens nothing.
@@ -17,8 +19,8 @@
 // E10 Wrong setup code: nothing else is accepted before the right one; five wrong codes close the hotspot, even for
 //     the right code afterwards.
 // E11 Window over: the hotspot closes at the deadline, at any step, what was entered is discarded, nothing is stored.
-// E12 Wi-Fi, Agent, pin, certificate, host name, refusal, bad reply: each aborts without touching the stored
-//     configuration; five failures close the hotspot.
+// E12 Wi-Fi, Agent, certificate, host name, refusal, bad reply (also another CA): each aborts without touching the
+//     stored configuration; five failures close the hotspot.
 // E13 Saving fails or reads back differently: the session stays open, shows the error, the old configuration is
 //     unchanged, and saving can be retried. It ends when the window ends.
 // E14 The configuration is committed once, complete, only after a good redemption, from the pinned CA; the update key
@@ -30,6 +32,7 @@
 #include "json_util.hpp"
 #include "pairing_session.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -72,8 +75,15 @@ static std::string b64(const std::string &raw) {
 }
 
 // ---- the shared vectors ----
-struct Vector { std::string package, url, grant_id, code, fingerprint_hex, why; };
+struct Vector { std::string package, url, grant_id, code, ca_der_hex, why; };
 static std::vector<Vector> valid_vectors, invalid_vectors;
+static std::string kCaDer;  // the DER of the first vector: the real test CA of tools/tests/fixtures/ca.pem, 764 bytes
+static std::vector<uint8_t> unhex(const std::string &h) {
+    std::vector<uint8_t> out;
+    for (size_t i = 0; i + 1 < h.size(); i += 2) out.push_back(static_cast<uint8_t>(std::stoi(h.substr(i, 2), nullptr, 16)));
+    return out;
+}
+static std::vector<uint8_t> ca_bytes() { return std::vector<uint8_t>(kCaDer.begin(), kCaDer.end()); }
 static void load_vectors() {
     std::ifstream in(PAIRING_VECTORS);
     std::stringstream ss;
@@ -85,22 +95,49 @@ static void load_vectors() {
     auto str = [](cJSON *o, const char *k) { auto *v = cJSON_GetObjectItemCaseSensitive(o, k); return cJSON_IsString(v) ? std::string(v->valuestring) : std::string(); };
     cJSON *item;
     cJSON_ArrayForEach(item, cJSON_GetObjectItemCaseSensitive(root, "valid"))
-        valid_vectors.push_back({str(item, "package"), str(item, "url"), str(item, "grant_id"), str(item, "code"), str(item, "ca_fingerprint_hex"), ""});
+        valid_vectors.push_back({str(item, "package"), str(item, "url"), str(item, "grant_id"), str(item, "code"), str(item, "ca_der_hex"), ""});
     cJSON_ArrayForEach(item, cJSON_GetObjectItemCaseSensitive(root, "invalid"))
         invalid_vectors.push_back({str(item, "package"), "", "", "", "", str(item, "why")});
     cJSON_Delete(root);
-    CHECK(valid_vectors.size() >= 3 && invalid_vectors.size() >= 10);
+    CHECK(valid_vectors.size() >= 4 && invalid_vectors.size() >= 20);
+    if (!valid_vectors.empty()) { const auto der = unhex(valid_vectors[0].ca_der_hex); kCaDer.assign(der.begin(), der.end()); }
+    CHECK(kCaDer.size() == 764);
 }
-static const std::string kCaDer = "deskhub pairing test vector CA";  // the vectors' "CA": its SHA-256 is the fingerprint
+// A DER SEQUENCE of exactly `total` bytes: a valid header in the shortest length form, zero bytes inside.
+static std::string fake_der(size_t total) {
+    std::string out;
+    if (total - 2 < 128) { out += '\x30'; out += static_cast<char>(total - 2); }
+    else if (total - 3 < 256) { out += '\x30'; out += static_cast<char>(0x81); out += static_cast<char>(total - 3); }
+    else { out += '\x30'; out += static_cast<char>(0x82); out += static_cast<char>((total - 4) >> 8); out += static_cast<char>((total - 4) & 255); }
+    out.resize(total, '\0');
+    return out;
+}
+// A package built by hand: the test's own encoder, which does not validate anything.
+static std::string craft(const std::string &url, const std::string &id, const std::string &code, uint8_t version, const std::string &der, long ca_len = -1) {
+    std::string body;
+    body += static_cast<char>(version);
+    body += static_cast<char>(url.size());
+    body += url + id + code;
+    const size_t n = ca_len < 0 ? der.size() : static_cast<size_t>(ca_len);
+    body += static_cast<char>(n >> 8);
+    body += static_cast<char>(n & 255);
+    body += der;
+    const Digest check = sha256(body);
+    body.append(reinterpret_cast<const char *>(check.data()), 4);
+    std::string out = b64(body);
+    for (auto &c : out) { if (c == '+') c = '-'; else if (c == '/') c = '_'; }
+    while (!out.empty() && out.back() == '=') out.pop_back();
+    return "DHP2." + out;
+}
 
-// ---- V1, V2 ----
+
 static void v1_vectors() {
     for (const auto &v : valid_vectors) {
         Package p;
         PackageError why = PackageError::Prefix;
         CHECK(decode_package(v.package, p, &why) && why == PackageError::None);
-        CHECK(p.url == v.url && p.grant_id == v.grant_id && p.code == v.code && hex(p.fingerprint) == v.fingerprint_hex);
-        CHECK(valid_https_origin(p.url));
+        CHECK(p.url == v.url && p.grant_id == v.grant_id && p.code == v.code && p.ca_der == unhex(v.ca_der_hex));
+        CHECK(valid_https_origin(p.url) && der_sequence_ok(p.ca_der.data(), p.ca_der.size()));
         CHECK(decode_package("  \t" + v.package + "\r\n ", p));  // copy and paste
     }
     for (const auto &v : invalid_vectors) {
@@ -113,6 +150,7 @@ static void v1_vectors() {
 static void v2_tampering() {
     const std::string good = valid_vectors[0].package;
     Package p;
+    CHECK(good.size() > 1000 && good.size() < 1200);
     for (size_t i = 5; i < good.size(); ++i) {
         std::string changed = good;
         changed[i] = good[i] != 'A' ? 'A' : 'B';
@@ -120,47 +158,61 @@ static void v2_tampering() {
     }
     for (size_t n = 0; n < good.size(); ++n) CHECK(!decode_package(good.substr(0, n), p));   // every truncation
     for (const char *extra : {"A", "AA", "AAAA", "=", "\n\n", "-"}) CHECK(decode_package(good + extra, p) == (std::string(extra) == "\n\n"));  // only white space is allowed after it
-    for (size_t i = 5; i < good.size(); ++i) { std::string s = good; s.insert(i, " "); CHECK(!decode_package(s, p)); }
-    for (size_t i = 5; i < good.size(); ++i) { std::string s = good; s.insert(i, "\n"); CHECK(!decode_package(s, p)); }
-    for (const char *prefix : {"DHP2.", "dhp1.", "DHP1", "DHP1:", "XHP1.", ""}) CHECK(!decode_package(prefix + good.substr(5), p));
-    CHECK(!decode_package("DHP1.", p) && !decode_package("", p) && !decode_package("   ", p));
-    // the spare bits of the last character
+    for (size_t i = 5; i < good.size(); i += 7) { std::string s = good; s.insert(i, " "); CHECK(!decode_package(s, p)); }
+    for (size_t i = 5; i < good.size(); i += 7) { std::string s = good; s.insert(i, "\n"); CHECK(!decode_package(s, p)); }
+    for (const char *prefix : {"DHP1.", "dhp2.", "DHP2", "DHP2:", "XHP2.", ""}) CHECK(!decode_package(prefix + good.substr(5), p));
+    CHECK(!decode_package("DHP2.", p) && !decode_package("", p) && !decode_package("   ", p));
+    // the spare bits of the last character, with both leftovers (two and four bits)
     static const std::string table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    const size_t last = table.find(good.back());
-    CHECK(last != std::string::npos && last % 16 == 0);
-    for (size_t extra = 1; extra < 16; ++extra) CHECK(!decode_package(good.substr(0, good.size() - 1) + table[last + extra], p));
+    for (size_t size : {300u, 301u}) {
+        const std::string text = craft("https://10.10.10.5:8765", "ABCD2345", "KM7QWXYZ09", 2, fake_der(size));
+        CHECK(decode_package(text, p));
+        const size_t raw = 2 + 23 + 18 + 2 + size + 4, spare = raw % 3 == 1 ? 4 : 2;
+        CHECK(raw % 3 != 0);
+        const size_t last = table.find(text.back());
+        CHECK(last != std::string::npos && last % (1u << spare) == 0);
+        for (size_t extra = 1; extra < (1u << spare); ++extra) CHECK(!decode_package(text.substr(0, text.size() - 1) + table[last + extra], p));
+    }
     // the standard alphabet and padding are not accepted
     for (const char *bad : {"+", "/", "=", "==", "*", "~", "\x01", "\xff"}) { std::string s = good; s.replace(10, 1, bad); CHECK(!decode_package(s, p)); }
     CHECK(!decode_package(good + std::string(1, '\0'), p));
-    // a valid check does not make a bad address good
-    auto craft = [&](const std::string &url, const std::string &id, const std::string &code, uint8_t version = 1, const std::string &tail = "") {
-        std::string body;
-        body += static_cast<char>(version);
-        body += static_cast<char>(url.size());
-        body += url + id + code;
-        const Digest fp = sha256(kCaDer);
-        body.append(reinterpret_cast<const char *>(fp.data()), 32);
-        body += tail;                                                  // bytes after the fingerprint, under a valid check
-        const Digest check = sha256(body);
-        body.append(reinterpret_cast<const char *>(check.data()), 4);
-        std::string out = b64(body);
-        for (auto &c : out) { if (c == '+') c = '-'; else if (c == '/') c = '_'; }
-        while (!out.empty() && out.back() == '=') out.pop_back();
-        return "DHP1." + out;
-    };
-    CHECK(decode_package(craft("https://10.10.10.5:8765", "ABCD2345", "KM7QWXYZ09"), p));
+    // a valid check does not make a bad address, id, code or version good
+    const std::string der = fake_der(200);
+    CHECK(decode_package(craft("https://10.10.10.5:8765", "ABCD2345", "KM7QWXYZ09", 2, der), p) && p.ca_der.size() == 200);
     for (const char *url : {"http://10.10.10.5:8765", "https://x/api", "https://x/", "https://u:p@x", "https://x?q=1", "https://x#f", "", "https://", "https://x:0",
                             "https://x:99999", "https://x:", "https://x y", "https://-x", "https://x-", "https://.x", "ftp://x", "https://[::1", "https://[]"})
-        CHECK(!decode_package(craft(url, "ABCD2345", "KM7QWXYZ09"), p));
-    for (const char *id : {"ABCD234", "ABCD23456", "abcd2345", "ABCI2345", "ABCL2345", "ABCO2345", "ABCU2345", "ABCD 345"}) CHECK(!decode_package(craft("https://x", id, "KM7QWXYZ09"), p));
-    for (const char *code : {"KM7QWXYZ0", "KM7QWXYZ090", "km7qwxyz09", "KM7QWXYZ0I", "KM7QWXYZ0U"}) CHECK(!decode_package(craft("https://x", "ABCD2345", code), p));
-    CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 0), p) && !decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2), p));
-    CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 1, "X"), p) && !decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 1, std::string(40, 'X')), p));
+        CHECK(!decode_package(craft(url, "ABCD2345", "KM7QWXYZ09", 2, der), p));
+    for (const char *id : {"ABCD234", "ABCD23456", "abcd2345", "ABCI2345", "ABCL2345", "ABCO2345", "ABCU2345", "ABCD 345"}) CHECK(!decode_package(craft("https://x", id, "KM7QWXYZ09", 2, der), p));
+    for (const char *code : {"KM7QWXYZ0", "KM7QWXYZ090", "km7qwxyz09", "KM7QWXYZ0I", "KM7QWXYZ0U"}) CHECK(!decode_package(craft("https://x", "ABCD2345", code, 2, der), p));
+    for (int version : {0, 1, 3, 255}) CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", static_cast<uint8_t>(version), der), p));
+    // the certificate: one DER sequence, nothing else
+    const std::string tiny("\x30\x03\x02\x01\x05", 5);
+    const std::vector<std::pair<const char *, std::string>> bad_der = {
+        {"empty", ""}, {"not a sequence", std::string("\x31\x03\x02\x01\x05", 5)}, {"an integer", std::string("\x02\x01\x05", 3)},
+        {"length longer than the data", std::string("\x30\x09\x02\x01\x05", 5)}, {"bytes after the sequence", tiny + std::string("\0\0", 2)},
+        {"length shorter than the data", std::string("\x30\x01\x02\x01\x05", 5)}, {"indefinite length", std::string("\x30\x80\x02\x01\x05\0\0", 7)},
+        {"a long form for a short length", std::string("\x30\x81\x03\x02\x01\x05", 6)},
+        {"a two byte length for a one byte length", std::string("\x30\x82\x00\xc8", 4) + std::string(200, '\0')},
+        {"three length bytes", std::string("\x30\x83\x00\x00\x03\x02\x01\x05", 8)}, {"only a tag", std::string("\x30", 1)},
+        {"tag and half a length", std::string("\x30\x82\x01", 3)}, {"above 2048 bytes", fake_der(2049)}, {"far above 2048 bytes", fake_der(5000)}};
+    for (const auto &b : bad_der) {
+        if (decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2, b.second), p)) std::fprintf(stderr, "accepted a certificate that is: %s\n", b.first);
+        CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2, b.second), p));
+        CHECK(!der_sequence_ok(reinterpret_cast<const uint8_t *>(b.second.data()), b.second.size()));
+    }
+    for (long stated : {0L, 1L, 4L, 6L, 100L, 65535L}) CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2, tiny, stated), p));   // a wrong stated length
+    // a good certificate of exactly the stated length, and two more bytes after it inside the package
+    CHECK(!decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2, tiny + std::string("\0\0", 2), static_cast<long>(tiny.size())), p));
+    for (size_t size : {5u, 129u, 131u, 200u, 258u, 260u, 764u, 1500u, 2048u}) {                                                      // every length form is accepted
+        const std::string d = fake_der(size);
+        CHECK(der_sequence_ok(reinterpret_cast<const uint8_t *>(d.data()), d.size()));
+        CHECK(decode_package(craft("https://x", "ABCD2345", "KM7QWXYZ09", 2, d), p) && p.ca_der == std::vector<uint8_t>(d.begin(), d.end()));
+    }
     // random garbage and random damage never decode
     uint64_t s = 88172645463325252ULL;
     auto next = [&]() { s ^= s << 13; s ^= s >> 7; s ^= s << 17; return s; };
     for (int round = 0; round < 20000; ++round) {
-        std::string junk = "DHP1.";
+        std::string junk = "DHP2.";
         const size_t n = next() % 140;
         for (size_t i = 0; i < n; ++i) junk += static_cast<char>(next() % 256);
         CHECK(!decode_package(junk, p));
@@ -188,7 +240,6 @@ static void h1_sha256() {
     CHECK(hex(sha256(std::string("abc"))) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     CHECK(hex(sha256(std::string("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"))) == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
     CHECK(hex(sha256(std::string(1000000, 'a'))) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
-    for (const auto &v : valid_vectors) CHECK(hex(sha256(kCaDer)) == v.fingerprint_hex);  // an independent oracle made these
     CHECK(equal_constant_time(reinterpret_cast<const uint8_t *>("abc"), reinterpret_cast<const uint8_t *>("abc"), 3));
     CHECK(!equal_constant_time(reinterpret_cast<const uint8_t *>("abc"), reinterpret_cast<const uint8_t *>("abd"), 3));
     CHECK(equal_constant_time(nullptr, nullptr, 0));
@@ -202,22 +253,21 @@ static std::string pem_of(const std::string &der) {
     return out + "-----END CERTIFICATE-----\n";
 }
 static void n1_pin() {
-    Digest pin = sha256(kCaDer);
-    std::vector<uint8_t> der(kCaDer.begin(), kCaDer.end());
-    CHECK(pin_matches(pin, der));
-    for (size_t byte = 0; byte < der.size(); ++byte)
-        for (int bit = 0; bit < 8; ++bit) { auto d = der; d[byte] ^= static_cast<uint8_t>(1 << bit); CHECK(!pin_matches(pin, d)); }
-    auto longer = der; longer.push_back(0);
-    CHECK(!pin_matches(pin, longer) && !pin_matches(pin, std::vector<uint8_t>(der.begin(), der.end() - 1)));
-    CHECK(!pin_matches(pin, {}));
-    Digest zero{};
-    CHECK(!pin_matches(sha256(std::string()), {}));                                // the hash of nothing is not a pin for nothing
-    CHECK(!pin_matches(zero, der) && !pin_matches(zero, {}));    // an all-zero pin never matches, not even the empty certificate
-    const std::string other = "another CA";
-    CHECK(!pin_matches(pin, std::vector<uint8_t>(other.begin(), other.end())));
-    // PEM to DER
+    // DER to PEM and back
+    const std::vector<uint8_t> der = ca_bytes();
+    const std::string pem = der_to_pem(der);
+    CHECK(pem == pem_of(kCaDer));
+    CHECK(pem.rfind("-----BEGIN CERTIFICATE-----\n", 0) == 0 && pem.size() > 29 && pem.compare(pem.size() - 26, 26, "-----END CERTIFICATE-----\n") == 0);
+    for (size_t from = 0, to; from < pem.size(); from = to + 1) { to = pem.find('\n', from); CHECK(to != std::string::npos && to - from <= 64); }
     std::vector<uint8_t> out;
-    CHECK(pem_to_der(pem_of(kCaDer), out) && out == der);
+    CHECK(pem_to_der(pem, out) && out == der);
+    for (size_t n = 1; n < 300; ++n) {
+        std::vector<uint8_t> d(n);
+        for (size_t i = 0; i < n; ++i) d[i] = static_cast<uint8_t>(i * 7 + n);
+        CHECK(pem_to_der(der_to_pem(d), out) && out == d);
+    }
+    CHECK(der_to_pem({}).empty());
+    // PEM to DER
     CHECK(pem_to_der("junk\n" + pem_of(kCaDer) + "junk", out) && out == der);
     for (const char *bad : {"", "garbage", "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n", "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n",
                             "-----BEGIN CERTIFICATE-----\n!!!!\n-----END CERTIFICATE-----\n", "-----BEGIN CERTIFICATE-----\nAAAA\n"})
@@ -231,29 +281,36 @@ static std::string good_body(const std::string &token = std::string(43, 'T'), co
     return "{\"agent_id\":\"" + agent + "\",\"token\":\"" + token + "\",\"ca_pem\":\"" + escaped + "\",\"scopes\":[\"read:status\",\"device:sync\"],\"targets\":[\"monitor-desk-01\"]}";
 }
 static void n2_reply() {
-    const Digest pin = sha256(kCaDer);
+    const std::vector<uint8_t> pinned = ca_bytes();
     Reply r;
-    CHECK(parse_redeem_reply(good_body(), pin, r) && r.agent_id == "agent-test" && r.token == std::string(43, 'T') && r.ca_pem == pem_of(kCaDer));
-    CHECK(!parse_redeem_reply(good_body(), Digest{}, r));                                                         // not the pinned CA
-    CHECK(!parse_redeem_reply(good_body(std::string(43, 'T'), "agent-test", pem_of("a different CA")), pin, r));
+    CHECK(parse_redeem_reply(good_body(), pinned, r) && r.agent_id == "agent-test" && r.token == std::string(43, 'T') && r.ca_pem == pem_of(kCaDer));
+    CHECK(!parse_redeem_reply(good_body(), std::vector<uint8_t>{0x30, 0x03, 0x02, 0x01, 0x05}, r) && !parse_redeem_reply(good_body(), {}, r));   // not the CA of the package
+    for (size_t byte : {size_t(0), size_t(100), size_t(763)}) {                                                                                      // a single changed byte of the package's CA
+        auto other = pinned;
+        other[byte] ^= 1;
+        CHECK(!parse_redeem_reply(good_body(), other, r));
+    }
+    CHECK(!parse_redeem_reply(good_body(std::string(43, 'T'), "agent-test", pem_of("a different CA")), pinned, r));
+    auto longer = pem_of(kCaDer + std::string(1, '\0'));                                                                                           // the same CA with a byte more
+    CHECK(!parse_redeem_reply(good_body(std::string(43, 'T'), "agent-test", longer), pinned, r));
     for (const std::string &token : {std::string(31, 'T'), std::string(257, 'T'), std::string("short"), std::string(40, ' '), std::string(40, 'T') + "\\n", std::string()})
-        CHECK(!parse_redeem_reply(good_body(token), pin, r));
-    for (const char *agent : {"", "bad id", "-x", "a/b"}) CHECK(!parse_redeem_reply(good_body(std::string(43, 'T'), agent), pin, r));
+        CHECK(!parse_redeem_reply(good_body(token), pinned, r));
+    for (const char *agent : {"", "bad id", "-x", "a/b"}) CHECK(!parse_redeem_reply(good_body(std::string(43, 'T'), agent), pinned, r));
     const std::string base = good_body();
     for (const char *key : {"agent_id", "token", "ca_pem", "scopes", "targets"}) {
         std::string s = base;
         s.replace(s.find(std::string("\"") + key + "\""), std::strlen(key) + 2, "\"x_x\"");
-        CHECK(!parse_redeem_reply(s, pin, r));                                 // a missing member
+        CHECK(!parse_redeem_reply(s, pinned, r));                                 // a missing member
     }
-    CHECK(!parse_redeem_reply(base.substr(0, base.size() - 1) + ",\"extra\":1}", pin, r));
-    CHECK(!parse_redeem_reply(base.substr(0, base.size() - 1) + ",\"token\":\"" + std::string(43, 'U') + "\"}", pin, r));   // a repeated member
-    for (const char *bad : {"", "{}", "[]", "null", "\"x\"", "{\"agent_id\":1}", "not json", "{\"agent_id\":\"a\"", "{}{}"}) CHECK(!parse_redeem_reply(bad, pin, r));
+    CHECK(!parse_redeem_reply(base.substr(0, base.size() - 1) + ",\"extra\":1}", pinned, r));
+    CHECK(!parse_redeem_reply(base.substr(0, base.size() - 1) + ",\"token\":\"" + std::string(43, 'U') + "\"}", pinned, r));   // a repeated member
+    for (const char *bad : {"", "{}", "[]", "null", "\"x\"", "{\"agent_id\":1}", "not json", "{\"agent_id\":\"a\"", "{}{}"}) CHECK(!parse_redeem_reply(bad, pinned, r));
     std::string typed = base;
     const std::string needle = "[\"read:status\",\"device:sync\"]";
     typed.replace(typed.find(needle), needle.size(), "\"read:status\"");
-    CHECK(!parse_redeem_reply(typed, pin, r));
-    CHECK(!parse_redeem_reply(base + std::string(1, '\0'), pin, r));
-    CHECK(!parse_redeem_reply(std::string(20000, ' ') + base, pin, r));
+    CHECK(!parse_redeem_reply(typed, pinned, r));
+    CHECK(!parse_redeem_reply(base + std::string(1, '\0'), pinned, r));
+    CHECK(!parse_redeem_reply(std::string(20000, ' ') + base, pinned, r));
 }
 
 // ---- I1 ----
@@ -433,9 +490,7 @@ struct Rig {
     Why open(bool paired = false, bool press = false) { return session.open(now, paired, press); }
     void unlock() { CHECK(session.enter_code(now, session.offer().setup_code) == Why::None); }
     void to_joining() { CHECK(open() == Why::None); unlock(); CHECK(session.submit(now, form()) == Why::None); }
-    void to_fetching() { to_joining(); CHECK(session.joined(now, true) == Why::None); }
-    std::vector<uint8_t> der() const { return std::vector<uint8_t>(kCaDer.begin(), kCaDer.end()); }
-    void to_redeeming() { to_fetching(); CHECK(session.ca_fetched(now, true, der(), pem_of(kCaDer)) == Why::None); }
+    void to_redeeming() { to_joining(); CHECK(session.joined(now, true) == Why::None); }
     Why finish(const std::string &body = std::string()) { return session.redeemed(now, Tls::Ok, 200, body.empty() ? good_body() : body); }
     bool untouched() const { return sink.commits == 0 && same_secrets(sink.stored, original); }
 };
@@ -464,8 +519,8 @@ static void e10_wrong_code() {
         Rig r;                                                                   // before the code nothing else is accepted
         r.open();
         CHECK(r.session.submit(r.now, r.form()) == Why::CodeRequired && r.session.phase() == Phase::Open && !r.session.holds_secrets());
-        CHECK(r.session.joined(r.now, true) == Why::WrongPhase && r.session.ca_fetched(r.now, true, r.der(), pem_of(kCaDer)) == Why::WrongPhase &&
-              r.session.redeemed(r.now, Tls::Ok, 200, good_body()) == Why::WrongPhase && r.session.retry_save(r.now) == Why::WrongPhase);
+        CHECK(r.session.joined(r.now, true) == Why::WrongPhase && r.session.redeemed(r.now, Tls::Ok, 200, good_body()) == Why::WrongPhase &&
+              r.session.retry_save(r.now) == Why::WrongPhase);
         CHECK(r.sink.time_sets == 0 && r.untouched());
     }
     {
@@ -507,20 +562,18 @@ static void e11_window() {
         CHECK(r.session.remaining_ms(r.now + kWindowMs) == 0 && r.session.offer().hotspot_password.empty());
         CHECK(r.untouched());
     }
-    for (int stage = 0; stage < 5; ++stage) {                                    // the window ends at every step; the step then fails
+    for (int stage = 0; stage < 4; ++stage) {                                    // the window ends at every step; the step then fails
         Rig r;
         r.open();
         r.unlock();
         if (stage >= 1) CHECK(r.session.submit(r.now, r.form()) == Why::None);
         if (stage >= 2) CHECK(r.session.joined(r.now, true) == Why::None);
-        if (stage >= 3) CHECK(r.session.ca_fetched(r.now, true, r.der(), pem_of(kCaDer)) == Why::None);
         const int64_t late = r.now + kWindowMs;
         Why why = Why::None;
         switch (stage) {
         case 0: why = r.session.submit(late, r.form()); break;
         case 1: why = r.session.joined(late, true); break;
-        case 2: why = r.session.ca_fetched(late, true, r.der(), pem_of(kCaDer)); break;
-        case 3: why = r.session.redeemed(late, Tls::Ok, 200, good_body()); break;
+        case 2: why = r.session.redeemed(late, Tls::Ok, 200, good_body()); break;
         default: why = r.session.enter_code(late, "000000"); break;
         }
         CHECK(why == Why::Timeout && r.session.phase() == Phase::Closed);
@@ -535,22 +588,20 @@ static void e11_window() {
 }
 static void e12_aborts() {
     struct Step { const char *name; std::function<Why(Rig &)> fail; Why expect; int stage; };
+    auto changed_ca = [](size_t byte) { std::string d = kCaDer; d[byte] = static_cast<char>(d[byte] ^ 1); return pem_of(d); };
     const Step steps[] = {
         {"wifi", [](Rig &r) { return r.session.joined(r.now, false); }, Why::WifiFailed, 1},
-        {"agent unreachable", [](Rig &r) { return r.session.ca_fetched(r.now, false, {}, ""); }, Why::AgentUnreachable, 2},
-        {"wrong ca", [](Rig &r) { std::string o = "another CA"; return r.session.ca_fetched(r.now, true, std::vector<uint8_t>(o.begin(), o.end()), pem_of(o)); }, Why::PinMismatch, 2},
-        {"empty ca", [](Rig &r) { return r.session.ca_fetched(r.now, true, {}, ""); }, Why::PinMismatch, 2},
-        {"pem and der differ", [](Rig &r) { return r.session.ca_fetched(r.now, true, r.der(), pem_of("another CA")); }, Why::PinMismatch, 2},
-        {"tls unreachable", [](Rig &r) { return r.session.redeemed(r.now, Tls::Unreachable, 0, ""); }, Why::AgentUnreachable, 3},
-        {"certificate expired", [](Rig &r) { return r.session.redeemed(r.now, Tls::CertificateExpired, 0, ""); }, Why::CertificateExpired, 3},
-        {"host name", [](Rig &r) { return r.session.redeemed(r.now, Tls::HostnameMismatch, 0, ""); }, Why::HostnameMismatch, 3},
-        {"chain", [](Rig &r) { return r.session.redeemed(r.now, Tls::ChainInvalid, 0, ""); }, Why::ChainInvalid, 3},
-        {"refused", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 403, "{\"error\":{}}"); }, Why::RedeemRefused, 3},
-        {"busy", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 429, ""); }, Why::AgentUnreachable, 3},
-        {"server error", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 503, ""); }, Why::AgentUnreachable, 3},
-        {"not json", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, "<html>"); }, Why::BadReply, 3},
-        {"short token", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, good_body("short")); }, Why::BadReply, 3},
-        {"another ca in the reply", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, good_body(std::string(43, 'T'), "agent-test", pem_of("another CA"))); }, Why::BadReply, 3},
+        {"tls unreachable", [](Rig &r) { return r.session.redeemed(r.now, Tls::Unreachable, 0, ""); }, Why::AgentUnreachable, 2},
+        {"certificate expired", [](Rig &r) { return r.session.redeemed(r.now, Tls::CertificateExpired, 0, ""); }, Why::CertificateExpired, 2},
+        {"host name", [](Rig &r) { return r.session.redeemed(r.now, Tls::HostnameMismatch, 0, ""); }, Why::HostnameMismatch, 2},
+        {"chain", [](Rig &r) { return r.session.redeemed(r.now, Tls::ChainInvalid, 0, ""); }, Why::ChainInvalid, 2},
+        {"refused", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 403, "{\"error\":{}}"); }, Why::RedeemRefused, 2},
+        {"busy", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 429, ""); }, Why::AgentUnreachable, 2},
+        {"server error", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 503, ""); }, Why::AgentUnreachable, 2},
+        {"not json", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, "<html>"); }, Why::BadReply, 2},
+        {"short token", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, good_body("short")); }, Why::BadReply, 2},
+        {"another ca in the reply", [](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, good_body(std::string(43, 'T'), "agent-test", pem_of("another CA"))); }, Why::BadReply, 2},
+        {"the ca of the package with one byte changed in the reply", [&](Rig &r) { return r.session.redeemed(r.now, Tls::Ok, 200, good_body(std::string(43, 'T'), "agent-test", changed_ca(300))); }, Why::BadReply, 2},
     };
     for (const Step &s : steps) {
         Rig r;
@@ -558,7 +609,6 @@ static void e12_aborts() {
         r.unlock();
         CHECK(r.session.submit(r.now, r.form()) == Why::None);
         if (s.stage >= 2) CHECK(r.session.joined(r.now, true) == Why::None);
-        if (s.stage >= 3) CHECK(r.session.ca_fetched(r.now, true, r.der(), pem_of(kCaDer)) == Why::None);
         const Why got = s.fail(r);
         if (got != s.expect) std::fprintf(stderr, "step %s answered %d\n", s.name, static_cast<int>(got));
         CHECK(got == s.expect);
@@ -581,7 +631,7 @@ static void e12_aborts() {
     {
         Rig r;                                                                                                  // a late step of another phase is refused
         r.to_joining();
-        CHECK(r.session.ca_fetched(r.now, true, r.der(), pem_of(kCaDer)) == Why::WrongPhase && r.session.redeemed(r.now, Tls::Ok, 200, good_body()) == Why::WrongPhase);
+        CHECK(r.session.redeemed(r.now, Tls::Ok, 200, good_body()) == Why::WrongPhase);
         CHECK(r.session.phase() == Phase::Joining && r.untouched());
     }
     {
@@ -593,7 +643,7 @@ static void e12_aborts() {
             [](SetupForm &x) { x.ssid = ""; }, [](SetupForm &x) { x.ssid = std::string(33, 'a'); }, [](SetupForm &x) { x.wifi_password = "short"; },
             [](SetupForm &x) { x.wifi_password = std::string(64, 'p'); }, [](SetupForm &x) { x.utc = "yesterday"; }, [](SetupForm &x) { x.utc = "2026-02-29T00:00:00Z"; },
             [](SetupForm &x) { x.package = ""; }, [](SetupForm &x) { x.package = x.package.substr(0, x.package.size() - 1); },
-            [](SetupForm &x) { x.package[20] = x.package[20] == 'A' ? 'B' : 'A'; }};
+            [](SetupForm &x) { x.package[200] = x.package[200] == 'A' ? 'B' : 'A'; }, [](SetupForm &x) { x.package = "DHP1." + x.package.substr(5); }};
         for (const auto &b : breaks) {
             SetupForm g = f;
             b(g);
@@ -654,9 +704,10 @@ static void e14_commit() {
     Rig r;
     r.to_joining();
     CHECK(r.sink.commits == 0 && r.sink.time_sets == 1 && r.sink.time_value == "2026-10-28T12:34:56Z");     // the clock is set early, nothing else
-    CHECK(r.session.joined(r.now, true) == Why::None && r.sink.commits == 0);
-    CHECK(r.session.ca_fetched(r.now, true, r.der(), pem_of(kCaDer)) == Why::None && r.sink.commits == 0 && r.session.phase() == Phase::Redeeming);
+    CHECK(r.session.ca_pem() == pem_of(kCaDer) && r.session.package().ca_der == ca_bytes());               // the TLS client gets the CA of the package from the start
+    CHECK(r.session.joined(r.now, true) == Why::None && r.sink.commits == 0 && r.session.phase() == Phase::Redeeming);
     CHECK(r.session.redeemed(r.now, Tls::Unreachable, 0, "") == Why::AgentUnreachable && r.sink.commits == 0);
+    CHECK(r.session.ca_pem().empty());                                                                      // and forgets it when the attempt fails
     r.session.close(Why::Cancelled);
     Rig q;
     q.to_redeeming();
@@ -665,9 +716,9 @@ static void e14_commit() {
     const Secrets &s = q.sink.committed[0];
     CHECK(s.ready());
     CHECK(s.ssid == "HomeWifi" && s.password == "wifi-password" && s.url == valid_vectors[0].url && s.agent_id == "agent-test" && s.token == std::string(43, 'T'));
-    CHECK(s.ca_pem == pem_of(kCaDer));                                                                        // the pinned CA, not another one
+    CHECK(s.ca_pem == pem_of(kCaDer));                                                                        // the CA of the package, not another one
     CHECK(s.update_public_key_pem == "UPDATE KEY" && !s.update_key_explicit && s.ntp_server == "ntp.old.example");   // what pairing does not own stays
-    CHECK(!q.session.holds_secrets() && q.session.offer().hotspot_password.empty() && q.session.package().code.empty() && q.session.ca_pem().empty());
+    CHECK(!q.session.holds_secrets() && q.session.offer().hotspot_password.empty() && q.session.package().code.empty() && q.session.package().ca_der.empty() && q.session.ca_pem().empty());
     CHECK(q.session.open(q.now, true, false) == Why::NotAllowed && q.session.open(q.now, true, true) == Why::None);   // a new pairing needs a long press
     // power cut: the commit does not finish, the old configuration remains and nothing half-written is read back
     Rig c;
@@ -740,7 +791,7 @@ static void f1_random_walk() {
             case 3: r.session.submit(r.now, r.form()); break;
             case 4: { SetupForm f = r.form(); f.ssid = roll(2) ? "" : f.ssid; r.session.submit(r.now, f); break; }
             case 5: r.session.joined(r.now, roll(4) != 0); break;
-            case 6: r.session.ca_fetched(r.now, roll(5) != 0, r.der(), pem_of(roll(6) == 0 ? "another CA" : kCaDer)); break;
+            case 6: r.session.joined(r.now, true); break;
             case 7: r.session.redeemed(r.now, static_cast<Tls>(roll(5)), roll(3) == 0 ? 403 : 200, roll(5) == 0 ? "junk" : good_body()); break;
             case 8: r.sink.commit_ok = roll(3) != 0; r.sink.corrupt_readback = roll(4) == 0; r.sink.power_cut = roll(5) == 0; break;
             case 9: r.session.retry_save(r.now); break;
@@ -756,8 +807,8 @@ static void f1_random_walk() {
                 ++commits_seen;
             }
             const Phase now_phase = r.session.phase();
-            if (now_phase == Phase::Closed || now_phase == Phase::Done) CHECK(!r.session.holds_secrets() && r.session.offer().setup_code.empty() && r.session.offer().hotspot_password.empty());
-            if (now_phase == Phase::Open) CHECK(!r.session.holds_secrets());
+            if (now_phase == Phase::Closed || now_phase == Phase::Done) CHECK(!r.session.holds_secrets() && r.session.offer().setup_code.empty() && r.session.offer().hotspot_password.empty() && r.session.package().ca_der.empty());
+            if (now_phase == Phase::Open) CHECK(!r.session.holds_secrets() && r.session.package().ca_der.empty() && r.session.ca_pem().empty());
             const int64_t left = r.session.remaining_ms(r.now);
             CHECK(left >= 0 && left <= kWindowMs);
             CHECK(r.session.wrong_codes() <= kMaxWrongCodes && r.session.attempts() <= kMaxAttempts);

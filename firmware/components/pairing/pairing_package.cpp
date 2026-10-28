@@ -111,8 +111,9 @@ bool valid_https_origin(const std::string &url) {
 
 // ---------------------------------------------------------------- the package
 namespace {
-constexpr char kPrefix[] = "DHP1.";
-constexpr size_t kFixed = 8 + 10 + 32;
+constexpr char kPrefix[] = "DHP2.";
+constexpr uint8_t kVersion = 2;
+constexpr size_t kFixed = 8 + 10 + 2;  // grant id, code, the two length bytes of the certificate
 int url_safe_value(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
     if (c >= 'a' && c <= 'z') return c - 'a' + 26;
@@ -152,26 +153,44 @@ bool decode_package(const std::string &text, Package &out, PackageError *why) {
     const size_t body_size = raw.size() - 4;
     const Digest check = sha256(raw.data(), body_size);
     if (!equal_constant_time(check.data(), raw.data() + body_size, 4)) return fail(PackageError::Check);
-    if (raw[0] != 1) return fail(PackageError::Version);
+    if (raw[0] != kVersion) return fail(PackageError::Version);
     const size_t url_size = raw[1];
-    if (url_size == 0 || body_size != 2 + url_size + kFixed) return fail(PackageError::Length);
+    if (url_size == 0 || body_size < 2 + url_size + kFixed) return fail(PackageError::Length);
+    const size_t length_at = 2 + url_size + 18;
+    const size_t ca_size = (static_cast<size_t>(raw[length_at]) << 8) | raw[length_at + 1];
+    if (body_size != length_at + 2 + ca_size) return fail(PackageError::Length);  // the stated length must be exactly what is there
     Package p;
     p.url.assign(reinterpret_cast<const char *>(raw.data() + 2), url_size);
     p.grant_id.assign(reinterpret_cast<const char *>(raw.data() + 2 + url_size), 8);
     p.code.assign(reinterpret_cast<const char *>(raw.data() + 2 + url_size + 8), 10);
-    std::copy(raw.begin() + 2 + url_size + 18, raw.begin() + 2 + url_size + 50, p.fingerprint.begin());
+    p.ca_der.assign(raw.begin() + length_at + 2, raw.begin() + length_at + 2 + ca_size);
     if (!valid_https_origin(p.url)) return fail(PackageError::Url);
     if (!in_alphabet(p.grant_id, 8) || !in_alphabet(p.code, 10)) return fail(PackageError::Alphabet);
+    if (!der_sequence_ok(p.ca_der)) return fail(PackageError::Certificate);
     out = p;
     if (why) *why = PackageError::None;
     return true;
 }
 
-// ---------------------------------------------------------------- the pin and the reply
-bool pin_matches(const Digest &expected, const std::vector<uint8_t> &ca_der) {
-    if (ca_der.empty()) return false;
-    const Digest actual = sha256(ca_der.data(), ca_der.size());
-    return equal_constant_time(actual.data(), expected.data(), 32);
+// ---------------------------------------------------------------- the certificate and the reply
+bool der_sequence_ok(const uint8_t *der, size_t length) {
+    if (!der || length < 2 || length > kMaxCaBytes || der[0] != 0x30) return false;
+    size_t header, content;
+    if (der[1] < 0x80) {
+        header = 2;
+        content = der[1];
+    } else if (der[1] == 0x81 && length >= 3) {
+        header = 3;
+        content = der[2];
+        if (content < 0x80) return false;  // not minimal: the short form would have done
+    } else if (der[1] == 0x82 && length >= 4) {
+        header = 4;
+        content = (static_cast<size_t>(der[2]) << 8) | der[3];
+        if (content < 0x100) return false;  // not minimal
+    } else {
+        return false;  // indefinite length, three length bytes, or a header that is cut off
+    }
+    return header + content == length;
 }
 
 namespace {
@@ -212,7 +231,25 @@ bool pem_to_der(const std::string &pem, std::vector<uint8_t> &der) {
     return true;
 }
 
-bool parse_redeem_reply(const std::string &body, const Digest &pinned, Reply &out) {
+std::string der_to_pem(const std::vector<uint8_t> &der) {
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    if (der.empty()) return std::string();
+    std::string body;
+    for (size_t i = 0; i < der.size(); i += 3) {
+        uint32_t v = static_cast<uint32_t>(der[i]) << 16;
+        if (i + 1 < der.size()) v |= static_cast<uint32_t>(der[i + 1]) << 8;
+        if (i + 2 < der.size()) v |= der[i + 2];
+        body += table[v >> 18];
+        body += table[(v >> 12) & 63];
+        body += i + 1 < der.size() ? table[(v >> 6) & 63] : '=';
+        body += i + 2 < der.size() ? table[v & 63] : '=';
+    }
+    std::string pem = "-----BEGIN CERTIFICATE-----\n";
+    for (size_t i = 0; i < body.size(); i += 64) pem += body.substr(i, 64) + "\n";
+    return pem + "-----END CERTIFICATE-----\n";
+}
+
+bool parse_redeem_reply(const std::string &body, const std::vector<uint8_t> &package_ca_der, Reply &out) {
     cJSON *root = dh::parse_json_strict(body.c_str(), body.size());
     if (!root) return false;
     struct Free { cJSON *p; ~Free() { cJSON_Delete(p); } } guard{root};
@@ -237,7 +274,7 @@ bool parse_redeem_reply(const std::string &body, const Digest &pinned, Reply &ou
     if (!text("agent_id", r.agent_id) || !text("token", r.token) || !text("ca_pem", r.ca_pem) || !strings("scopes", 3) || !strings("targets", 4)) return false;
     if (!valid_identifier(r.agent_id) || !valid_token(r.token) || !valid_ca_pem(r.ca_pem)) return false;
     std::vector<uint8_t> der;
-    if (!pem_to_der(r.ca_pem, der) || !pin_matches(pinned, der)) return false;  // the CA in the reply must be the pinned one
+    if (package_ca_der.empty() || !pem_to_der(r.ca_pem, der) || der != package_ca_der) return false;  // the CA in the reply must be the one of the package
     out = r;
     return true;
 }
