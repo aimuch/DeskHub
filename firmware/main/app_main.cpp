@@ -1,6 +1,7 @@
 #include "core.hpp"
 #include "board.hpp"
 #include "ui.hpp"
+#include "power_wire.hpp"
 #include "agent_client.hpp"
 #include "management.hpp"
 #include "json_util.hpp"
@@ -49,6 +50,7 @@ cJSON *handle(cJSON *request) {
         if(op=="status"){cJSON_AddStringToObject(r,"wifi",s.wifi.c_str());cJSON_AddStringToObject(r,"agent",s.agent.c_str());cJSON_AddStringToObject(r,"time_quality",s.time_quality.c_str());cJSON_AddStringToObject(r,"error",s.error.c_str());cJSON_AddNumberToObject(r,"config_revision",dh::config().revision);cJSON_AddNumberToObject(r,"provision_revision",dh::secrets().revision);cJSON_AddBoolToObject(r,"configured",dh::secrets().ready());}
         if(op=="status"){
             cJSON_AddBoolToObject(r,"ui_alive",dh::ui_alive());
+            cJSON_AddItemToObject(r,"power",dh::power_report_json(power,dh::monotonic_ms()));
             const auto configuration=dh::config();
             cJSON_AddStringToObject(r,"theme",configuration.layout.theme.c_str());
             cJSON_AddNumberToObject(r,"rotation",configuration.rotation);

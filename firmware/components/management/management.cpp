@@ -3,6 +3,7 @@
 #include "update_policy.hpp"
 #include "json_util.hpp"
 #include "board.hpp"
+#include "power_wire.hpp"
 #include "ui.hpp"
 #include "esp_http_client.h"
 #include "esp_ota_ops.h"
@@ -129,7 +130,7 @@ static cJSON *report(const Secrets &s){
     if(!config_error.empty())cJSON_AddStringToObject(o,"config_error",config_error.c_str());
     else if(application_error)cJSON_AddStringToObject(o,"config_error",application_error);
     else cJSON_AddNullToObject(o,"config_error");
-    auto *p=cJSON_AddObjectToObject(o,"power");cJSON_AddStringToObject(p,"vbus",power.observed_ms&&monotonic_ms()-power.observed_ms<=6000?power.vbus.c_str():"unknown");cJSON_AddStringToObject(p,"battery",power.battery.c_str());cJSON_AddStringToObject(p,"charging",power.charging.c_str());cJSON_AddBoolToObject(p,"fault",power.fault);
+    cJSON_AddItemToObject(o,"power",power_report_json(power,monotonic_ms()));
     auto *caps=cJSON_AddObjectToObject(o,"capabilities");cJSON_AddBoolToObject(caps,"management",true);auto fingerprint=update_key_fingerprint(s.update_public_key_pem);
     cJSON_AddBoolToObject(caps,"signed_ota",journal_healthy&&!fingerprint.empty());if(fingerprint.empty())cJSON_AddNullToObject(caps,"update_key_fingerprint");else cJSON_AddStringToObject(caps,"update_key_fingerprint",fingerprint.c_str());
     auto *layouts=cJSON_AddArrayToObject(caps,"layouts");for(auto value:{"desk","clock","focus"})cJSON_AddItemToArray(layouts,cJSON_CreateString(value));
