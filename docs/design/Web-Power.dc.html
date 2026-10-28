@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>管理台 电源</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} display: flex; flex-wrap: wrap; min-height: 800px; background: radial-gradient(900px 520px at 88% -8%, var(--glow), transparent 62%), linear-gradient(160deg, var(--bg), var(--bg2)); color: var(--ink); font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 15px">
+
+  <nav aria-label="主导航" style="flex: 0 0 224px; box-sizing: border-box; padding: 22px 14px; background: var(--side); border-right: 1px solid var(--edge)">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 20px">
+      <span style="width: 28px; height: 28px; border-radius: 50%; border: 4px solid var(--accent); box-sizing: border-box"></span>
+      <span style="font-size: 20px; font-weight: 700">DeskHub</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="8">
+        <div style="height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: {{n.weight}}; background: {{n.bg}}; color: {{n.ink}}; box-shadow: {{n.glow}}"><span>{{n.label}}</span><span style="font-size: 13px">{{n.badge}}</span></div>
+      </sc-for>
+    </div>
+  </nav>
+
+  <main style="flex: 1 1 560px; min-width: 0; box-sizing: border-box; padding: 26px 32px; display: flex; flex-direction: column; gap: 18px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px">
+      <div>
+        <h1 style="margin: 0; font-size: 28px; font-weight: 700">电源</h1>
+        <p style="margin: 4px 0 0; font-size: 14px; color: var(--muted)">电量、电压、温度和充电保护。读数来自电源芯片 AXP2101。</p>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 13px; color: var(--muted)">desk-01 · 3 秒前更新</span></div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+      <span style="font-size: 14px; line-height: 1.6">要显示电池电压和芯片温度，固件会打开电源芯片的 ADC：只写寄存器 0x30 的位 0、2、4，写完都读回确认。其他寄存器一律不写。</span>
+      <span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--agent); background: color-mix(in srgb, var(--agent) 15%, transparent); border: 1px solid color-mix(in srgb, var(--agent) 50%, transparent)">读回一致</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+
+      <div style="flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+        <section style="padding: 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+          <h2 style="margin: 0 0 12px; font-size: 16px; font-weight: 700">实时读数</h2>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px">
+            <svg width="130" height="130" viewBox="0 0 130 130" role="img" aria-label="电量仪表 67%" style="flex: none">
+              <path d="M29.6 100.4 A50 50 0 1 1 100.4 100.4" fill="none" stroke-width="11" stroke-linecap="round" style="stroke: var(--edge)"></path>
+              <path d="M29.6 100.4 A50 50 0 1 1 100.9 30.2" fill="none" stroke-width="11" stroke-linecap="round" style="stroke: var(--agent)"></path>
+              <text x="65" y="70" text-anchor="middle" font-size="27" font-weight="500" font-family="'Noto Sans SC', sans-serif" style="fill: var(--ink)">67%</text>
+              <text x="65" y="92" text-anchor="middle" font-size="13" font-family="'Noto Sans SC', sans-serif" style="fill: var(--muted)">电量</text>
+            </svg>
+            <div style="flex: 1 1 260px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+              <sc-for list="{{readings}}" as="r" hint-placeholder-count="4">
+                <div style="padding: 10px 12px; border-radius: 12px; border: 1px solid var(--edge)">
+                  <div style="font-size: 13px; color: var(--muted)">{{r.label}}</div>
+                  <div style="margin-top: 2px; font-size: 20px; font-weight: 700; color: {{r.color}}">{{r.value}}</div>
+                  <div style="font-size: 12px; color: var(--muted)">{{r.note}}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+
+        <section style="padding: 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+          <h2 style="margin: 0 0 8px; font-size: 16px; font-weight: 700">测量状态</h2>
+          <div style="display: flex; flex-direction: column">
+            <sc-for list="{{channels}}" as="c" hint-placeholder-count="6">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--edge)">
+                <span style="flex: 1 1 150px; font-size: 14px; font-weight: 500">{{c.name}}</span>
+                <span style="flex: 2 1 200px; font-size: 13px; color: var(--muted)">{{c.note}}</span>
+                <span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: {{c.c}}; background: {{c.bg}}; border: 1px solid {{c.bd}}">{{c.text}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+      <div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+        <section style="padding: 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 10px"><h2 style="margin: 0; font-size: 16px; font-weight: 700">充电保护</h2><span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--power); background: color-mix(in srgb, var(--power) 15%, transparent); border: 1px solid color-mix(in srgb, var(--power) 50%, transparent)">实验</span></div>
+            <button role="switch" aria-checked="false" aria-label="启用充电保护" style="flex: none; width: 52px; height: 30px; border-radius: 999px; border: 1px solid var(--edge); background: var(--edge); padding: 2px; display: flex; align-items: center"><span style="width: 24px; height: 24px; border-radius: 50%; background: var(--muted)"></span></button>
+          </div>
+          <p style="margin: 10px 0 12px; font-size: 14px; line-height: 1.6; color: var(--muted)">电量到上限就停止充电，降到回充点再充。默认关闭，开启要二次确认。</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            <sc-for list="{{limits}}" as="l" hint-placeholder-count="3">
+              <button style="font-family: inherit; min-height: 52px; padding: 6px 16px; border-radius: 14px; text-align: center; background: {{l.bg}}; color: {{l.ink}}; border: {{l.border}}"><span style="display: block; font-size: 17px; font-weight: 500">{{l.label}}</span><span style="display: block; font-size: 12px; color: var(--muted)">{{l.sub}}</span></button>
+            </sc-for>
+          </div>
+          <div style="margin-top: 16px; font-size: 14px; font-weight: 500">保护措施</div>
+          <ul style="margin: 6px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.75; color: var(--muted)">
+            <li>电池电压不小于 4.30 V，或芯片温度不小于 65 °C：立刻停充</li>
+            <li>连续 3 个有效样本才切换，两次切换至少隔 60 秒</li>
+            <li>读不到电量：恢复正常充电，由芯片自己的终止机制兜底</li>
+            <li>每次开关都读回确认，并记入日志</li>
+          </ul>
+        </section>
+
+        <section style="padding: 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+          <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="margin: 0 0 6px; font-size: 16px; font-weight: 700">充电事件</h2><span style="font-size: 12px; color: var(--muted)">示例数据</span></div>
+          <div style="display: flex; flex-direction: column">
+            <sc-for list="{{events}}" as="e" hint-placeholder-count="3">
+              <div style="padding: 9px 0; border-top: 1px solid var(--edge)">
+                <div style="display: flex; justify-content: space-between; gap: 10px; font-size: 14px"><span style="font-weight: 500">{{e.what}}</span><span style="color: var(--muted)">{{e.time}}</span></div>
+                <div style="margin-top: 2px; font-size: 13px; color: var(--muted)">{{e.why}} · {{e.readback}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","default":"dark","options":["dark","light"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      dark: '--bg2:#082520;--glow:rgba(94,230,184,0.10);--glass:rgba(11,29,26,0.72);--lift:0 10px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);--bg:#040d0c;--side:#071713;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;--danger:#ff7b7b;',
+      light: '--bg:#f3f8f6;--side:#ffffff;--card:#ffffff;--edge:#d3e2de;--ink:#10231f;--muted:#566e68;--accent:#0b7a5f;--sel:#dff3ec;--wifi:#086a96;--agent:#146b34;--power:#8f5a00;--time:#6a3aae;--danger:#b02e22;--bg2:#e4f1ec;--glow:rgba(11,122,95,0.08);--glass:rgba(255,255,255,0.82);--lift:0 8px 24px rgba(16,35,31,0.08);'
+    };
+    const K = (v) => ({ c: 'var(--' + v + ')', bg: 'color-mix(in srgb, var(--' + v + ') 15%, transparent)', bd: 'color-mix(in srgb, var(--' + v + ') 50%, transparent)' });
+    const names = ['概览', '设备', '动作与显示器', '命令记录', '布局与显示', '电源', '固件升级', '访问管理', '外观'];
+    const active = 5;
+    const lim = [
+      { label: '80%', sub: '75% 回充', on: true },
+      { label: '90%', sub: '85% 回充', on: false },
+      { label: '自定义', sub: '70–100%', on: false }
+    ];
+    return {
+      vars: T[this.props.mode] || T.dark,
+      nav: names.map((label, i) => ({
+        label,
+        badge: label === '设备' ? '1' : '',
+        weight: i === active ? 500 : 400,
+        bg: i === active ? 'var(--sel)' : 'transparent',
+        glow: i === active ? 'inset 3px 0 0 var(--accent), 0 0 20px color-mix(in srgb, var(--accent) 22%, transparent)' : 'none',
+        ink: i === active ? 'var(--accent)' : 'var(--muted)'
+      })),
+      readings: [
+        { label: '电量', value: '67%', note: 'PMIC 估算，未验证', color: 'var(--ink)' },
+        { label: '电池电压', value: '4.12 V', note: '合理范围 2.5–4.6 V', color: 'var(--ink)' },
+        { label: 'USB 电压', value: '5.03 V', note: '合理范围 3.0–6.5 V', color: 'var(--ink)' },
+        { label: '芯片温度', value: '42.0 °C', note: '电源芯片，不是电池温度', color: 'var(--ink)' }
+      ],
+      channels: [
+        { name: '电池检测', note: '寄存器 0x68 位 0', text: '已启用', ...K('agent') },
+        { name: '电量计', note: '寄存器 0x18 位 3', text: '已启用', ...K('agent') },
+        { name: 'ADC · 电池电压', note: '寄存器 0x30 位 0', text: '已启用', ...K('agent') },
+        { name: 'ADC · USB 电压', note: '寄存器 0x30 位 2', text: '已启用', ...K('agent') },
+        { name: 'ADC · 芯片温度', note: '寄存器 0x30 位 4', text: '已启用', ...K('agent') },
+        { name: '电池温度', note: '没有已确认的温度探头，TS 引脚不使用', text: '不可用', ...K('muted') }
+      ],
+      limits: lim.map((l) => ({
+        label: l.label,
+        sub: l.sub,
+        bg: l.on ? 'var(--sel)' : 'var(--card)',
+        ink: l.on ? 'var(--accent)' : 'var(--ink)',
+        border: l.on ? '1.5px solid var(--accent)' : '1px solid var(--edge)'
+      })),
+      events: [
+        { what: '请求停充', time: '14:02:10', why: '电量 80%，达到上限', readback: '读回一致' },
+        { what: '请求恢复充电', time: '14:41:36', why: '电量 75%，降到回充点', readback: '读回一致' },
+        { what: '恢复正常充电', time: '15:03:02', why: '连续 3 次读不到电量', readback: '读回一致' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

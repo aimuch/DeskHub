@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>可定制模块</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; padding: 40px 48px; display: flex; gap: 40px; background: radial-gradient(900px 520px at 88% -8%, rgba(94,230,184,0.10), transparent 62%), linear-gradient(160deg, #05110f 0%, #082520 100%); color: #e6f7f2; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif">
+
+  <div style="width: 470px; flex: none; display: flex; flex-direction: column; gap: 12px">
+    <div>
+      <div style="font-size: 14px; font-weight: 500; letter-spacing: 2px; color: #5ee6b8">MODULES</div>
+      <h1 style="margin: 6px 0 0; font-size: 36px; font-weight: 700; line-height: 1.2">一切外观都是数据</h1>
+      <p style="margin: 8px 0 0; font-size: 15px; line-height: 1.7; color: #9bb7b0">颜色、字号、语言、字体、布局，都拆成可替换的包。包里没有代码。管理台和设备读同一份设计变量。</p>
+    </div>
+
+    <div style="padding: 16px 18px; border-radius: 16px; border: 1px solid #1b3d37; background: rgba(11,29,26,0.72); box-shadow: 0 10px 32px rgba(0,0,0,0.28)">
+      <div style="font-size: 12px; color: #9bb7b0">第 1 层</div>
+      <div style="margin-top: 2px; font-size: 18px; font-weight: 700">设计变量</div>
+      <div style="margin-top: 4px; font-size: 14px; color: #c9dcd7">颜色 · 字号 · 圆角 · 间距 · 动效。一份 JSON，是唯一的来源。</div>
+    </div>
+    <div style="padding: 16px 18px; border-radius: 16px; border: 1px solid #1b3d37; background: rgba(11,29,26,0.72); box-shadow: 0 10px 32px rgba(0,0,0,0.28)">
+      <div style="font-size: 12px; color: #9bb7b0">第 2 层</div>
+      <div style="margin-top: 2px; font-size: 18px; font-weight: 700">四种数据包</div>
+      <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <div style="padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(79,209,255,0.5); background: rgba(79,209,255,0.10); font-size: 14px"><b>主题包</b><br><span style="color: #9bb7b0; font-size: 12px">变量的取值</span></div>
+        <div style="padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(91,227,140,0.5); background: rgba(91,227,140,0.10); font-size: 14px"><b>语言包</b><br><span style="color: #9bb7b0; font-size: 12px">界面文字的键值表</span></div>
+        <div style="padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(242,181,68,0.5); background: rgba(242,181,68,0.10); font-size: 14px"><b>字体包</b><br><span style="color: #9bb7b0; font-size: 12px">字体文件和字号表</span></div>
+        <div style="padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(195,139,255,0.5); background: rgba(195,139,255,0.10); font-size: 14px"><b>布局包</b><br><span style="color: #9bb7b0; font-size: 12px">页面、预设、动作卡片</span></div>
+      </div>
+    </div>
+    <div style="padding: 16px 18px; border-radius: 16px; border: 1px solid #1b3d37; background: rgba(11,29,26,0.72); box-shadow: 0 10px 32px rgba(0,0,0,0.28)">
+      <div style="font-size: 12px; color: #9bb7b0">第 3 层</div>
+      <div style="margin-top: 2px; font-size: 18px; font-weight: 700">渲染端</div>
+      <div style="margin-top: 4px; font-size: 14px; line-height: 1.7; color: #c9dcd7">管理台：CSS 变量加字符串表<br>设备：样式加预编译字号和字库<br>预览：直接渲染真实的设备界面</div>
+    </div>
+    <div style="padding: 16px 18px; border-radius: 16px; border: 1px solid #1b3d37; background: rgba(11,29,26,0.72); box-shadow: 0 10px 32px rgba(0,0,0,0.28)">
+      <div style="font-size: 12px; color: #9bb7b0">每一层都有</div>
+      <div style="margin-top: 2px; font-size: 18px; font-weight: 700">校验与保护</div>
+      <div style="margin-top: 4px; font-size: 14px; line-height: 1.7; color: #c9dcd7">只含数据 · 格式与大小检查 · 对比度检查 · 字库覆盖检查 · 签名（字体包）· 长按恢复默认</div>
+    </div>
+  </div>
+
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="font-size: 18px; font-weight: 700">每一项能改到什么程度</div>
+    <div style="border-radius: 16px; border: 1px solid #1b3d37; background: rgba(11,29,26,0.72); box-shadow: 0 10px 32px rgba(0,0,0,0.28); overflow: hidden">
+      <div style="display: grid; grid-template-columns: 90px 1fr 1fr 150px; gap: 0; padding: 10px 16px; font-size: 12px; color: #9bb7b0; border-bottom: 1px solid #1b3d37"><span>项目</span><span>管理台</span><span>设备</span><span>怎么送到设备</span></div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+        <div style="display: grid; grid-template-columns: 90px 1fr 1fr 150px; gap: 12px; padding: 12px 16px; font-size: 14px; line-height: 1.5; border-bottom: 1px solid #1b3d37">
+          <span style="font-weight: 700">{{r.name}}</span>
+          <span style="color: #c9dcd7">{{r.web}}</span>
+          <span style="color: {{r.devColor}}">{{r.dev}}</span>
+          <span style="color: #9bb7b0; font-size: 13px">{{r.how}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding: 16px 18px; border-radius: 16px; border: 1px solid rgba(242,181,68,0.5); background: rgba(242,181,68,0.10)">
+      <div style="font-size: 15px; font-weight: 700; color: #f2b544">已决定（D13）：先不加数据分区</div>
+      <div style="margin-top: 6px; font-size: 14px; line-height: 1.7; color: #e6f7f2">设备上换字体或加语言，需要一个放字体包和语言包的数据分区。现在的 6 MiB 应用槽只剩约 2.4 MiB，装不下多套字库，分区表又只能用 USB 刷机修改。所以先不加：设备只支持主题与配色、中英文、三档文字大小。以后要加，再单独决定。</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { name: '语言', web: '任意：加语言包即可', dev: '中文、英文。其他要先补字库', devColor: '#e6f7f2', how: '语言包 JSON，Agent 下发' },
+        { name: '字体', web: '任意字体或字体文件', dev: '内置一种，暂不支持更换', devColor: '#f2b544', how: '签名的字体包' },
+        { name: '文字大小', web: '12 到 20 px，连续', dev: '小、标准、大，三档预编译', devColor: '#e6f7f2', how: '配置下发' },
+        { name: '主题', web: '深色、浅色、跟随系统，加主题包', dev: '三个内置主题，加自定义主题包', devColor: '#e6f7f2', how: '主题包 JSON' },
+        { name: '配色', web: '全部颜色', dev: '强调色和四种语义色，有对比度检查', devColor: '#e6f7f2', how: '主题包 JSON' },
+        { name: '布局', web: '预设与动作卡片', dev: '预设与动作卡片（已有）', devColor: '#e6f7f2', how: '布局包（已有）' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

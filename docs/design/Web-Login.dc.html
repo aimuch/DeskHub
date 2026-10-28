@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>管理台 登录与信任证书</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} min-height: 720px; box-sizing: border-box; padding: 48px 32px; display: flex; flex-direction: column; align-items: center; gap: 28px; background: radial-gradient(900px 520px at 85% -10%, var(--glow), transparent 62%), linear-gradient(160deg, var(--bg), var(--bg2)); color: var(--ink); font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; font-size: 15px">
+
+  <div style="display: flex; align-items: center; gap: 12px">
+    <span style="width: 36px; height: 36px; border-radius: 50%; border: 5px solid var(--accent); box-sizing: border-box; box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent)"></span>
+    <span style="font-size: 26px; font-weight: 700">DeskHub 管理台</span>
+  </div>
+
+  <div style="width: 100%; max-width: 980px; display: flex; flex-wrap: wrap; gap: 18px; align-items: stretch">
+
+    <section style="flex: 1 1 380px; min-width: 0; box-sizing: border-box; padding: 26px; border-radius: 20px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700">管理员登录</h1>
+
+      <div role="tablist" aria-label="登录方式" style="margin-top: 14px; display: flex; padding: 3px; gap: 3px; border-radius: 14px; border: 1px solid var(--edge); background: var(--bg)">
+        <sc-for list="{{methods}}" as="m" hint-placeholder-count="2">
+          <div role="tab" aria-selected="{{m.selected}}" style="flex: 1 1 0; min-height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; background: {{m.bg}}; color: {{m.ink}}">{{m.label}}</div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{isPassword}}" hint-placeholder-val="{{ true }}">
+        <div>
+          <label for="user" style="display: block; margin-top: 18px; font-size: 14px; font-weight: 500">账户</label>
+          <input id="user" type="text" value="admin" autocomplete="username" style="box-sizing: border-box; width: 100%; margin-top: 6px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edge); background: var(--bg); color: var(--ink); font-family: inherit; font-size: 15px">
+          <label for="pw" style="display: block; margin-top: 14px; font-size: 14px; font-weight: 500">密码</label>
+          <input id="pw" type="password" autocomplete="current-password" placeholder="输入密码" style="box-sizing: border-box; width: 100%; margin-top: 6px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edge); background: var(--bg); color: var(--ink); font-family: inherit; font-size: 15px">
+          <button style="margin-top: 18px; width: 100%; min-height: 48px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-family: inherit; font-size: 16px; font-weight: 700">登录</button>
+          <p style="margin: 14px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted)">还没设置过密码？切到“口令（首次）”登录，进去后设置。忘记密码，要在运行 Agent 的电脑上用命令行重置。</p>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isToken}}" hint-placeholder-val="{{ false }}">
+        <div>
+          <p style="margin: 18px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted)">口令在管理员凭据文件的 <span style="font-family: ui-monospace, monospace; color: var(--ink)">token</span> 字段里。复制过来，粘贴到下面。登录后会要求你马上设置密码。</p>
+          <label for="token" style="display: block; margin-top: 14px; font-size: 14px; font-weight: 500">管理员口令</label>
+          <input id="token" type="password" autocomplete="off" placeholder="粘贴口令" style="box-sizing: border-box; width: 100%; margin-top: 6px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edge); background: var(--bg); color: var(--ink); font-family: inherit; font-size: 15px">
+          <button style="margin-top: 18px; width: 100%; min-height: 48px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-family: inherit; font-size: 16px; font-weight: 700">用口令登录</button>
+          <p style="margin: 14px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted)">设置密码之后，网页就不再接受口令。口令继续给命令行和脚本用。</p>
+        </div>
+      </sc-if>
+
+      <p style="margin: 14px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted)">口令和密码都不要放进网址、命令行参数或截图。浏览器只保留 30 分钟的会话，不保存它们。</p>
+    </section>
+
+    <section style="flex: 1 1 420px; min-width: 0; box-sizing: border-box; padding: 26px; border-radius: 20px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); box-shadow: var(--lift)">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+        <h2 style="margin: 0; font-size: 22px; font-weight: 700">信任证书</h2>
+        <span style="padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--power); background: color-mix(in srgb, var(--power) 15%, transparent); border: 1px solid color-mix(in srgb, var(--power) 50%, transparent)">浏览器提示不受信任</span>
+      </div>
+      <p style="margin: 6px 0 16px; font-size: 14px; line-height: 1.6; color: var(--muted)">管理台的证书由项目自己的 CA 签发，浏览器默认不认识它。信任一次，以后就不再提示。</p>
+      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px">
+        <sc-for list="{{steps}}" as="s" hint-placeholder-count="3">
+          <li style="display: flex; gap: 12px; align-items: flex-start">
+            <span style="flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">{{s.n}}</span>
+            <div style="min-width: 0"><div style="font-size: 15px; font-weight: 500">{{s.title}}</div><div style="margin-top: 2px; font-size: 13px; line-height: 1.6; color: var(--muted)">{{s.note}}</div></div>
+          </li>
+        </sc-for>
+      </ol>
+      <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px">
+        <button style="font-family: inherit; font-size: 14px; font-weight: 500; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--edge); background: var(--glass); color: var(--ink)">下载 CA 证书</button>
+        <button style="font-family: inherit; font-size: 14px; font-weight: 500; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--edge); background: var(--glass); color: var(--ink)">复制信任脚本命令</button>
+      </div>
+    </section>
+  </div>
+
+  <p style="margin: 0; max-width: 980px; font-size: 13px; line-height: 1.7; color: var(--muted); text-align: center">只在本机使用、不接设备时，也可以改用本机回环地址 <span style="font-family: ui-monospace, monospace; color: var(--ink)">http://127.0.0.1:8765/manage/</span>。它没有证书，设备连不上。</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","default":"dark","options":["dark","light"]},"method":{"editor":"enum","default":"password","options":["password","token"]},"$preview":{"width":1280,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      dark: '--bg2:#082520;--glow:rgba(94,230,184,0.10);--glass:rgba(11,29,26,0.72);--lift:0 10px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);--bg:#040d0c;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--accent-ink:#04231b;--power:#f2b544;',
+      light: '--bg2:#e4f1ec;--glow:rgba(11,122,95,0.08);--glass:rgba(255,255,255,0.82);--lift:0 8px 24px rgba(16,35,31,0.08);--bg:#f3f8f6;--card:#ffffff;--edge:#d3e2de;--ink:#10231f;--muted:#566e68;--accent:#0b7a5f;--accent-ink:#ffffff;--power:#8f5a00;'
+    };
+    const method = this.props.method || 'password';
+    const defs = [['password', '密码登录'], ['token', '口令（首次）']];
+    return {
+      vars: T[this.props.mode] || T.dark,
+      isPassword: method === 'password',
+      isToken: method === 'token',
+      methods: defs.map(([id, label]) => ({
+        label,
+        selected: id === method ? 'true' : 'false',
+        bg: id === method ? 'var(--sel, color-mix(in srgb, var(--accent) 16%, transparent))' : 'transparent',
+        ink: id === method ? 'var(--accent)' : 'var(--muted)'
+      })),
+      steps: [
+        { n: '1', title: '下载 CA 证书', note: '文件是公开的证书，不含私钥。' },
+        { n: '2', title: '运行信任脚本', note: '脚本会先让你确认，再请你输入系统密码，由你自己执行。我们不会静默改动系统。' },
+        { n: '3', title: '重启浏览器，再打开管理台', note: '地址栏出现锁形图标，就表示信任生效。' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

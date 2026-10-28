@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DeskHub 设计语言</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; padding: 44px 52px; display: flex; gap: 56px; background: linear-gradient(160deg, #05110f 0%, #082520 100%); color: #e6f7f2; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;">
+
+  <div style="width: 560px; display: flex; flex-direction: column; gap: 26px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 14px; font-weight: 500; letter-spacing: 2px; color: #5ee6b8">DESKHUB</div>
+      <h1 style="margin: 0; font-size: 44px; font-weight: 700; line-height: 1.15">同一套设计语言</h1>
+      <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #9bb7b0">设备界面和网页管理台共用同一套颜色、字号和组件。管理台里的布局预览，直接渲染真实的设备界面。</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">三个主题</div>
+      <div style="display: flex; gap: 12px">
+        <div style="flex: 1 1 0; min-width: 0; border-radius: 16px; border: 1px solid #1b3d37; background: #0b1d1a; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="height: 44px; border-radius: 10px; background: linear-gradient(160deg, #03100e, #082520)"></div>
+          <div style="font-size: 15px; font-weight: 500">薄荷夜色</div>
+          <div style="display: flex; gap: 6px">
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #5ee6b8"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #4fd1ff"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #f2b544"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #c38bff"></span>
+          </div>
+        </div>
+        <div style="flex: 1 1 0; min-width: 0; border-radius: 16px; border: 1px solid #173c50; background: #0a2130; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="height: 44px; border-radius: 10px; background: linear-gradient(160deg, #03131c, #062a3a)"></div>
+          <div style="font-size: 15px; font-weight: 500">深海蓝</div>
+          <div style="display: flex; gap: 6px">
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #4fc3f7"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #4de0b6"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #ffc857"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #9fa8ff"></span>
+          </div>
+        </div>
+        <div style="flex: 1 1 0; min-width: 0; border-radius: 16px; border: 1px solid #3a2a1f; background: #1e1510; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="height: 44px; border-radius: 10px; background: linear-gradient(160deg, #120c08, #24150a)"></div>
+          <div style="font-size: 15px; font-weight: 500">暖橙</div>
+          <div style="display: flex; gap: 6px">
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #ff9e4a"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #45c8ea"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #ffb347"></span>
+            <span style="width: 18px; height: 18px; border-radius: 50%; background: #db8ff2"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">四种语义色（每种颜色只表示一件事）</div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #0b1d1a; border: 1px solid #1b3d37"><span style="width: 12px; height: 12px; border-radius: 50%; background: #4fd1ff"></span><span style="font-size: 14px">网络</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #0b1d1a; border: 1px solid #1b3d37"><span style="width: 12px; height: 12px; border-radius: 50%; background: #5be38c"></span><span style="font-size: 14px">电脑</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #0b1d1a; border: 1px solid #1b3d37"><span style="width: 12px; height: 12px; border-radius: 50%; background: #f2b544"></span><span style="font-size: 14px">电源</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #0b1d1a; border: 1px solid #1b3d37"><span style="width: 12px; height: 12px; border-radius: 50%; background: #c38bff"></span><span style="font-size: 14px">时间</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #2a1414; border: 1px solid #6b2a2a"><span style="width: 12px; height: 12px; border-radius: 50%; background: #ff7b7b"></span><span style="font-size: 14px; color: #ffb4b4">故障</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">功能的三种状态（规则 R1）</div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 12px"><span style="min-width: 64px; text-align: center; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; color: #5be38c; background: rgba(91,227,140,0.14); border: 1px solid rgba(91,227,140,0.5)">已验证</span><span style="font-size: 14px; color: #c9dcd7">有测试或实测证据，默认可用</span></div>
+        <div style="display: flex; align-items: center; gap: 12px"><span style="min-width: 64px; text-align: center; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; color: #f2b544; background: rgba(242,181,68,0.14); border: 1px solid rgba(242,181,68,0.5)">实验</span><span style="font-size: 14px; color: #c9dcd7">默认关，二次确认才开，界面常驻标识</span></div>
+        <div style="display: flex; align-items: center; gap: 12px"><span style="min-width: 64px; text-align: center; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; color: #9bb7b0; background: rgba(155,183,176,0.12); border: 1px solid rgba(155,183,176,0.4)">不可用</span><span style="font-size: 14px; color: #c9dcd7">保留入口，写出原因，不隐藏</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 26px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">状态环与仪表</div>
+      <div style="display: flex; gap: 28px; align-items: center">
+        <svg width="200" height="200" viewBox="0 0 200 200" role="img" aria-label="四段状态环示意：网络、电脑、电源、时间">
+          <defs><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"></feGaussianBlur></filter></defs>
+          <circle cx="100" cy="100" r="82" fill="none" stroke="#0f2622" stroke-width="16"></circle>
+          <g fill="none" stroke-linecap="round" stroke-width="22" opacity="0.35" filter="url(#glow)">
+            <path d="M111.4 18.8 A82 82 0 0 1 181.2 88.6" stroke="#4fd1ff"></path>
+            <path d="M181.2 111.4 A82 82 0 0 1 111.4 181.2" stroke="#5be38c"></path>
+            <path d="M88.6 181.2 A82 82 0 0 1 18.8 111.4" stroke="#f2b544"></path>
+            <path d="M18.8 88.6 A82 82 0 0 1 88.6 18.8" stroke="#c38bff"></path>
+          </g>
+          <g fill="none" stroke-linecap="round" stroke-width="16">
+            <path d="M111.4 18.8 A82 82 0 0 1 181.2 88.6" stroke="#4fd1ff"></path>
+            <path d="M181.2 111.4 A82 82 0 0 1 111.4 181.2" stroke="#5be38c"></path>
+            <path d="M88.6 181.2 A82 82 0 0 1 18.8 111.4" stroke="#f2b544"></path>
+            <path d="M18.8 88.6 A82 82 0 0 1 88.6 18.8" stroke="#c38bff"></path>
+          </g>
+          <text x="100" y="104" text-anchor="middle" font-size="38" font-weight="500" fill="#e6f7f2" font-family="'Noto Sans SC', sans-serif">11:00</text>
+          <text x="100" y="128" text-anchor="middle" font-size="13" fill="#9bb7b0" font-family="'Noto Sans SC', sans-serif">10月28日 星期三</text>
+        </svg>
+        <svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="电量仪表 67%">
+          <path d="M30.4 109.6 A56 56 0 1 1 109.6 109.6" fill="none" stroke="#0f2622" stroke-width="12" stroke-linecap="round"></path>
+          <path d="M30.4 109.6 A56 56 0 1 1 110.2 31.0" fill="none" stroke="#5be38c" stroke-width="12" stroke-linecap="round"></path>
+          <text x="70" y="78" text-anchor="middle" font-size="28" font-weight="500" fill="#e6f7f2" font-family="'Noto Sans SC', sans-serif">67%</text>
+          <text x="70" y="98" text-anchor="middle" font-size="12" fill="#9bb7b0" font-family="'Noto Sans SC', sans-serif">电量</text>
+        </svg>
+        <div style="font-size: 14px; line-height: 1.7; color: #c9dcd7">环亮起：这一路正常<br>环熄灭：这一路不正常<br>仪表只在读数有效时填充<br>未知时留空，不显示 0</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">组件</div>
+      <div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 16px; background: #0b1d1a; border: 1px solid #1b3d37">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: #103a30; display: flex; align-items: center; justify-content: center"><span style="width: 12px; height: 12px; border-radius: 50%; background: #5ee6b8; box-shadow: 0 0 10px #5ee6b8"></span></span>
+        <div style="flex: 1 1 0; min-width: 0"><div style="font-size: 17px; font-weight: 500">显示与亮度</div><div style="font-size: 14px; color: #9bb7b0">夜间与屏幕保护</div></div>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap">
+        <button style="font-family: inherit; font-size: 15px; font-weight: 500; padding: 10px 20px; min-height: 44px; border-radius: 999px; border: 1px solid #5ee6b8; background: #103a30; color: #5ee6b8">切到 Mac</button>
+        <button style="font-family: inherit; font-size: 15px; font-weight: 500; padding: 10px 20px; min-height: 44px; border-radius: 999px; border: 1px solid #1b3d37; background: #0b1d1a; color: #e6f7f2">取消</button>
+        <button style="font-family: inherit; font-size: 15px; font-weight: 500; padding: 10px 20px; min-height: 44px; border-radius: 999px; border: 1px solid #6b2a2a; background: #2a1414; color: #ffb4b4">恢复出厂</button>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+        <span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 14px; color: #f2b544; background: rgba(242,181,68,0.14); border: 1px solid rgba(242,181,68,0.5)"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f2b544"></span>充电保护中：上限 80%</span>
+        <span style="font-size: 13px; color: #9bb7b0">实验功能开着时，这个标识常驻</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 13px; font-weight: 500; color: #9bb7b0">字体与规则</div>
+      <div style="display: flex; gap: 24px; align-items: flex-end">
+        <div><div style="font-size: 28px; font-weight: 500">电量 67%</div><div style="font-size: 12px; color: #9bb7b0">设备 28 px · 思源黑体子集</div></div>
+        <div><div style="font-size: 20px">USB接入 · 充电中</div><div style="font-size: 12px; color: #9bb7b0">设备 20 px</div></div>
+        <div><div style="font-size: 15px">管理台正文</div><div style="font-size: 12px; color: #9bb7b0">15 px · Noto Sans SC</div></div>
+      </div>
+      <div style="font-size: 14px; line-height: 1.7; color: #c9dcd7">主要触摸热区不小于 56×56 px。关键信息不只靠颜色，还有文字。温度写“度”，因为字库没有“°”。</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
