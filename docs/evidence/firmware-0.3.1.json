@@ -1,0 +1,81 @@
+{
+  "version": "0.3.1",
+  "built_from": "提交 a347c88（升版）；构建时 firmware/ 目录与该提交一致",
+  "build_dir": "firmware/build-0.3.1（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.0": [
+    "电源读数上报：设备上报和 USB 状态带电源对象（firmware/components/management/power_wire.cpp）",
+    "配对的纯逻辑组件 firmware/components/pairing/（配对包版本 2、会话状态机）：已编译进镜像，没有接线，设备上看不到、也用不到"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4333008,
+    "sha256": "1b73e207f6cedaa75634939201e1502d0ba4b8d6e4194c4420b83a1838c4e7f1",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 31
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.1-esp32s3.zip",
+      "size_bytes": 2670228,
+      "sha256": "823092d4726db0e74e3974026ca4645eeb4ce0ef062d7da86871581a01f5c646",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.1",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "这次没有生成 .dhfw：只做了 USB 刷写，没有被要求签名。需要时用 tools/firmware_package.py sign（它自己读取 .state/signing 的密钥）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.1",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.1，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "刷写前用 tools/provision.py --identify 只读确认串口上是 deskhub-44bd8d60c598，版本 0.3.0",
+    "刷写后读 --identify 和 --status：版本 0.3.1，设备编号不变"
+  ],
+  "flashed": {
+    "device_id": "deskhub-44bd8d60c598",
+    "port": "/dev/cu.usbmodem21101",
+    "method": "USB 包里的 flash.py（IDF 的 esptool 5.3.1，--no-stub），先只读识别 ESP32-S3 / 16 MiB 再写入 4 个镜像",
+    "before": {
+      "firmware_version": "0.3.0"
+    },
+    "esptool_verify": "Hash of data verified；flash.py 报告“刷写及 esptool 镜像校验完成”",
+    "after_boot": {
+      "firmware_version": "0.3.1",
+      "config_revision": 37,
+      "ui_alive": true,
+      "theme": "ocean",
+      "rotation": 180,
+      "wifi": "未配置",
+      "agent": "未配对",
+      "time_quality": "rtc",
+      "power": {
+        "vbus": "present",
+        "battery": "present",
+        "charging": "full",
+        "measurement": "ok",
+        "fault": false,
+        "soc_percent": 100,
+        "battery_mv": 4183,
+        "vbus_mv": 5156,
+        "chip_temp_c": 40.3
+      },
+      "note": "刷写后第一次读 --status 超时（\"USB 响应超时\"）；再等约 10 秒后 --identify 和 --status 都正常。原因没有查：可能是刷写后串口重新枚举，也可能是刚复位时设备还没起来。配置版本 0.3.0 刷入时是 34，现在是 37；刷写不写 NVS，增加的 3 次来自两次刷写之间对设备的操作，具体是什么没有核实。"
+    }
+  },
+  "not_done": [
+    "没有人在这次刷写后看过屏幕：显示、触摸、旋转、常亮都没有验证",
+    "电源读数只通过 USB 读到一次；没有和万用表或充电器的读数对照。电量 100% 是电源芯片的估算",
+    "设备没有配置 Wi-Fi 和 Agent，所以设备到 Agent 的电源上报没有在真机上试过",
+    "没有做 OTA 与回滚，没有生成签名的 .dhfw",
+    "热点配网没有接线；设备上的配对逻辑只有主机测试"
+  ],
+  "hardware_verified": false
+}
