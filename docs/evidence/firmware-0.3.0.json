@@ -1,0 +1,43 @@
+{
+  "version": "0.3.0",
+  "built_from": "提交 fbbd766（升版）；此后 firmware/ 目录没有改动",
+  "build_dir": "firmware/build-0.3.0（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4330016,
+    "sha256": "3d320ecfbf39377da1bf074bb8f06330cb93d66229c508ed5ca0bbf64449584e",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 31
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.0-esp32s3.zip",
+      "size_bytes": 2668250,
+      "sha256": "5640ccf01b62ffd7a601d5026e6a5acbedbb8583ed7b4c4fb2c1876aa6a3829c",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.0",
+      "images": ["0x0 bootloader.bin", "0x8000 partition-table.bin", "0xf000 ota_data_initial.bin", "0x20000 deskhub.bin"]
+    },
+    "signed_ota": {
+      "file": "dist/deskhub-0.3.0.dhfw",
+      "size_bytes": 4330715,
+      "sha256": "0065302e323d6e59b0b4b272bf7ece9c6e9394e64f10af5bf8e76a3fae82e91e",
+      "made_by": "tools/firmware_package.py sign（密钥在 .state/signing，未读取、未复制）",
+      "signing_key_fingerprint": "7b5b100669d6c4752e9db65d3e946e11a97bd67ef02ce6991387892e3339294a",
+      "contents": ["app.bin", "manifest.json"]
+    }
+  },
+  "checks_done": [
+    "打包脚本自带的离线校验（镜像头、固定偏移、各镜像 SHA-256）",
+    "解压 USB 包后运行包内 flash.py --check：4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "用 Agent 自己的 validate_package 和 .state/signing 的公钥验证 .dhfw：只含 app.bin 与 manifest.json，签名、镜像哈希、版本 0.3.0 都对",
+    "USB 包里的 deskhub.bin 与 .dhfw 里的 app.bin 是同一个镜像（SHA-256 相同）",
+    "主机测试 8 组全部通过；原生 LVGL 离屏预览 15 组加触摸方向回归通过"
+  ],
+  "not_done": [
+    "没有刷到任何设备",
+    "没有从管理台上传 .dhfw，也没有在设备上做过 OTA 与回滚",
+    "屏幕、触摸、电源读数、常亮、长时间运行都没有真机验证：hardware_verified 为 false"
+  ],
+  "hardware_verified": false
+}
