@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import timedelta
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+from deskhub_agent.app import create_app
+from deskhub_agent.backend import Backend
+from deskhub_agent.errors import AgentError
+from deskhub_agent.models import Settings, stamp, utcnow
+from deskhub_agent.storage import Store
+
+
+class TestBackend(Backend):
+    """Only injected by tests. Production settings have no simulation backend."""
+    __test__ = False
+    calls = 0
+    delay = 0
+    observed = "mac-usbc"
+    failure = None
+    binding_failure = None
+
+    def availability(self):
+        return True, None
+
+    async def probe(self):
+        return {"availability": "ready", "version": "TEST ONLY", "reason_code": None}
+
+    async def validate_binding(self, display):
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.binding_failure:
+            raise AgentError("TARGET_UNAVAILABLE", self.binding_failure, 503)
+
+    async def set_input(self, display, input_id):
+        self.calls += 1
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.failure:
+            raise AgentError(self.failure, "simulated backend failure", 504)
+
+    async def read_input(self, display):
+        if self.observed == "exception":
+            raise AgentError("TARGET_UNAVAILABLE", "path lost", 503)
+        return self.observed
+
+
+@pytest.fixture
+def settings(tmp_path):
+    return Settings(agent_id="agent-test", db_path=str(tmp_path / "state.sqlite3"),
+        displays=[{"monitor_id": "monitor-desk-01", "label": "Desk", "binding": {"uuid": "real-test-uuid", "serial": "A123", "registry_location": "IO/test"},
+                   "inputs": {"mac-usbc": 123, "pc-dp": 456}, "readback_enabled": True}],
+        actions=[{"action_id": "desktop.switch_to_mac", "label": "Mac", "target_id": "monitor-desk-01", "input_id": "mac-usbc"},
+                 {"action_id": "desktop.switch_to_pc", "label": "PC", "target_id": "monitor-desk-01", "input_id": "pc-dp"}])
+
+
+@pytest.fixture
+def harness(settings):
+    store = Store(settings.db_path)
+    token = store.pair("device-test", ["read:status", "control:displays"], ["monitor-desk-01"])
+    adapter = TestBackend(settings)
+    app = create_app(settings, store=store, backend=adapter)
+    with TestClient(app) as client:
+        client.headers["Authorization"] = "Bearer " + token
+        yield client, store, adapter, token
+    store.close()
+
+
+def payload(**changes):
+    now = utcnow()
+    return {"request_id": str(uuid4()), "idempotency_key": str(uuid4()), "action_id": "desktop.switch_to_mac",
+            "target_id": "monitor-desk-01", "parameters": {"input_id": "mac-usbc"},
+            "sent_at": stamp(now), "expires_at": stamp(now + timedelta(seconds=10)), **changes}
+
+
+def complete(client, command_id):
+    import time
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        response = client.get("/api/v1/commands/" + command_id)
+        assert response.status_code == 200, response.text
+        if response.json()["state"] not in {"queued", "executing"}:
+            return response.json()
+        time.sleep(0.01)
+    raise AssertionError("command did not finish")

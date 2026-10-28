@@ -1,0 +1,292 @@
+{
+  "$defs": {
+    "ActionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "input_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Input Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "shortcut": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shortcut"
+        },
+        "target_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "label",
+        "target_id",
+        "input_id"
+      ],
+      "title": "ActionConfig",
+      "type": "object"
+    },
+    "DisplayBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "registry_location": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Registry Location",
+          "type": "string"
+        },
+        "serial": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Serial",
+          "type": "string"
+        },
+        "uuid": {
+          "maxLength": 128,
+          "minLength": 8,
+          "title": "Uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "serial",
+        "registry_location"
+      ],
+      "title": "DisplayBinding",
+      "type": "object"
+    },
+    "DisplayConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/DisplayBinding"
+        },
+        "compatibility_verified": {
+          "default": false,
+          "title": "Compatibility Verified",
+          "type": "boolean"
+        },
+        "inputs": {
+          "maxProperties": 12,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$": {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "label": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "monitor_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Monitor Id",
+          "type": "string"
+        },
+        "readback_enabled": {
+          "default": false,
+          "title": "Readback Enabled",
+          "type": "boolean"
+        },
+        "return_path_verified": {
+          "default": false,
+          "title": "Return Path Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "monitor_id",
+        "label",
+        "binding",
+        "inputs"
+      ],
+      "title": "DisplayConfig",
+      "type": "object"
+    }
+  },
+  "$id": "urn:deskhub:protocol:v1:agent-config",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/ActionConfig"
+      },
+      "maxItems": 12,
+      "title": "Actions",
+      "type": "array"
+    },
+    "agent_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "allowed_networks": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Allowed Networks",
+      "type": "array"
+    },
+    "backend": {
+      "default": "disabled",
+      "enum": [
+        "disabled",
+        "betterdisplay"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "backend_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Backend Path"
+    },
+    "backend_timeout_seconds": {
+      "default": 5,
+      "maximum": 5,
+      "minimum": 0.1,
+      "title": "Backend Timeout Seconds",
+      "type": "number"
+    },
+    "bind": {
+      "default": "127.0.0.1",
+      "title": "Bind",
+      "type": "string"
+    },
+    "db_path": {
+      "default": "state/agent.sqlite3",
+      "title": "Db Path",
+      "type": "string"
+    },
+    "displays": {
+      "items": {
+        "$ref": "#/$defs/DisplayConfig"
+      },
+      "maxItems": 4,
+      "title": "Displays",
+      "type": "array"
+    },
+    "firmware_public_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Firmware Public Key"
+    },
+    "host_id": {
+      "default": "host-main",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Host Id",
+      "type": "string"
+    },
+    "lan_enabled": {
+      "default": false,
+      "title": "Lan Enabled",
+      "type": "boolean"
+    },
+    "name": {
+      "default": "DeskHub Agent",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "port": {
+      "default": 8765,
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "retention_hours": {
+      "default": 24,
+      "maximum": 720,
+      "minimum": 24,
+      "title": "Retention Hours",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "tls_cert": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tls Cert"
+    },
+    "tls_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tls Key"
+    }
+  },
+  "required": [
+    "agent_id"
+  ],
+  "title": "Settings",
+  "type": "object"
+}

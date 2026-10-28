@@ -1,0 +1,51 @@
+{
+  "$id": "urn:deskhub:protocol:v1:status",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "boot_id": {
+      "title": "Boot Id",
+      "type": "string"
+    },
+    "health": {
+      "title": "Health",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "protocol_version": {
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "server_time": {
+      "format": "date-time",
+      "title": "Server Time",
+      "type": "string"
+    },
+    "uptime_seconds": {
+      "title": "Uptime Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "agent_id",
+    "agent_version",
+    "protocol_version",
+    "boot_id",
+    "name",
+    "health",
+    "server_time",
+    "uptime_seconds"
+  ],
+  "title": "Status",
+  "type": "object"
+}

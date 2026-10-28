@@ -1,0 +1,148 @@
+{
+  "$defs": {
+    "DisplayConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "brightness": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 3,
+          "title": "Brightness",
+          "type": "integer"
+        },
+        "clock_s": {
+          "default": 60,
+          "maximum": 86400,
+          "minimum": 5,
+          "title": "Clock S",
+          "type": "integer"
+        },
+        "dim_s": {
+          "default": 120,
+          "maximum": 86400,
+          "minimum": 5,
+          "title": "Dim S",
+          "type": "integer"
+        },
+        "night_cap": {
+          "default": 15,
+          "maximum": 100,
+          "minimum": 3,
+          "title": "Night Cap",
+          "type": "integer"
+        },
+        "night_enabled": {
+          "default": true,
+          "title": "Night Enabled",
+          "type": "boolean"
+        },
+        "night_end": {
+          "default": 420,
+          "maximum": 1439,
+          "minimum": 0,
+          "title": "Night End",
+          "type": "integer"
+        },
+        "night_start": {
+          "default": 1320,
+          "maximum": 1439,
+          "minimum": 0,
+          "title": "Night Start",
+          "type": "integer"
+        },
+        "off_s": {
+          "default": 300,
+          "maximum": 86400,
+          "minimum": 0,
+          "title": "Off S",
+          "type": "integer"
+        },
+        "protection": {
+          "default": true,
+          "title": "Protection",
+          "type": "boolean"
+        },
+        "rotation": {
+          "default": 0,
+          "description": "Clockwise screen angle in 90-degree steps; omitted schema-1 values default to 0.",
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "title": "Rotation",
+          "type": "integer"
+        }
+      },
+      "title": "DisplayConfiguration",
+      "type": "object"
+    },
+    "LayoutConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "action_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Action Ids",
+          "type": "array"
+        },
+        "preset": {
+          "default": "desk",
+          "enum": [
+            "desk",
+            "clock",
+            "focus"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "show_cpu": {
+          "default": true,
+          "title": "Show Cpu",
+          "type": "boolean"
+        },
+        "show_seconds": {
+          "default": false,
+          "title": "Show Seconds",
+          "type": "boolean"
+        },
+        "theme": {
+          "default": "mint",
+          "description": "Built-in device color theme; omitted schema-1 values default to mint.",
+          "enum": [
+            "mint",
+            "ocean",
+            "amber"
+          ],
+          "title": "Theme",
+          "type": "string"
+        }
+      },
+      "title": "LayoutConfiguration",
+      "type": "object"
+    }
+  },
+  "$id": "urn:deskhub:protocol:v1:device-configuration",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "display": {
+      "$ref": "#/$defs/DisplayConfiguration"
+    },
+    "layout": {
+      "$ref": "#/$defs/LayoutConfiguration"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "DeviceConfiguration",
+  "type": "object"
+}

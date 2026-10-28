@@ -1,0 +1,10 @@
+{
+  "agent_id": "agent-example",
+  "agent_version": "0.1.0a1",
+  "protocol_version": "1.0",
+  "boot_id": "boot-example",
+  "name": "DeskHub Agent",
+  "health": "ok",
+  "server_time": "2026-10-27T03:00:00Z",
+  "uptime_seconds": 120.5
+}

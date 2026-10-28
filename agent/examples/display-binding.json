@@ -1,0 +1,13 @@
+{
+  "monitor_id": "monitor-desk-01",
+  "label": "书桌显示器",
+  "binding": {
+    "uuid": "REPLACE-WITH-EXACT-UUID-FROM-INVENTORY",
+    "serial": "REPLACE-WITH-REAL-SERIAL",
+    "registry_location": "REPLACE-WITH-REAL-REGISTRY-LOCATION"
+  },
+  "inputs": {},
+  "readback_enabled": false,
+  "compatibility_verified": false,
+  "return_path_verified": false
+}

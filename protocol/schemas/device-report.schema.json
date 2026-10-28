@@ -1,0 +1,371 @@
+{
+  "$defs": {
+    "DeviceCapabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "layouts": {
+          "items": {
+            "enum": [
+              "desk",
+              "clock",
+              "focus"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Layouts",
+          "type": "array"
+        },
+        "management": {
+          "default": true,
+          "title": "Management",
+          "type": "boolean"
+        },
+        "signed_ota": {
+          "default": false,
+          "title": "Signed Ota",
+          "type": "boolean"
+        },
+        "update_key_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Update Key Fingerprint"
+        }
+      },
+      "title": "DeviceCapabilities",
+      "type": "object"
+    },
+    "DeviceConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "$ref": "#/$defs/DisplayConfiguration"
+        },
+        "layout": {
+          "$ref": "#/$defs/LayoutConfiguration"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "title": "DeviceConfiguration",
+      "type": "object"
+    },
+    "DisplayConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "brightness": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 3,
+          "title": "Brightness",
+          "type": "integer"
+        },
+        "clock_s": {
+          "default": 60,
+          "maximum": 86400,
+          "minimum": 5,
+          "title": "Clock S",
+          "type": "integer"
+        },
+        "dim_s": {
+          "default": 120,
+          "maximum": 86400,
+          "minimum": 5,
+          "title": "Dim S",
+          "type": "integer"
+        },
+        "night_cap": {
+          "default": 15,
+          "maximum": 100,
+          "minimum": 3,
+          "title": "Night Cap",
+          "type": "integer"
+        },
+        "night_enabled": {
+          "default": true,
+          "title": "Night Enabled",
+          "type": "boolean"
+        },
+        "night_end": {
+          "default": 420,
+          "maximum": 1439,
+          "minimum": 0,
+          "title": "Night End",
+          "type": "integer"
+        },
+        "night_start": {
+          "default": 1320,
+          "maximum": 1439,
+          "minimum": 0,
+          "title": "Night Start",
+          "type": "integer"
+        },
+        "off_s": {
+          "default": 300,
+          "maximum": 86400,
+          "minimum": 0,
+          "title": "Off S",
+          "type": "integer"
+        },
+        "protection": {
+          "default": true,
+          "title": "Protection",
+          "type": "boolean"
+        },
+        "rotation": {
+          "default": 0,
+          "description": "Clockwise screen angle in 90-degree steps; omitted schema-1 values default to 0.",
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "title": "Rotation",
+          "type": "integer"
+        }
+      },
+      "title": "DisplayConfiguration",
+      "type": "object"
+    },
+    "LayoutConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "action_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Action Ids",
+          "type": "array"
+        },
+        "preset": {
+          "default": "desk",
+          "enum": [
+            "desk",
+            "clock",
+            "focus"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "show_cpu": {
+          "default": true,
+          "title": "Show Cpu",
+          "type": "boolean"
+        },
+        "show_seconds": {
+          "default": false,
+          "title": "Show Seconds",
+          "type": "boolean"
+        },
+        "theme": {
+          "default": "mint",
+          "description": "Built-in device color theme; omitted schema-1 values default to mint.",
+          "enum": [
+            "mint",
+            "ocean",
+            "amber"
+          ],
+          "title": "Theme",
+          "type": "string"
+        }
+      },
+      "title": "LayoutConfiguration",
+      "type": "object"
+    },
+    "PowerReport": {
+      "additionalProperties": false,
+      "properties": {
+        "battery": {
+          "default": "unknown",
+          "enum": [
+            "present",
+            "absent",
+            "unknown"
+          ],
+          "title": "Battery",
+          "type": "string"
+        },
+        "charging": {
+          "default": "unknown",
+          "enum": [
+            "charging",
+            "full",
+            "idle",
+            "fault",
+            "unknown"
+          ],
+          "title": "Charging",
+          "type": "string"
+        },
+        "fault": {
+          "default": false,
+          "title": "Fault",
+          "type": "boolean"
+        },
+        "vbus": {
+          "default": "unknown",
+          "enum": [
+            "present",
+            "absent",
+            "unknown"
+          ],
+          "title": "Vbus",
+          "type": "string"
+        }
+      },
+      "title": "PowerReport",
+      "type": "object"
+    },
+    "UpdateReport": {
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 96,
+              "pattern": "^[A-Z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "job_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "progress_percent": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Progress Percent",
+          "type": "integer"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "downloading",
+            "verifying",
+            "writing",
+            "rebooting",
+            "pending_confirmation",
+            "succeeded",
+            "failed",
+            "rolled_back",
+            "unconfirmed"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "state"
+      ],
+      "title": "UpdateReport",
+      "type": "object"
+    }
+  },
+  "$id": "urn:deskhub:protocol:v1:device-report",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "applied_revision": {
+      "default": 0,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Applied Revision",
+      "type": "integer"
+    },
+    "board_model": {
+      "const": "ESP32-S3-Touch-AMOLED-2.16",
+      "default": "ESP32-S3-Touch-AMOLED-2.16",
+      "title": "Board Model",
+      "type": "string"
+    },
+    "boot_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Boot Id",
+      "type": "string"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/DeviceCapabilities"
+    },
+    "config_error": {
+      "anyOf": [
+        {
+          "maxLength": 96,
+          "pattern": "^[A-Z0-9_]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Error"
+    },
+    "configuration": {
+      "$ref": "#/$defs/DeviceConfiguration"
+    },
+    "firmware_version": {
+      "maxLength": 31,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.+-]+$",
+      "title": "Firmware Version",
+      "type": "string"
+    },
+    "free_heap_bytes": {
+      "minimum": 0,
+      "title": "Free Heap Bytes",
+      "type": "integer"
+    },
+    "power": {
+      "$ref": "#/$defs/PowerReport"
+    },
+    "update": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UpdateReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "uptime_seconds": {
+      "minimum": 0,
+      "title": "Uptime Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "firmware_version",
+    "boot_id",
+    "uptime_seconds",
+    "free_heap_bytes",
+    "configuration"
+  ],
+  "title": "DeviceReport",
+  "type": "object"
+}

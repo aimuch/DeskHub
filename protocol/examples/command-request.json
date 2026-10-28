@@ -1,0 +1,9 @@
+{
+  "request_id": "7ec69114-6c9b-44cb-ae3f-1fa5716b875c",
+  "idempotency_key": "b9a37132-b36b-49fe-bc1d-7ddb1c027738",
+  "action_id": "desktop.switch_to_mac",
+  "target_id": "monitor-desk-01",
+  "parameters": {"input_id": "mac-usbc"},
+  "sent_at": "2026-10-27T03:00:00Z",
+  "expires_at": "2026-10-27T03:00:10Z"
+}

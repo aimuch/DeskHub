@@ -1,0 +1,3 @@
+#pragma once
+constexpr int ESP_ERR_ESP_TLS_CANNOT_RESOLVE_HOSTNAME = 0x8001;
+constexpr int ESP_ERR_ESP_TLS_CONNECTION_TIMEOUT = 0x8002;

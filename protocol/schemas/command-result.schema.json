@@ -1,0 +1,196 @@
+{
+  "$defs": {
+    "CommandParameters": {
+      "additionalProperties": false,
+      "properties": {
+        "input_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Input Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_id"
+      ],
+      "title": "CommandParameters",
+      "type": "object"
+    },
+    "ErrorDetail": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "ErrorDetail",
+      "type": "object"
+    },
+    "Observation": {
+      "properties": {
+        "input_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input Id"
+        },
+        "quality": {
+          "enum": [
+            "valid",
+            "stale",
+            "unavailable",
+            "unsupported",
+            "invalid"
+          ],
+          "title": "Quality",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_id",
+        "quality"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "Verification": {
+      "properties": {
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason Code"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "method",
+        "result"
+      ],
+      "title": "Verification",
+      "type": "object"
+    }
+  },
+  "$id": "urn:deskhub:protocol:v1:command-result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accepted_at": {
+      "format": "date-time",
+      "title": "Accepted At",
+      "type": "string"
+    },
+    "command_id": {
+      "title": "Command Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorDetail"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "observed": {
+      "$ref": "#/$defs/Observation"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "requested": {
+      "$ref": "#/$defs/CommandParameters"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "executing",
+        "succeeded",
+        "unconfirmed",
+        "failed",
+        "expired",
+        "cancelled",
+        "partial"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "target_id": {
+      "title": "Target Id",
+      "type": "string"
+    },
+    "verification": {
+      "$ref": "#/$defs/Verification"
+    }
+  },
+  "required": [
+    "request_id",
+    "command_id",
+    "state",
+    "target_id",
+    "requested",
+    "observed",
+    "verification",
+    "accepted_at"
+  ],
+  "title": "CommandResult",
+  "type": "object"
+}

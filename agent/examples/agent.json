@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "agent_id": "agent-example-replace-with-init",
+  "host_id": "host-main",
+  "name": "DeskHub Agent",
+  "db_path": "state/agent.sqlite3",
+  "bind": "127.0.0.1",
+  "port": 8765,
+  "lan_enabled": false,
+  "tls_cert": null,
+  "tls_key": null,
+  "allowed_networks": ["127.0.0.0/8", "::1/128"],
+  "backend": "disabled",
+  "backend_path": null,
+  "backend_timeout_seconds": 5,
+  "displays": [],
+  "actions": [],
+  "retention_hours": 24
+}

@@ -1,0 +1,62 @@
+{
+  "$id": "urn:deskhub:protocol:v1:firmware-payload",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board_model": {
+      "const": "ESP32-S3-Touch-AMOLED-2.16",
+      "title": "Board Model",
+      "type": "string"
+    },
+    "chip": {
+      "const": "esp32s3",
+      "title": "Chip",
+      "type": "string"
+    },
+    "config_schema_max": {
+      "const": 1,
+      "title": "Config Schema Max",
+      "type": "integer"
+    },
+    "config_schema_min": {
+      "const": 1,
+      "title": "Config Schema Min",
+      "type": "integer"
+    },
+    "image_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Image Sha256",
+      "type": "string"
+    },
+    "image_size": {
+      "maximum": 6291456,
+      "minimum": 256,
+      "title": "Image Size",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "version": {
+      "maxLength": 31,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.+-]+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "board_model",
+    "chip",
+    "version",
+    "config_schema_min",
+    "config_schema_max",
+    "image_size",
+    "image_sha256"
+  ],
+  "title": "FirmwarePayload",
+  "type": "object"
+}

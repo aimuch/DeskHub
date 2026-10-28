@@ -1,0 +1,11 @@
+{
+  "key": "cpu.temperature",
+  "label": "CPU 温度",
+  "value": null,
+  "unit": "celsius",
+  "source": "host-agent",
+  "observed_at": "2026-10-27T03:00:00Z",
+  "ttl_ms": 6000,
+  "quality": "unsupported",
+  "reason_code": "CPU_TEMPERATURE_UNSUPPORTED"
+}

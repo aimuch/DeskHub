@@ -1,0 +1,80 @@
+{
+  "$id": "urn:deskhub:protocol:v1:metric",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "quality": {
+      "enum": [
+        "valid",
+        "stale",
+        "unavailable",
+        "unsupported",
+        "invalid"
+      ],
+      "title": "Quality",
+      "type": "string"
+    },
+    "reason_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason Code"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "ttl_ms": {
+      "title": "Ttl Ms",
+      "type": "integer"
+    },
+    "unit": {
+      "title": "Unit",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Value"
+    }
+  },
+  "required": [
+    "key",
+    "label",
+    "value",
+    "unit",
+    "source",
+    "observed_at",
+    "ttl_ms",
+    "quality"
+  ],
+  "title": "Metric",
+  "type": "object"
+}

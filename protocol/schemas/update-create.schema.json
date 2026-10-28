@@ -1,0 +1,24 @@
+{
+  "$id": "urn:deskhub:protocol:v1:update-create",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "expected_firmware_version": {
+      "maxLength": 31,
+      "minLength": 1,
+      "title": "Expected Firmware Version",
+      "type": "string"
+    },
+    "package_id": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Package Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "package_id",
+    "expected_firmware_version"
+  ],
+  "title": "UpdateCreate",
+  "type": "object"
+}

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Credential does not permit this target",
+    "retryable": false,
+    "request_id": "req-example"
+  }
+}

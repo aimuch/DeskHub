@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deskhub-agent"
+version = "0.2.0a1"
+description = "Authenticated desktop control and telemetry agent for DeskHub"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi==0.115.12",
+  "uvicorn==0.34.2",
+  "psutil==7.0.0",
+  "httpx==0.28.1",
+  "pydantic==2.11.4",
+  "cryptography==44.0.3",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.3.5", "pytest-asyncio==0.26.0"]
+
+[project.scripts]
+deskhubctl = "deskhub_agent.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deskhub_agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

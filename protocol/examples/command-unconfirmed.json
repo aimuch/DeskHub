@@ -1,0 +1,12 @@
+{
+  "request_id": "7ec69114-6c9b-44cb-ae3f-1fa5716b875c",
+  "command_id": "cmd-8f3067d1",
+  "state": "unconfirmed",
+  "target_id": "monitor-desk-01",
+  "requested": {"input_id": "mac-usbc"},
+  "observed": {"input_id": null, "quality": "unavailable"},
+  "verification": {"method": "readback", "result": "unavailable", "reason_code": "CONTROL_PATH_LOST_AFTER_SWITCH"},
+  "error": null,
+  "accepted_at": "2026-10-27T03:00:01Z",
+  "completed_at": "2026-10-27T03:00:08Z"
+}

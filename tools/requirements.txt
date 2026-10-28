@@ -1,0 +1,2 @@
+# Only the USB transport needs an external package; agent uses its own uv.lock.
+pyserial==3.5

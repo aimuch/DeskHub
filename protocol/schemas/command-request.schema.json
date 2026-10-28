@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "CommandParameters": {
+      "additionalProperties": false,
+      "properties": {
+        "input_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+          "title": "Input Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_id"
+      ],
+      "title": "CommandParameters",
+      "type": "object"
+    }
+  },
+  "$id": "urn:deskhub:protocol:v1:command-request",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "idempotency_key": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "parameters": {
+      "$ref": "#/$defs/CommandParameters"
+    },
+    "request_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "title": "Sent At",
+      "type": "string"
+    },
+    "target_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+      "title": "Target Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "idempotency_key",
+    "action_id",
+    "target_id",
+    "parameters",
+    "sent_at"
+  ],
+  "title": "CommandRequest",
+  "type": "object"
+}
