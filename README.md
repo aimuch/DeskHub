@@ -36,7 +36,7 @@ Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_m
 检查“原样”：
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview'
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json'
 ```
 
 输出为空，就表示这些文件与归档逐字节相同。
@@ -48,6 +48,9 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
 | `firmware/tests/CMakeLists.txt` | 加入新设备界面的模型测试目标 `ui_view_models`，其余目标不变 |
 | `firmware/CMakeLists.txt` | 版本号 0.2.6 改为 0.3.0，两处 |
+| `firmware/components/management/`（`management.cpp`、`CMakeLists.txt`）、`firmware/main/app_main.cpp` | 设备上报和 USB 状态带电源对象；新增纯函数 `power_wire.cpp/.hpp` 和 `firmware/tests/power_wire_test.cpp` |
+| `agent/src/deskhub_agent/management_models.py`、`management.py`；`protocol/`（`openapi.json`、`schemas/device-report.schema.json`、`export_openapi.py`、`README.md`、新示例） | Agent 接收并校验电源读数，设备记录带 `power_state`（未上报、新鲜、过期）；新增 `agent/tests/test_power_report.py` |
+| `tools/provision.py` | `--status` 只打印检查过的电源对象；新增 `tools/tests/test_provision_power.py` |
 | `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
@@ -57,6 +60,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - [产品范围](docs/product-scope.md)：做什么、不做什么、每个功能的状态，以及 14 条决策记录。
 - [规则](docs/rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
 - [设计稿](docs/design/README.md)：设计稿源文件、画板清单和设计变量。
+- [配对接口设计](docs/pairing-design.md)：热点配网（R7）的设计，**待你审完才实现**。
 
 ## 现状
 
@@ -64,6 +68,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.1 MiB，应用分区 6 MiB）。
 - 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
 - 界面里已做好但设备上看不到的两处：配网页（后端 R7 还没做，没有代码调用它），充电保护确认框（充电控制 N1 还没做；保护页的开启按钮是禁用的，并写明原因）。
+- 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。这些改动还没有刷到设备（设备上跑的仍是 0.3.0 的第一个构建），也没有用真实设备的上报验证过。
+- 设计好但没实现：热点配网和 Agent 的配对接口，见 [配对接口设计](docs/pairing-design.md)。
 - 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
 - 固件版本 0.3.0。USB 刷机包和签名 OTA 包已生成在 `dist/`（不在 git 里），哈希和做过的检查记在 [docs/evidence/firmware-0.3.0.json](docs/evidence/firmware-0.3.0.json)。0.3.0 已用 USB 包刷到设备 deskhub-44bd8d60c598：写入校验通过，开机后界面心跳正常、没有错误。用户在设备旁确认“屏幕显示正常，新界面已经出来”。逐页显示、触摸、真实电量数值和 OTA 回滚都没验证。
 
