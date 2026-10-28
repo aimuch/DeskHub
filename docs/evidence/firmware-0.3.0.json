@@ -34,10 +34,28 @@
     "USB 包里的 deskhub.bin 与 .dhfw 里的 app.bin 是同一个镜像（SHA-256 相同）",
     "主机测试 8 组全部通过；原生 LVGL 离屏预览 15 组加触摸方向回归通过"
   ],
+  "flashed": {
+    "device_id": "deskhub-44bd8d60c598",
+    "port": "/dev/cu.usbmodem20101",
+    "method": "USB 包里的 flash.py（esptool 5.3.1，--no-stub），先只读识别 ESP32-S3 / 16 MiB 再写入 4 个镜像",
+    "before": {"firmware_version": "0.2.6", "config_revision": 34, "theme": "ocean", "rotation": 180},
+    "esptool_verify": "Hash of data verified（4 个镜像）",
+    "after_boot": {
+      "firmware_version": "0.3.0",
+      "config_revision": 34,
+      "ui_alive": true,
+      "error": "",
+      "battery_soc": {"availability": "ready", "reason_code": "PMIC_ESTIMATE_UNVERIFIED"},
+      "wifi": "未配置",
+      "agent": "未配对",
+      "note": "NVS 没有被改：设备编号、配置版本、主题、旋转保持不变。读状态要等开机 12 秒后；刚开机几秒内 ui_alive 为 false，是界面还没启动，不是故障。"
+    }
+  },
   "not_done": [
-    "没有刷到任何设备",
     "没有从管理台上传 .dhfw，也没有在设备上做过 OTA 与回滚",
-    "屏幕、触摸、电源读数、常亮、长时间运行都没有真机验证：hardware_verified 为 false"
+    "没有人看过屏幕：显示、触摸、旋转、常亮、电池读数的真实数值都没有真机验证",
+    "USB 状态还不输出电池电压、USB 电压和芯片温度（下一步做）",
+    "这台设备没有配置 Wi-Fi 和 Agent，所以电脑指标、动作、命令都没有试"
   ],
   "hardware_verified": false
 }
