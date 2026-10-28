@@ -12,6 +12,7 @@ import datetime as dt
 import getpass
 import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -330,6 +331,51 @@ def parser() -> argparse.ArgumentParser:
     return cli
 
 
+POWER_WORDS = {
+    "vbus": {"present", "absent", "unknown"},
+    "battery": {"present", "absent", "unknown"},
+    "charging": {"charging", "full", "idle", "fault", "unknown"},
+    "measurement": {"ok", "adc_enable_failed", "adc_read_failed", "adc_out_of_range", "not_measured"},
+}
+# Plausible ranges of the AXP2101 readings (docs/rules.md R3), the same ones the firmware and the Agent enforce.
+POWER_RANGES = {"soc_percent": (0, 100), "battery_mv": (2500, 4600), "vbus_mv": (3000, 6500), "chip_temp_c": (-40, 150)}
+
+
+def safe_power(value: Any) -> dict[str, Any] | None:
+    """The power object of a status reply, reduced to what can be vouched for.
+
+    Unknown keys, words the tool does not know, mistyped or implausible numbers and numbers that contradict the rest
+    (a failed measurement, no battery, no USB) are dropped, not corrected. A null from the device stays null: unknown.
+    """
+    if not isinstance(value, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    for key, words in POWER_WORDS.items():
+        word = value.get(key)
+        if isinstance(word, str) and word in words:
+            cleaned[key] = word
+    if isinstance(value.get("fault"), bool):
+        cleaned["fault"] = value["fault"]
+    for key, (low, high) in POWER_RANGES.items():
+        number = value.get(key)
+        if number is None and key in value:
+            cleaned[key] = None
+        elif type(number) is int or (key == "chip_temp_c" and type(number) is float):
+            if math.isfinite(number) and low <= number <= high:
+                cleaned[key] = number
+    if cleaned.get("measurement") != "ok":
+        for key in ("battery_mv", "vbus_mv", "chip_temp_c"):
+            if cleaned.get(key) is not None:
+                del cleaned[key]
+    if cleaned.get("battery") != "present":
+        for key in ("soc_percent", "battery_mv"):
+            if cleaned.get(key) is not None:
+                del cleaned[key]
+    if cleaned.get("vbus") != "present" and cleaned.get("vbus_mv") is not None:
+        del cleaned["vbus_mv"]
+    return cleaned
+
+
 def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     # Allowlist scalar diagnostics; no arbitrary echoed remote fields are printed.
     keys = {"device_id", "firmware_version", "protocol_version", "board_model", "configured", "wifi", "agent", "wifi_state", "agent_state", "time_quality", "config_revision", "provision_revision", "update_key_fingerprint", "applied_revision", "ui_alive", "theme", "rotation"}
@@ -349,6 +395,9 @@ def safe_status(result: dict[str, Any]) -> dict[str, Any]:
                     safe_caps[key] = {"support": support, "availability": availability}
         if safe_caps:
             cleaned["capabilities"] = safe_caps
+    power = safe_power(result.get("power"))
+    if power is not None:
+        cleaned["power"] = power
     return cleaned
 
 
