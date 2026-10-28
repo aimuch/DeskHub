@@ -21,8 +21,8 @@
 //  A11 Idle: with nothing changing, many ticks draw nothing. Switching pages 1000 times leaks no objects.
 //  A12 Settings changes (rotation, brightness, always-on) are applied once, failures stay visible, and the
 //      configuration is acknowledged only after the screen shows it.
-//  A13 Pairing page: the code is shown only when it is well formed, the countdown is right, the shell is hidden,
-//      cancel calls back, hide restores the normal page.
+//  A13 Pairing page: the code (4 to 8 characters) and the hotspot password (8 to 12) are shown only when well formed, never cut off, the countdown is right, the
+//      shell is hidden, cancel calls back, hide restores the normal page. It fits in every theme, language and size.
 //  A14 Protect dialog: dims everything, offers 80 % and 90 %, passes the chosen limit, cancel closes it.
 //  A15 Power page: a control that would do nothing is disabled and explained, never silently inert.
 #include "agent_client.hpp"
@@ -455,6 +455,15 @@ static void case_matrix() {
                     check_targets(where);
                     ++views;
                 }
+                {   // the pairing page, with the longest strings it can get
+                    dh::PairingInfo info; info.code = "ZZZZZZZZ"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "ABCDEFGHJKMN"; info.remaining_s = 299;
+                    dh::ui_pairing_show(info, [] {}); step(); step();
+                    const std::string where = std::string(theme) + "/" + lang + "/" + size + "/pairing";
+                    check_layout(where);
+                    check_targets(where);
+                    EXPECT(has("ABCDEFGHJKMN"));
+                    dh::ui_pairing_hide(); step();
+                }
             }
     EXPECT(views == 3 * 2 * 3 * 12);
 }
@@ -731,20 +740,31 @@ static void case_pairing() {
     static int cancels = 0;
     cancels = 0;
     dh::PairingInfo info;
-    info.code = "624819"; info.hotspot = "DeskHub-C598"; info.remaining_s = 272; info.total_s = 300;
+    info.code = "624819"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "K7M2QX9TWD4P"; info.remaining_s = 272; info.total_s = 300;
     dh::ui_pairing_show(info, [] { ++cancels; });
     step();
     EXPECT(has("624819") && has("04:32") && contains("DeskHub-C598") && has("取消配对"));
+    EXPECT(has("热点密码") && has("K7M2QX9TWD4P"));
     EXPECT(!has("总览") && !has("动作"));           // the shell is hidden
     EXPECT(detail::pairing_bar_percent() == 90);
     step(2000);
     EXPECT(has("04:30"));
     check_layout("pairing"); check_targets("pairing");
-    for (const char *bad : {"", "12 34", "abc", "123", "1234567890123", "62481\n"}) {
+    for (const char *bad : {"", "12 34", "abc", "123", "123456789", "1234567890123", "62481\n"}) {
         dh::PairingInfo p = info; p.code = bad;
         dh::ui_pairing_show(p, [] { ++cancels; }); step();
         EXPECT(has("------"));
     }
+    // the hotspot password is drawn only when it is 8 to 63 printable characters without a space; anything else is dashes
+    for (const char *bad : {"", "short", "has space in it", "tab\there1234", "new\nline1234", "\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9\xc3\xa9"}) {
+        dh::PairingInfo p = info; p.hotspot_password = bad;
+        dh::ui_pairing_show(p, [] { ++cancels; }); step();
+        EXPECT(has("------------") && !has("K7M2QX9TWD4P"));
+        if (std::strlen(bad) > 4) EXPECT(!has(bad));
+    }
+    { dh::PairingInfo p = info; p.hotspot_password = std::string(13, 'p'); dh::ui_pairing_show(p, [] { ++cancels; }); step(); EXPECT(has("------------") && !has(std::string(13, 'p'))); }
+    { dh::PairingInfo p = info; p.hotspot_password = std::string(12, 'p'); dh::ui_pairing_show(p, [] { ++cancels; }); step(); EXPECT(has(std::string(12, 'p'))); }
+    dh::ui_pairing_show(info, [] { ++cancels; }); step();
     dh::PairingInfo over = info; over.remaining_s = 9999; over.total_s = 300;
     dh::ui_pairing_show(over, [] { ++cancels; }); step();
     EXPECT(detail::pairing_bar_percent() == 100);
@@ -816,7 +836,7 @@ static void case_screenshots() {
     mock_snapshot.agent_ready = false; mock_snapshot.metrics_expires_ms = mock_ms - 1; step(); step();
     save_png_source("state-offline");
     fresh();
-    dh::PairingInfo info; info.code = "624819"; info.hotspot = "DeskHub-C598"; info.remaining_s = 272;
+    dh::PairingInfo info; info.code = "624819"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "K7M2QX9TWD4P"; info.remaining_s = 272;
     dh::ui_pairing_show(info, [] {}); step();
     save_png_source("state-pairing");
     fresh();

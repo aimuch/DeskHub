@@ -738,28 +738,42 @@ lv_obj_t *build_pairing(lv_obj_t *screen, const PairingInfo &info, int64_t, void
     lv_obj_set_pos(root, 0, 0);
     label_at(root, T(Str::PairingTitle), kMargin, 20, kContentW, look.title, p.accent);
     label_at(root, T(Str::PairingSub), kMargin, 20 + lh(look.title), kContentW, look.caption, p.muted);
-    auto *code_card = panel(root, kContentW, 138, p.selected, p.accent, 28);
-    lv_obj_set_pos(code_card, kMargin, 104);
+    // The vertical budget is tight in the large text size, so the page is laid out from the font heights.
+    const int code_h = 12 + lh(look.caption) + 8 + lh(&lv_font_montserrat_48) + 12;
+    const int code_y = 20 + lh(look.title) + lh(look.caption) + 8;
+    auto *code_card = panel(root, kContentW, code_h, p.selected, p.accent, 28);
+    lv_obj_set_pos(code_card, kMargin, code_y);
     lv_obj_set_style_border_width(code_card, 2, 0);
     auto *key = label_at(code_card, T(Str::OneTimeCode), 0, 12, kContentW - 6, look.caption, p.muted);
     centered(key);
-    bool good = info.code.size() >= 4 && info.code.size() <= 12;
+    bool good = info.code.size() >= 4 && info.code.size() <= 8;
     for (char c : info.code) if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))) good = false;
-    auto *code = label_at(code_card, good ? info.code : "------", 0, 12 + lh(look.caption) + 10, kContentW - 6, &lv_font_montserrat_48, p.ink);
+    auto *code = label_at(code_card, good ? info.code : "------", 0, 12 + lh(look.caption) + 8, kContentW - 6, &lv_font_montserrat_48, p.ink);
     lv_obj_set_style_text_letter_space(code, 6, 0);
     centered(code);
     single_line(code, lh(&lv_font_montserrat_48));
-    auto *spot = label_at(root, T(Str::Hotspot) + "  " + (info.hotspot.empty() ? std::string("--") : info.hotspot), kMargin, 256, kContentW, look.body, p.ink);
-    single_line(spot, lh(look.body));
-    auto *hint = label_at(root, T(Str::PairingHint), kMargin + 16, 256 + lh(look.body) + 6, kContentW - 32, look.caption, p.muted);
+    // The hotspot: its name and its password, both on the screen, because the person has to type them on the phone.
+    bool password_good = info.hotspot_password.size() >= 8 && info.hotspot_password.size() <= 12;
+    for (unsigned char c : info.hotspot_password) if (c < 33 || c > 126) password_good = false;
+    const int row_h = std::max(lh(look.body), lh(look.caption));
+    int y = code_y + code_h + 8;
+    for (int i = 0; i < 2; ++i) {
+        const std::string value = i == 0 ? (info.hotspot.empty() ? std::string("--") : info.hotspot) : (password_good ? info.hotspot_password : std::string(12, '-'));
+        auto *name = label_at(root, T(i == 0 ? Str::Hotspot : Str::HotspotPassword), kMargin, y + (row_h - lh(look.caption)) / 2, 190, look.caption, p.muted);
+        single_line(name, lh(look.caption));
+        auto *v = label_at(root, value, kMargin + 190, y, kContentW - 190, look.body, p.ink);
+        single_line(v, lh(look.body));
+        y += row_h + 4;
+    }
+    auto *hint = label_at(root, T(Str::PairingHint), kMargin, y + 2, kContentW, look.caption, p.muted);
     lv_obj_set_height(hint, lh(look.caption) * 2);
-    const int bar_y = 340;
-    label_at(root, T(Str::RemainingLabel), kMargin, bar_y, 250, look.caption, p.muted);
+    const int bar_y = y + 2 + lh(look.caption) * 2 + 4;
+    label_at(root, T(Str::RemainingLabel), kMargin, bar_y + (lh(look.body) - lh(look.caption)) / 2, 250, look.caption, p.muted);
     g_pairing_time = label_at(root, "", kMargin + 250, bar_y, kContentW - 250, look.body, p.ink);
     lv_obj_set_style_text_align(g_pairing_time, LV_TEXT_ALIGN_RIGHT, 0);
     single_line(g_pairing_time, lh(look.body));
     g_pairing_bar = holder(root, kContentW, 8);
-    lv_obj_set_pos(g_pairing_bar, kMargin, bar_y + lh(look.body) + 6);
+    lv_obj_set_pos(g_pairing_bar, kMargin, bar_y + lh(look.body) + 4);
     lv_obj_set_style_radius(g_pairing_bar, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(g_pairing_bar, hex(p.track), 0);
     lv_obj_set_style_bg_opa(g_pairing_bar, LV_OPA_COVER, 0);
