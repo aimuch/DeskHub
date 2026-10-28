@@ -24,3 +24,4 @@ scripts/ui_preview/build/
 dist/
 build/
 
+firmware/tests/ui_preview/out/
