@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <string>
 #include <cstdint>
 #include <ctime>
@@ -10,6 +11,13 @@ struct PowerState {
     // estimate (AXP2101 register 0xA4), not validated against this particular cell and
     // never derived from voltage. Only set while a battery is present.
     int soc_percent = -1;
+    // Read-only AXP2101 ADC measurements. -1 and NaN mean "not measured": the channel is off and could not be
+    // enabled, the read failed, the value is implausible, or there is nothing to measure (no battery, no USB).
+    int battery_mv = -1;
+    int vbus_mv = -1;
+    float chip_temp_c = NAN;  // the power chip's die temperature, never the cell's
+    // ADC_OK, ADC_ENABLE_FAILED, ADC_READ_FAILED or ADC_OUT_OF_RANGE; empty before a sample and on a PMIC fault.
+    std::string measure_reason;
     // Current and cell temperature stay absent until validated.
     bool fault = false;
     int64_t observed_ms = 0;

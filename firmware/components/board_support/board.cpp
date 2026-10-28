@@ -24,6 +24,82 @@ static bool add(uint8_t addr, i2c_master_dev_handle_t *dev) {
     i2c_device_config_t c{}; c.dev_addr_length = I2C_ADDR_BIT_LEN_7; c.device_address = addr; c.scl_speed_hz = 400000;
     return i2c_master_bus_add_device(bus,&c,dev) == ESP_OK;
 }
+// ---- the only PMIC writes this firmware makes (docs/rules.md, R3) ----
+// Checked against XPowersLib's XPowersAXP2101 on 2026-10-28:
+//   0x30 bits 0, 2, 4  enableBattVoltageMeasure, enableVbusVoltageMeasure, enableTemperatureMeasure
+//   0x68 bit 0         enableBattDetection
+// Not written on purpose: 0x18 bit 3 (fuel gauge: no XPowersLib function, not verified), 0x18 bit 1
+// (charge enable: charging protection only), charge voltage, the TS pin, current limits, timers, BATFET.
+static constexpr uint8_t kAdcReg = 0x30, kAdcBits = 0x15, kDetectReg = 0x68, kDetectBit = 0x01;
+static constexpr int kMaxEnableFailures = 3;
+static int enable_failures = 0;  // failed enable attempts in a row; reset when the bits are seen set
+static esp_err_t write_register(i2c_master_dev_handle_t dev, uint8_t reg, uint8_t value) {
+    if (!dev) return ESP_ERR_INVALID_STATE;
+    const uint8_t data[2] = {reg, value};
+    return i2c_master_transmit(dev,data,sizeof(data),100);
+}
+// Read-modify-write one whitelisted register from its known value, then read it back. true only if the
+// bits read back as set; on failure `value` keeps what was last read.
+static bool enable_bits(uint8_t reg, uint8_t mask, uint8_t &value) {
+    if (write_register(pmic,reg,static_cast<uint8_t>(value | mask)) != ESP_OK) return false;
+    uint8_t back = 0;
+    if (read(pmic,reg,&back,1) != ESP_OK) return false;
+    value = back;
+    return (back & mask) == mask;
+}
+struct Enabled {
+    bool adc_read = false, detect_read = false, enable_failed = false;
+    uint8_t adc = 0, detect = 0;
+};
+// Reads the two whitelisted registers and, when bits are missing, enables them. Never writes on a failed
+// read, and gives up after kMaxEnableFailures failed attempts in a row.
+static Enabled ensure_measurement_enabled() {
+    Enabled e;
+    e.adc_read = read(pmic,kAdcReg,&e.adc,1) == ESP_OK;
+    e.detect_read = read(pmic,kDetectReg,&e.detect,1) == ESP_OK;
+    if (!e.adc_read || !e.detect_read) return e;
+    const bool adc_ok = (e.adc & kAdcBits) == kAdcBits, detect_ok = (e.detect & kDetectBit) == kDetectBit;
+    if (adc_ok && detect_ok) { enable_failures = 0; return e; }
+    if (enable_failures >= kMaxEnableFailures) { e.enable_failed = true; return e; }
+    bool good = true;
+    if (!adc_ok) good = enable_bits(kAdcReg,kAdcBits,e.adc) && good;
+    if (!detect_ok) good = enable_bits(kDetectReg,kDetectBit,e.detect) && good;
+    if (good) enable_failures = 0; else { ++enable_failures; e.enable_failed = true; }
+    return e;
+}
+// Battery voltage (0x34/0x35, 13 bit mV), USB voltage (0x38/0x39, 14 bit mV) and the chip's die temperature
+// (0x3C/0x3D, 14 bit, 22 + (7274 - raw) / 20 C), after XPowersLib. Only channels that are on and that have
+// something to measure are read; anything missing, failed or implausible stays unknown.
+static void measure(PowerState &next, const Enabled &e) {
+    if (!e.adc_read) { next.measure_reason = "ADC_READ_FAILED"; return; }
+    bool read_failed = false, disabled = false, out_of_range = false;
+    uint8_t b[2];
+    if (next.battery == "present") {
+        if (!(e.adc & 0x01)) disabled = true;
+        else if (read(pmic,0x34,b,2) != ESP_OK) read_failed = true;
+        else {
+            const int mv = ((b[0] & 0x1f) << 8) | b[1];
+            if (mv >= 2500 && mv <= 4600) next.battery_mv = mv; else out_of_range = true;
+        }
+    }
+    if (next.vbus == "present") {
+        if (!(e.adc & 0x04)) disabled = true;
+        else if (read(pmic,0x38,b,2) != ESP_OK) read_failed = true;
+        else {
+            const int mv = ((b[0] & 0x3f) << 8) | b[1];
+            if (mv >= 3000 && mv <= 6500) next.vbus_mv = mv; else out_of_range = true;
+        }
+    }
+    if (!(e.adc & 0x10)) disabled = true;
+    else if (read(pmic,0x3c,b,2) != ESP_OK) read_failed = true;
+    else {
+        const int raw = ((b[0] & 0x3f) << 8) | b[1];
+        const float celsius = 22.0f + static_cast<float>(7274 - raw) / 20.0f;
+        if (celsius >= -40.0f && celsius <= 150.0f) next.chip_temp_c = celsius; else out_of_range = true;
+    }
+    next.measure_reason = read_failed ? "ADC_READ_FAILED" : (disabled || e.enable_failed) ? "ADC_ENABLE_FAILED" :
+        out_of_range ? "ADC_OUT_OF_RANGE" : "ADC_OK";
+}
 esp_err_t board_init() {
     // Initialization runs before the UI/tasks. Failed initialization must keep
     // an explicitly unknown cache, never a fresh-looking power observation.
@@ -103,17 +179,21 @@ esp_err_t board_rotation(int degrees) {
 void board_sample_power() {
     if (!io_mutex || !power_mutex || !pmic) return;
     xSemaphoreTake(io_mutex,portMAX_DELAY);
-    uint8_t id=0, status[2]{}, detection=0;
+    uint8_t id=0, status[2]{};
     PowerState next;
     // Read semantics cross-checked against official example's MIT XPowersLib:
     // STATUS1 0x00 bit3 battery, bit5 VBUS good; STATUS2 0x01 bits7:5 charging.
     // Fuel-gauge percentage: register 0xA4 returned raw, only with a battery present
-    // (XPowersLib getBatteryPercent). Read-only; no ADC/gauge/charging enable writes.
-    if (read(pmic,0x03,&id,1) != ESP_OK || (id & 0xcf) != 0x4a || read(pmic,0x00,status,2) != ESP_OK || read(pmic,0x68,&detection,1) != ESP_OK) {
+    // (XPowersLib getBatteryPercent). The only PMIC writes are the whitelist in ensure_measurement_enabled,
+    // and only a chip that identifies itself as an AXP2101 is ever written to.
+    const bool identified = read(pmic,0x03,&id,1) == ESP_OK && (id & 0xcf) == 0x4a;
+    Enabled enabled;
+    if (identified) enabled = ensure_measurement_enabled();
+    if (!identified || !enabled.detect_read || read(pmic,0x00,status,2) != ESP_OK) {
         next.fault = true; next.reason = "PMIC_COMMUNICATION_FAULT";
     } else {
         next.vbus = (status[0] & 0x20) && !(status[1] & 8) ? "present" : "absent";
-        if (detection & 1) next.battery = status[0] & 8 ? "present" : "absent";
+        if (enabled.detect & kDetectBit) next.battery = status[0] & 8 ? "present" : "absent";
         next.charging = next.battery == "absent" ? "idle" : next.battery == "unknown" ? "unknown" :
             (status[1] >> 5) == 1 ? "charging" : (status[1] & 7) == 4 ? "full" : "idle";
         next.reason = next.battery == "unknown" ? "BATTERY_DETECTION_DISABLED" : "SOC_UNVERIFIED";
@@ -126,6 +206,7 @@ void board_sample_power() {
             else if (level > 100) next.reason = "SOC_OUT_OF_RANGE";
             else { next.soc_percent = level; next.reason = "SOC_PMIC_ESTIMATE"; }
         }
+        measure(next,enabled);
     }
     next.observed_ms = monotonic_ms();
     // The UI only takes power_mutex. All potentially slow I2C work above is
