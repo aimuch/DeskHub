@@ -12,6 +12,9 @@ scripts/mutation/charge_firmware.py    # 充电保护的策略：改 firmware/co
 scripts/mutation/charge_ui.py          # 充电保护的界面：改 ui_model.cpp、ui_pages.cpp、ui.cpp，跑 ui_model_test 和界面预览
 scripts/mutation/header_ui.py           # 图标顶栏、电池百分比和圆环粗细：改 ui_model.cpp、ui_pages.cpp，跑 ui_model_test 和界面预览
 scripts/mutation/corners_ui.py          # 屏幕圆角：改 ui_pages.cpp 里避开圆角的位置，跑界面预览里的圆角几何测试
+scripts/mutation/pairing_glue.py        # 设备端配对接线里能在主机上测的部分：改 pairing_glue.cpp，跑 pairing_glue_test
+scripts/mutation/admin_password.py      # 管理员密码：改 admin_auth.py、management.py、cli.py，跑 test_admin_password.py
+scripts/mutation/console_ui.py          # 网页管理台：改前端脚本，跑 scripts/e2e/console.e2e.mjs（真实的 Agent 加 Chrome，每处约 2 分钟）
 ```
 
 这些脚本都可以带名字片段，只跑名字里含这些片段的变异：

@@ -255,12 +255,15 @@ try {
     await waitText('配置已保存在 Agent', '保存成功提示');
     await openPage('devices', '设备');
     await waitText('等待设备确认', '设备页：等待设备确认');
-    check('保存后，设备页写“等待设备确认”，不写“已应用”', !(await browser.text()).includes('设备已应用') || (await browser.text()).includes('等待设备确认'));
+    const badge = () => browser.evaluate(`(() => { const panel = [...document.querySelectorAll('#content .panel')].find(item => item.querySelector('h2')?.innerText === '配置状态'); const mark = panel?.querySelector('.badge'); return mark ? { text: mark.innerText, kind: mark.className } : null; })()`);
+    const waiting = await badge();
+    check('保存后，设备页的配置状态是“等待设备确认”（黄色），不是“设备已应用”', waiting && waiting.text === '等待设备确认' && waiting.kind.includes('warn'), JSON.stringify(waiting));
     device.autoAck = true;
     await heartbeat();
     await browser.click('#refresh');
     await browser.waitFor('document.body.innerText.includes("设备已应用")', '设备确认后显示“设备已应用”');
-    check('设备上报同一个 revision 和完整配置后，才显示“设备已应用”', true);
+    const applied = await badge();
+    check('设备上报同一个 revision 和完整配置后，才显示“设备已应用”（绿色）', applied && applied.text === '设备已应用' && applied.kind.includes('ok'), JSON.stringify(applied));
     await snap('devices-applied', { full: true });
   });
 

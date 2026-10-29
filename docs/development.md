@@ -57,6 +57,10 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/CMakeLists.txt`、`firmware/tests/ui_preview/`（`CMakeLists.txt`、`harness.cpp`）、`firmware/tests/ui_model_test.cpp` | 新增测试目标 `charge_test`（`charge_protection_logic`）；界面测试加入充电保护的视图和流程（T19、A16） |
 | `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`） | 启动时 `charge::init()`，每 250 毫秒 `charge::tick()`；能力 `charge_limit` 报实验（`unverified`）；USB 状态加只读的 `charge` 对象；常驻任务的栈从 4096 加到 6144 |
 | `tools/provision.py` | `--status` 另外打印检查过的 `charge` 对象；新增 `tools/tests/test_provision_charge.py` |
+| `agent/src/deskhub_agent/`（`management.py`、`management_models.py`、`cli.py`）、`agent/tests/`（`conftest.py`、`test_management.py`、`test_pairing_grants.py`、`test_power_report.py`）、`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`） | 管理员密码登录（R8）：设置会话、密码会话、脚本会话；`GET /admin/auth`、`POST /admin/login`、`PUT /admin/password`；`deskhubctl admin-password-reset`。现有测试改成真实的起步方式（口令、设置密码、再用密码）。新增 `admin_auth.py` 和 `agent/tests/test_admin_password.py` |
+| `firmware/components/core/`（`core.cpp`、`core.hpp`） | `network_hold`、`network_wifi_started`：热点配对期间 Wi-Fi 任务不抢无线电 |
+| `firmware/tests/CMakeLists.txt` | 新增测试目标 `pairing_glue_test`（`hotspot_pairing_glue`） |
+| `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`）、`tools/provision.py` | 启动 `pairing_device`；USB 状态加 `pairing` 对象（`open`、`phase`、`why`）；`--status` 只打印检查过的 `pairing` 对象；新增 `tools/tests/test_provision_pairing.py` |
 | `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
@@ -66,23 +70,25 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - [产品范围](product-scope.md)：做什么、不做什么、每个功能的状态，以及 14 条决策记录。
 - [规则](rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
 - [设计稿](design/README.md)：设计稿源文件、画板清单和设计变量。
-- [配对接口设计](pairing-design.md)：热点配网（R7）的设计，**待你审完才实现**。
+- [配对接口设计](pairing-design.md)：热点配网（R7）的设计、实现和第 13 节的 K1 复审。
+- [管理员登录的设计](admin-login-design.md)、[网页管理台](web-console-design.md)。
 
 ## 现状（开发记录）
 
 这是按时间写下来的详细记录；给使用者看的简表在 [README](../README.md)。
 
-- 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
+- 有：Agent 的 API 和网页管理台（`/manage/`）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
 - 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.4 MiB，应用分区 6 MiB）。
 - 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
 - 顶栏改成图标（设计稿画板 `Dev-Header`，2026-10-29）：Wi-Fi、电脑、USB、闪电、电池，数字写在电池里（不带 %，可在外观里隐藏）。正在连接的图标闪烁（`blink_on`，每秒一次）。电池里的数字压在 40% 强度的填充上，数字对比度在三个主题里都不低于 4.5:1（`kBatteryFillPercent`，测试 T20）。外观里多了“电池百分比”和“圆环粗细”（细、标准、粗：总览的状态环 12、20、28 px，电量页的仪表 7、11、15 px）。外观的存储格式多了两个字段，0.3.x 存的四个字段仍然能读。屏幕上不再有“实验功能”字样（规则 R1 已改）。
 - 屏幕是圆角的，Waveshare 没公布半径。界面用 `kCornerR`（现在是 80 像素）和 `corner_inset()` 躲开四角；预览测试 A17 检查每页、每个主题、语言和字号。半径是猜的，真机上是否还有被切的，要看过才知道。
-- 界面里已做好但设备上看不到的一处：配网页（后端 R7 还没做，没有代码调用它）。
+- 配网页现在由 `pairing_device` 调用（长按 GPIO0 或未配对时开机 8 秒后）；没有在真机上看过。首页没有动作时不再画“设置网络与配对”卡片（2026-10-29）。
 - 有：充电保护（N1，实验功能）的完整实现，设计见 [docs/charge-protection-design.md](charge-protection-design.md)：策略和失败方向、电源芯片充电开关的读写（只写 0x18 位 1）、保存、界面（保护页、确认框、状态文字）、USB 状态里的 `charge` 对象。主机测试、界面预览和变异检查（`scripts/mutation/`）都通过。**还没有刷到设备，没有在真机上停过充电**；电量计的估算也没对照过这颗电芯。刷旧固件之前要先关闭它，见 [docs/flashing.md](flashing.md)。
 - 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。固件这一侧已随 0.3.1 刷到设备：USB 状态里读到了电源对象（电池 4183 mV、USB 5156 mV、芯片温度 40.3 °C、电量 100%、已充满）。读数只读了一次，没有和仪表对照；设备没有配置 Wi-Fi 和 Agent，所以设备到 Agent 的上报没有在真机上试过。
 - 有：热点配网的 Agent 端（授权、配对包版本 2 带 CA、无凭据兑换；没有 CA 下载接口）和设备端的纯逻辑（配对包解码、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
-- **设备端的接线还没有做**：热点、配网页的 HTTP、兑换的 TLS 客户端（用配对包里的 CA 验证）、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](pairing-design.md) 第 10 节。
-- 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
+- 设备端的接线做完了（2026-10-29）：热点、配网页、TLS 兑换、保存路径、按键，`firmware/components/pairing_device/`；能在主机上测的部分在 `pairing_glue`（测试 `pairing_glue_test`，变异检查 46 处全部报红）。K1 复审在 [配对接口设计](pairing-design.md) 第 13 节。固件完整构建通过。**没有在真机上验证任何一步**：按键引脚（GPIO0）没有核对原理图，热点与 Wi-Fi 同信道、堆内存、手机能否打开配网页都要看真机。USB 状态的 `pairing` 对象（`tools/provision.py --status`）用来读它做到哪一步。
+- 有：管理员密码登录（R8，`admin_auth.py`：scrypt、锁定、命令行重置，40 条测试，64 处变异全部报红）和网页管理台（`agent/src/deskhub_agent/web/`，九个页面）。管理台用真实的 Agent 加真实的 Chrome 走过整套流程（`scripts/e2e/console.e2e.mjs`，62 项通过，证据在 `docs/evidence/console-e2e/`）；没有接真实设备和显示器。
+- 没有：声音（N2 要先确认扬声器是否接在板上）；网页上开关充电保护（设备的上报里没有这一项）。
 - 固件版本 0.3.4（图标顶栏、电池里写百分比、圆环粗细可调、没有“实验功能”字样）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**。不生成签名 OTA 包（你决定不需要）。哈希和做过的检查记在 [docs/evidence/firmware-0.3.4.json](evidence/firmware-0.3.4.json)。上一个版本 0.3.3 的记录在 [docs/evidence/firmware-0.3.3.json](evidence/firmware-0.3.3.json)。
 - 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](evidence/firmware-0.3.1.json)。
 - 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
@@ -93,13 +99,14 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 .venv/bin/python -m pytest agent/tests -q
 .venv/bin/python -m unittest discover -s tools/tests
 .venv/bin/python protocol/export_openapi.py --check
+node scripts/e2e/console.e2e.mjs   # 网页管理台：真实的 Agent 加 Chrome，约 2 分钟，证据写到 docs/evidence/console-e2e/
 cmake -S firmware/tests -B firmware/build-host && cmake --build firmware/build-host && ctest --test-dir firmware/build-host --output-on-failure
 python3 firmware/tests/ui_preview/render.py
 ```
 
 最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
 
-变异检查（故意改坏实现，看测试会不会报红）：`scripts/mutation/` 下有配对（Agent 端、设备端）、充电保护（策略、界面）和屏幕圆角五个脚本。用法和输出的含义见 [scripts/mutation/README.md](../scripts/mutation/README.md)。
+变异检查（故意改坏实现，看测试会不会报红）：`scripts/mutation/` 下有配对（Agent 端、设备端、设备端接线的纯逻辑）、充电保护（策略、界面）、屏幕圆角、顶栏图标、管理员密码和网页管理台。用法和输出的含义见 [scripts/mutation/README.md](../scripts/mutation/README.md)。
 
 完整构建固件（独立目录，不碰别的构建）：
 

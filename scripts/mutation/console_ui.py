@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 W = "agent/src/deskhub_agent/web/"
 MUTATIONS = [
     ("first-time session sees the console", [(W + "app.js", "if (session.setup_required) needsPassword(session);\n    else await enter(session);", "await enter(session);")]),
-    ("password write without CSRF", [(W + "lib/api.js", "(path === '/session' || path === '/login'))) init.headers.set", "(path === '/session' || path === '/login' || path === '/password'))) init.headers.set")]),
+    ("password write without CSRF", [(W + "lib/api.js", "!(method === 'POST' && (path === '/session' || path === '/login'))) init.headers.set", "!(path === '/session' || path === '/login' || path === '/password')) init.headers.set")]),
     ("a pending configuration looks applied", [(W + "lib/copy.js", "pending: ['等待设备确认', 'warn']", "pending: ['设备已应用', 'ok']")]),
     ("a stale session is not noticed", [(W + "lib/api.js", "&& error.code === 'UNAUTHORIZED') onUnauthorized()", "&& false) onUnauthorized()")]),
     ("the password tab is never the default", [(W + "app.js", "pickTab(passwordSet ? 'password' : 'token');", "pickTab('token');")]),
@@ -32,7 +32,10 @@ MUTATIONS = [
 
 def run(root, out):
     env = {**os.environ, "PYTHONPATH": str(root / "agent/src"), "E2E_OUT": str(out), "PYTHONDONTWRITEBYTECODE": "1"}
-    return subprocess.run(["node", str(ROOT / "scripts/e2e/console.e2e.mjs")], env=env, cwd=ROOT, capture_output=True, text=True, timeout=600).returncode
+    try:
+        return subprocess.run(["node", str(ROOT / "scripts/e2e/console.e2e.mjs")], env=env, cwd=ROOT, capture_output=True, text=True, timeout=420).returncode
+    except subprocess.TimeoutExpired:
+        return 124   # the run hung: that is not a verdict, the caller reports it as such
 
 
 def main():
@@ -63,8 +66,8 @@ def main():
             bad += 1
         else:
             code = run(tmp, out)
-            print(("SURVIVED " if code == 0 else "caught   ") + name, flush=True)
-            bad += code == 0
+            print(("SURVIVED " if code == 0 else "TIMEOUT  " if code == 124 else "caught   ") + name, flush=True)
+            bad += code in (0, 124)
         for rel, text in saved.items():
             (tmp / rel).write_text(text, encoding="utf-8")
     shutil.rmtree(tmp, ignore_errors=True)
