@@ -178,14 +178,7 @@ void build_home(lv_obj_t *body, const Frame &f) {
     single_line(w.notice, lh(look.caption));
     const auto actions = make_actions(look.lang, f.s);
     const int top = 256, h = 80;
-    if (actions.empty()) {
-        auto *b = button(body, on_page, data(static_cast<int>(Page::Connect)), kContentW, h);
-        lv_obj_set_pos(b, 0, top);
-        auto *t = label_at(b, T(f.s.agent_ready ? Str::NoActions : Str::SetupPairing), 20, 8, kContentW - 40, look.body, P().ink);
-        single_line(t, lh(look.body));
-        auto *s = label_at(b, T(f.s.agent_ready ? Str::NoActionsHint : Str::SetupHint), 20, 8 + lh(look.body), kContentW - 40, look.caption, P().muted);
-        single_line(s, lh(look.caption));
-    }
+    // With no actions the home page draws nothing in their place: the ring and the header icons already say what is missing.
     for (size_t i = 0; i < std::min<size_t>(2, actions.size()); ++i) {
         auto *b = action_card(body, i, 210, h, actions[i]);
         lv_obj_set_pos(b, static_cast<int>(i) * 222, top);
@@ -254,12 +247,9 @@ void refresh_clock(const Frame &f) {
 void build_actions(lv_obj_t *body, const Frame &f) {
     heading(body, T(Str::NavActions), P().accent);
     const auto actions = make_actions(look.lang, f.s);
-    if (actions.empty()) {
-        auto *b = button(body, on_page, data(static_cast<int>(Page::Connect)), kContentW, 88);
-        auto *t = label_at(b, T(f.s.agent_ready ? Str::NoActions : Str::SetupPairing), 20, 8, kContentW - 40, look.body, P().ink);
-        single_line(t, lh(look.body));
-        auto *s = label_at(b, T(f.s.agent_ready ? Str::NoActionsHint : Str::SetupHint), 20, 8 + lh(look.body), kContentW - 40, look.caption, P().muted);
-        lv_obj_set_height(s, lh(look.caption) * 2);
+    if (actions.empty()) {   // a line of text, not a card: there is nothing to tap here
+        caption(body, T(Str::NoActions), P().ink);
+        caption(body, T(Str::NoActionsHint), P().muted);
         return;
     }
     for (size_t i = 0; i < actions.size(); ++i) {

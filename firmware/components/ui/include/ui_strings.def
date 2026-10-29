@@ -33,8 +33,6 @@ S(Unknown, "未知", "Unknown")
 // ---- actions, computer ----
 S(NoActions, "尚无可用动作", "No actions yet")
 S(NoActionsHint, "在 Agent 绑定显示器后，动作会显示在这里。", "Actions appear here once the Agent has a display bound.")
-S(SetupPairing, "设置网络与配对", "Set up network and pairing")
-S(SetupHint, "首次设置请使用电脑端配置工具。", "Use the computer tool for first setup.")
 S(ActionOffline, "Agent 未连接", "Agent offline")
 S(MetricsWaiting, "尚未采样 · 等待电脑连接", "Not sampled yet - waiting for the PC")
 S(MetricsExpired, "指标已过期 · 等待刷新", "Metrics expired - waiting")

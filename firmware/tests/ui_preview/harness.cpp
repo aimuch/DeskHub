@@ -30,6 +30,10 @@
 //  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
 //      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
 //  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
+//  A23 No "set up network and pairing" card: with no actions, the home page draws nothing in their place and the Actions
+//      page says there are none in one line of text. The header icons and the Connect page already say what is missing.
+//  A22 While the pairing page is shown the screen stays awake: the person has to read the code and the hotspot password,
+//      and the window is five minutes, as long as the screen would be off. Nothing else keeps it awake.
 //  A21 The digits sit in the middle of the battery icon, measured on the pixels that are drawn (a text box that is
 //      centred is not enough: the line of a font has room under the digits).
 //  A20 No "experimental" word anywhere on the power pages and in the confirm dialog.
@@ -1059,6 +1063,30 @@ static void case_battery_digits() {   // A21
              "battery digits for level " << c.soc << " are off centre: ink [" << min_x << "," << min_y << "," << max_x << "," << max_y << "] in body [" << x1 << "," << y1 << "," << x2 << "," << y2 << "] dx " << dx << " dy " << dy);
     }
 }
+static void case_pairing_keeps_awake() {   // A22
+    fresh();
+    dh::PairingInfo info;
+    info.code = "123456"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "abcdefghjkmn"; info.remaining_s = 300; info.total_s = 300;
+    dh::ui_pairing_show(info, [] {});
+    step(); step();
+    for (int minute = 0; minute < 6; ++minute) step(60000);   // no touch for six minutes: it would dim after 2 and be off after 5
+    EXPECT(mock_brightness == mock_config.brightness);
+    dh::ui_pairing_hide(); step();
+    EXPECT(mock_brightness == mock_config.brightness);        // the idle time starts over when the page goes
+    step(61000); step(60000);                                  // and then the usual rules apply again
+    EXPECT(mock_brightness < mock_config.brightness);
+}
+static void case_no_setup_card() {   // A23
+    for (const bool agent : {true, false}) {
+        fresh();
+        mock_snapshot.action_count = 0; mock_snapshot.agent_ready = agent; step(); step();
+        EXPECT(!has("设置网络与配对") && !has("首次设置") && !has("尚无可用动作"));   // the home page: nothing in the place of the cards
+        goto_view(Page::Actions); step();
+        EXPECT(!has("设置网络与配对") && !has("首次设置"));
+        EXPECT(has("尚无可用动作") && has("在 Agent 绑定显示器后，动作会显示在这里。"));
+        check_layout("no-actions"); check_targets("no-actions");
+    }
+}
 static void case_screenshots() {
     if (out_dir.empty()) return;
     for (const char *theme : {"mint", "ocean", "amber"}) {
@@ -1107,7 +1135,7 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

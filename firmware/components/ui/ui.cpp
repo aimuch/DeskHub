@@ -137,6 +137,11 @@ void update() {
     time_t wall = time(nullptr);
     struct tm t{};
     localtime_r(&wall, &t);
+    {   // The pairing page is read, not touched: the code and the hotspot password must not vanish with the screen.
+        // Night limits and power protection are policy rules of their own and still apply.
+        std::lock_guard<std::mutex> lock(pairing_mutex);
+        if (pairing_on) policy.last_activity_ms = now;
+    }
     policy.update(c, now, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min));
     bool visible = page == Page::Computer && policy.mode == DisplayMode::Active;
     if (s.metrics_visible != visible) mutate([](Snapshot &v, void *p) { v.metrics_visible = *static_cast<bool *>(p); }, &visible);
