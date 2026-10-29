@@ -1,49 +1,294 @@
 {
   "v": 3,
-  "createdOnFiles": { "v": 1, "at": "2026-10-28T08:20:00Z" },
-  "title": "DeskHub 新设计",
-  "launch": { "view": "canvas" },
-  "pages": [],
+  "attachments": {},
   "boards": {
-    "Main.dc.html": { "x": 0, "y": 0, "w": 1280, "h": 760, "title": "设计语言" },
-    "Arch-Modules.dc.html": { "x": 1360, "y": 0, "w": 1280, "h": 760, "title": "架构 · 可定制模块" },
-    "Dev-Home.dc.html": { "x": 0, "y": 1200, "w": 480, "h": 480, "title": "设备 · 总览" },
-    "Dev-Actions.dc.html": { "x": 560, "y": 1200, "w": 480, "h": 480, "title": "设备 · 动作" },
-    "Dev-Computer.dc.html": { "x": 1120, "y": 1200, "w": 480, "h": 480, "title": "设备 · 电脑" },
-    "Dev-Settings.dc.html": { "x": 1680, "y": 1200, "w": 480, "h": 480, "title": "设备 · 设置" },
-    "Dev-Power.dc.html": { "x": 2240, "y": 1200, "w": 480, "h": 480, "title": "设备 · 电池与电源（电量）" },
-    "Dev-PowerReadings.dc.html": { "x": 2800, "y": 1200, "w": 480, "h": 480, "title": "设备 · 电池与电源（读数）" },
-    "Dev-Connect.dc.html": { "x": 3360, "y": 1200, "w": 480, "h": 480, "title": "设备 · 连接与配对" },
-    "Dev-Appearance.dc.html": { "x": 3920, "y": 1200, "w": 480, "h": 480, "title": "设备 · 外观" },
-    "Dev-Pairing.dc.html": { "x": 0, "y": 2040, "w": 480, "h": 480, "title": "状态 · 配网页（长按按键）" },
-    "Dev-Offline.dc.html": { "x": 560, "y": 2040, "w": 480, "h": 480, "title": "状态 · 离线与数据过期" },
-    "Dev-Protect.dc.html": { "x": 1120, "y": 2040, "w": 480, "h": 480, "title": "状态 · 充电保护（实验）" },
-    "Web-Overview.dc.html": { "x": 0, "y": 2880, "w": 1280, "h": 1040, "expand": "fill", "title": "管理台 · 概览" },
-    "Web-Devices.dc.html": { "x": 1360, "y": 2880, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 设备" },
-    "Web-Actions.dc.html": { "x": 2720, "y": 2880, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 动作与显示器" },
-    "Web-Commands.dc.html": { "x": 4080, "y": 2880, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 命令记录" },
-    "Web-Layout.dc.html": { "x": 0, "y": 4000, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 布局与显示" },
-    "Web-Power.dc.html": { "x": 1360, "y": 4000, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 电源" },
-    "Web-Firmware.dc.html": { "x": 2720, "y": 4000, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 固件" },
-    "Web-Access.dc.html": { "x": 4080, "y": 4000, "w": 1280, "h": 800, "expand": "fill", "title": "管理台 · 访问" },
-    "Web-Login.dc.html": { "x": 0, "y": 5080, "w": 1280, "h": 720, "expand": "fill", "title": "管理台 · 登录与信任证书" },
-    "Web-SetPassword.dc.html": { "x": 1360, "y": 5080, "w": 1280, "h": 720, "expand": "fill", "title": "管理台 · 首次设置密码" },
-    "Web-Appearance.dc.html": { "x": 2720, "y": 5080, "w": 1280, "h": 900, "expand": "fill", "title": "管理台 · 外观" }
+    "Arch-Modules.dc.html": {
+      "h": 760,
+      "title": "架构 · 可定制模块",
+      "w": 1280,
+      "x": 1360,
+      "y": 0
+    },
+    "Dev-Actions.dc.html": {
+      "h": 480,
+      "title": "设备 · 动作",
+      "w": 480,
+      "x": 560,
+      "y": 1200
+    },
+    "Dev-Appearance.dc.html": {
+      "h": 480,
+      "title": "设备 · 外观",
+      "w": 480,
+      "x": 3920,
+      "y": 1200
+    },
+    "Dev-Computer.dc.html": {
+      "h": 480,
+      "title": "设备 · 电脑",
+      "w": 480,
+      "x": 1120,
+      "y": 1200
+    },
+    "Dev-Connect.dc.html": {
+      "h": 480,
+      "title": "设备 · 连接与配对",
+      "w": 480,
+      "x": 3360,
+      "y": 1200
+    },
+    "Dev-Home.dc.html": {
+      "h": 480,
+      "title": "设备 · 总览",
+      "w": 480,
+      "x": 0,
+      "y": 1200
+    },
+    "Dev-Offline.dc.html": {
+      "h": 480,
+      "title": "状态 · 离线与数据过期",
+      "w": 480,
+      "x": 560,
+      "y": 2040
+    },
+    "Dev-Pairing.dc.html": {
+      "h": 480,
+      "title": "状态 · 配网页（长按按键）",
+      "w": 480,
+      "x": 0,
+      "y": 2040
+    },
+    "Dev-Power.dc.html": {
+      "h": 480,
+      "title": "设备 · 电池与电源（电量）",
+      "w": 480,
+      "x": 2240,
+      "y": 1200
+    },
+    "Dev-PowerReadings.dc.html": {
+      "h": 480,
+      "title": "设备 · 电池与电源（读数）",
+      "w": 480,
+      "x": 2800,
+      "y": 1200
+    },
+    "Dev-Protect.dc.html": {
+      "h": 480,
+      "title": "状态 · 充电保护",
+      "w": 480,
+      "x": 1120,
+      "y": 2040
+    },
+    "Dev-Settings.dc.html": {
+      "h": 480,
+      "title": "设备 · 设置",
+      "w": 480,
+      "x": 1680,
+      "y": 1200
+    },
+    "Main.dc.html": {
+      "h": 760,
+      "title": "设计语言",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Web-Access.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 访问",
+      "w": 1280,
+      "x": 4080,
+      "y": 4000
+    },
+    "Web-Actions.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 动作与显示器",
+      "w": 1280,
+      "x": 2720,
+      "y": 2880
+    },
+    "Web-Appearance.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "管理台 · 外观",
+      "w": 1280,
+      "x": 2720,
+      "y": 5080
+    },
+    "Web-Commands.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 命令记录",
+      "w": 1280,
+      "x": 4080,
+      "y": 2880
+    },
+    "Web-Devices.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 设备",
+      "w": 1280,
+      "x": 1360,
+      "y": 2880
+    },
+    "Web-Firmware.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 固件",
+      "w": 1280,
+      "x": 2720,
+      "y": 4000
+    },
+    "Web-Layout.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 布局与显示",
+      "w": 1280,
+      "x": 0,
+      "y": 4000
+    },
+    "Web-Login.dc.html": {
+      "expand": "fill",
+      "h": 720,
+      "title": "管理台 · 登录与信任证书",
+      "w": 1280,
+      "x": 0,
+      "y": 5080
+    },
+    "Web-Overview.dc.html": {
+      "expand": "fill",
+      "h": 1040,
+      "title": "管理台 · 概览",
+      "w": 1280,
+      "x": 0,
+      "y": 2880
+    },
+    "Web-Power.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "管理台 · 电源",
+      "w": 1280,
+      "x": 1360,
+      "y": 4000
+    },
+    "Web-SetPassword.dc.html": {
+      "expand": "fill",
+      "h": 720,
+      "title": "管理台 · 首次设置密码",
+      "w": 1280,
+      "x": 1360,
+      "y": 5080
+    },
+    "Dev-AppearanceMore.dc.html": {
+      "x": 4480,
+      "y": 1200,
+      "w": 480,
+      "h": 480,
+      "title": "设备 · 外观（下滑后）"
+    },
+    "Dev-Header.dc.html": {
+      "x": 1680,
+      "y": 2040,
+      "w": 1280,
+      "h": 720,
+      "title": "设备 · 顶栏图标（所有状态）"
+    },
+    "Dev-Rings.dc.html": {
+      "x": 3040,
+      "y": 2040,
+      "w": 1360,
+      "h": 620,
+      "title": "设备 · 圆环粗细（细、标准、粗）"
+    }
   },
-  "order": [
-    "Main.dc.html", "Arch-Modules.dc.html",
-    "Dev-Home.dc.html", "Dev-Actions.dc.html", "Dev-Computer.dc.html", "Dev-Settings.dc.html", "Dev-Power.dc.html", "Dev-PowerReadings.dc.html", "Dev-Connect.dc.html", "Dev-Appearance.dc.html",
-    "Dev-Pairing.dc.html", "Dev-Offline.dc.html", "Dev-Protect.dc.html",
-    "Web-Overview.dc.html", "Web-Devices.dc.html", "Web-Actions.dc.html", "Web-Commands.dc.html",
-    "Web-Layout.dc.html", "Web-Power.dc.html", "Web-Firmware.dc.html", "Web-Access.dc.html",
-    "Web-Login.dc.html", "Web-SetPassword.dc.html", "Web-Appearance.dc.html"
+  "createdOnFiles": {
+    "at": "2026-10-28T08:20:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "n_lang",
+    "n_dev",
+    "n_state",
+    "n_web",
+    "n_login"
   ],
   "notes": {
-    "n_lang": { "x": 0, "y": -240, "text": "DeskHub 新设计 · 设计语言与可定制模块", "kind": "title1", "maxW": 2640 },
-    "n_dev": { "x": 0, "y": 960, "text": "设备界面 · 主要页面（480×480）", "kind": "title1", "maxW": 4400 },
-    "n_state": { "x": 0, "y": 1800, "text": "设备状态页", "kind": "title1", "maxW": 1600 },
-    "n_web": { "x": 0, "y": 2640, "text": "网页管理台 · 9 个页面", "kind": "title1", "maxW": 5360 },
-    "n_login": { "x": 0, "y": 4840, "text": "登录、设置密码与外观", "kind": "title1", "maxW": 4000 }
+    "n_dev": {
+      "kind": "title1",
+      "maxW": 5000,
+      "text": "设备界面 · 主要页面（480×480）",
+      "w": 240,
+      "x": 0,
+      "y": 960
+    },
+    "n_lang": {
+      "kind": "title1",
+      "maxW": 2640,
+      "text": "DeskHub 新设计 · 设计语言与可定制模块",
+      "w": 240,
+      "x": 0,
+      "y": -240
+    },
+    "n_login": {
+      "kind": "title1",
+      "maxW": 4000,
+      "text": "登录、设置密码与外观",
+      "w": 240,
+      "x": 0,
+      "y": 4840
+    },
+    "n_state": {
+      "kind": "title1",
+      "maxW": 1600,
+      "text": "设备状态页",
+      "w": 240,
+      "x": 0,
+      "y": 1800
+    },
+    "n_web": {
+      "kind": "title1",
+      "maxW": 5360,
+      "text": "网页管理台 · 9 个页面",
+      "w": 240,
+      "x": 0,
+      "y": 2640
+    }
   },
-  "designSystems": []
+  "order": [
+    "Main.dc.html",
+    "Arch-Modules.dc.html",
+    "Dev-Home.dc.html",
+    "Dev-Actions.dc.html",
+    "Dev-Computer.dc.html",
+    "Dev-Settings.dc.html",
+    "Dev-Power.dc.html",
+    "Dev-PowerReadings.dc.html",
+    "Dev-Connect.dc.html",
+    "Dev-Appearance.dc.html",
+    "Dev-AppearanceMore.dc.html",
+    "Dev-Pairing.dc.html",
+    "Dev-Offline.dc.html",
+    "Dev-Protect.dc.html",
+    "Dev-Header.dc.html",
+    "Dev-Rings.dc.html",
+    "Web-Overview.dc.html",
+    "Web-Devices.dc.html",
+    "Web-Actions.dc.html",
+    "Web-Commands.dc.html",
+    "Web-Layout.dc.html",
+    "Web-Power.dc.html",
+    "Web-Firmware.dc.html",
+    "Web-Access.dc.html",
+    "Web-Login.dc.html",
+    "Web-SetPassword.dc.html",
+    "Web-Appearance.dc.html"
+  ],
+  "pages": [],
+  "title": "DeskHub 新设计"
 }

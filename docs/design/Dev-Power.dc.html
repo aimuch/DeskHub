@@ -16,20 +16,8 @@ body{margin:0}
 </helmet>
 <div style="{{vars}} position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2)); color: var(--ink); font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;">
 
-  <div style="position: absolute; left: 24px; top: 6px; width: 212px">
-    <div style="display: flex; align-items: center; gap: 8px; height: 28px"><span style="width: 10px; height: 10px; border-radius: 50%; background: var(--agent); box-shadow: 0 0 10px var(--agent)"></span><span style="font-size: 18px; color: var(--agent)">电脑在线</span></div>
-    <div style="display: flex; align-items: center; gap: 8px; height: 28px; margin-top: 4px">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="stroke: var(--wifi)"><path d="M2 9a15 15 0 0 1 20 0"></path><path d="M5.5 12.5a10 10 0 0 1 13 0"></path><path d="M9 16a5 5 0 0 1 6 0"></path><path d="M12 19.5h.01"></path></svg>
-      <span style="font-size: 17px; color: var(--muted)">Wi-Fi 已连接</span>
-    </div>
-  </div>
-  <div style="position: absolute; right: 24px; top: 6px; width: 212px; text-align: right">
-    <div style="display: flex; justify-content: flex-end; align-items: center; gap: 14px; height: 28px">
-      <span style="font-size: 18px; color: var(--agent)">电量 67%</span>
-      <svg width="34" height="18" viewBox="0 0 34 18" aria-hidden="true"><rect x="1" y="1" width="28" height="16" rx="4" fill="none" stroke-width="2" style="stroke: var(--agent)"></rect><rect x="4" y="4" width="17" height="10" rx="2" style="fill: var(--agent)"></rect><rect x="30" y="6" width="3" height="6" rx="1" style="fill: var(--agent)"></rect></svg>
-    </div>
-    <div style="height: 28px; margin-top: 4px; font-size: 17px; color: var(--muted)">充电中</div>
-  </div>
+  <div style="position: absolute; left: 38px; top: 14px; display: flex; align-items: center; gap: 14px"><svg width="26" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="Wi-Fi 已连接" style="flex: none; stroke: var(--wifi);"><path d="M2 9a15 15 0 0 1 20 0"></path><path d="M5.5 12.5a10 10 0 0 1 13 0"></path><path d="M9 16a5 5 0 0 1 6 0"></path><path d="M12 19.5h.01"></path></svg><svg width="26" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="电脑在线" style="flex: none; stroke: var(--agent)"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"></rect><path d="M8.5 20.5h7M12 16v4.5"></path></svg></div>
+  <div style="position: absolute; right: 36px; top: 14px; display: flex; align-items: center; gap: 8px"><span style="width: 22px; height: 24px; display: flex"><svg width="22" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="USB 供电" style="flex: none; stroke: var(--ink)"><path d="M12 18V4"></path><path d="M9.5 6.5 12 3.5l2.5 3"></path><path d="M12 14.5 7 12v-2.5"></path><circle cx="7" cy="8.2" r="1.3"></circle><path d="M12 12l5-2.5V8"></path><rect x="15.8" y="5.4" width="2.4" height="2.4" rx=".4"></rect><circle cx="12" cy="19.6" r="2"></circle></svg></span><span style="width: 14px; height: 22px; display: flex"><svg width="14" height="22" viewBox="0 0 14 22" role="img" aria-label="正在充电" style="flex: none"><path d="M8.6 1 1.4 12.6h5.2L5.6 21 12.6 9.2H7.4z" style="fill: var(--agent)"></path></svg></span><div role="img" aria-label="电量 67%" style="position: relative; width: 51px; height: 24px; flex: none"><div style="position: absolute; left: 0; top: 1px; width: 46px; height: 22px; box-sizing: border-box; border: 2px solid var(--agent); border-radius: 7px"></div><div style="position: absolute; left: 3px; top: 4px; width: 27px; height: 16px; border-radius: 4px; background: color-mix(in srgb, var(--agent) 40%, transparent)"></div><div style="position: absolute; left: 2px; top: 1px; width: 42px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; line-height: 1; color: var(--ink)">67</div><div style="position: absolute; left: 47px; top: 7.5px; width: 3px; height: 9px; border-radius: 1.5px; background: var(--agent)"></div></div></div>
 
   <div style="position: absolute; left: 24px; top: 62px; font-size: 26px; font-weight: 500; color: var(--power)">电池与电源</div>
 
@@ -53,8 +41,8 @@ body{margin:0}
       </div>
     </div>
     <div style="position: absolute; left: 24px; top: 360px; width: 432px; height: 40px; box-sizing: border-box; padding: 0 18px; border-radius: 20px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: space-between">
-      <span style="font-size: 16px">充电保护：关闭</span>
-      <span style="padding: 1px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--power); background: rgba(242,181,68,0.14); border: 1px solid rgba(242,181,68,0.5)">实验</span>
+      <span style="font-size: 16px">充电保护：未开启</span>
+      
     </div>
   </sc-if>
 
@@ -73,10 +61,10 @@ body{margin:0}
   <sc-if value="{{isProtect}}" hint-placeholder-val="{{ false }}">
     <div style="position: absolute; left: 24px; top: 164px; width: 432px; height: 190px; box-sizing: border-box; padding: 20px 22px; border-radius: 24px; border: 1px solid var(--edge); background: var(--card)">
       <div style="display: flex; align-items: center; justify-content: space-between">
-        <div style="display: flex; align-items: center; gap: 10px"><span style="font-size: 22px; font-weight: 500">充电保护</span><span style="padding: 1px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--power); background: rgba(242,181,68,0.14); border: 1px solid rgba(242,181,68,0.5)">实验</span></div>
-        <span style="font-size: 18px; color: var(--muted)">已关闭</span>
+        <div style="display: flex; align-items: center; gap: 10px"><span style="font-size: 22px; font-weight: 500">充电保护</span></div>
+        <span style="font-size: 18px; color: var(--muted)">未开启</span>
       </div>
-      <div style="margin-top: 14px; font-size: 17px; line-height: 1.7; color: var(--muted)">上限 80%，降到 75% 再充<br>读不到电量时，恢复正常充电</div>
+      <div style="margin-top: 14px; font-size: 17px; line-height: 1.7; color: var(--muted)">达到上限后停止充电，低于回充线再恢复。<br>读不到电量或温度过高时，恢复正常充电。</div>
       <div style="margin-top: 16px; height: 52px; box-sizing: border-box; border-radius: 26px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent)">开启…</div>
     </div>
   </sc-if>
