@@ -1,0 +1,65 @@
+{
+  "version": "0.3.6",
+  "built_from": "提交 2c493a7（升版）；构建时 firmware/ 目录与该提交一致",
+  "build_dir": "firmware/build-0.3.6（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.4": [
+    "电池里的数字垂直居中（按字形的墨迹居中，不是按文字框；像素测试 A21）",
+    "首页圆环加说明：点圆环（时钟除外）打开说明页，四行写明每一段的颜色、名字、状态和意思，暗的写原因；圆环下面那一行：某段暗了写它的名字（前面一个那一段颜色的点），都正常时写“点圆环看说明”；设计稿画板 Dev-RingInfo；测试 T21、A24",
+    "首页和“动作”页没有动作时，不再画“设置网络与配对”卡片（预览测试 A23）",
+    "设备端热点配网接线：热点（WPA2、一台手机）、配网页（esp_http_server，只回应热点网段）、只信配对包里 CA 的 TLS 兑换、保存走 USB 配对同一条路径、GPIO0 长按 3 秒；未配对的设备开机 8 秒后自动开一次",
+    "配网页显示期间屏幕不熄灭（预览测试 A22）",
+    "USB 状态多一个 pairing 对象（open、phase、why 三个词），tools/provision.py --status 只打印检查过的这个对象",
+    "core 加了 network_hold 和 network_wifi_started，配对期间 Wi-Fi 任务不抢无线电"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4424480,
+    "sha256": "5b5ce6fe17b5bdaabdfeafed791159157b0cf6f47add418f01a23142bdf2230e",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 30
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.6-esp32s3.zip",
+      "size_bytes": 2731790,
+      "sha256": "e20aac3e6963e363c10ce0831d6d7394f9c8618881a1a82e810bc175c056052e",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.6",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要（签名只用于无线更新 OTA；USB 刷机不需要，OTA 也没有真机验证）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告（交叉编译抓到过一处原生预览编译不出来的类型错误，已修），ESP-IDF 的 project_description.json 里 project_version 是 0.3.6",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.6，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "包内 README.txt 里的配网文字已改成现状",
+    "主机测试 12 组、Agent 384 条、tools 101 条、协议检查全部通过；界面预览 22 组通过（含 A21 电池数字居中、A22 配网时屏幕不熄灭、A23 没有设置卡片、A24 圆环说明）",
+    "安全基线文件与归档逐字节相同的检查（docs/development.md 里的 git diff 命令）输出为空",
+    "变异检查：圆环说明 26 处、设备端配对接线的纯逻辑 46 处、管理员密码 64 处、证书续期 16 处，全部报红；网页管理台前端 13 处（一整轮里 12 处报红，修了测试以后“吊销不需要确认”那一处单独重跑也报红；另有 1 处是等价变异，已删）",
+    "网页管理台：真实的 Agent 进程加真实的 Chrome，63 项检查通过（docs/evidence/console-e2e/）"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到任何设备，也没有连接设备。刷机等用户说“刷”，或用户自己刷",
+    "设备端热点配对没有在真机上验证任何一步：按键引脚用的是 GPIO0（BOOT），没有核对原理图；热点与 Wi-Fi 同信道时手机会不会断开、堆内存够不够、手机能不能打开 http://192.168.4.1/、失败后 Wi-Fi 能不能恢复，都要看真机。首次配对请先用 USB",
+    "圆环说明页和它下面那一行没有在真机上看过：点圆环的触摸区是圆形（预览里按坐标测过），真机上的手感和圆点的位置要看",
+    "屏幕上没有配对结果行；结果读 USB 状态的 pairing 对象",
+    "“连接”页和设置里的提示还写“首次设置需要 USB”，等热点配对验证以后再改（改界面文字要先走设计稿）",
+    "声音没做：要先确认这块板有没有接扬声器",
+    "网页上不能开关充电保护：设备上报里没有这一项",
+    "充电保护、新顶栏、显示切换、OTA 仍然没有在真机上验证",
+    "没有生成签名 .dhfw，没有做 OTA 与回滚",
+    "网页管理台没有接真实设备和显示器，只用了 Chrome"
+  ],
+  "hardware_verified": false
+}

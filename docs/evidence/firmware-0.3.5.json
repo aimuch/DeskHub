@@ -1,5 +1,6 @@
 {
   "version": "0.3.5",
+  "superseded_by": "0.3.6：0.3.5 从未刷到任何设备；之后又加了圆环说明页，并修了一处只有交叉编译才发现的类型错误，所以重新打了包（见 firmware-0.3.6.json）",
   "built_from": "提交 5d2a6e8（升版）；构建时 firmware/ 目录与该提交一致",
   "build_dir": "firmware/build-0.3.5（独立目录，ESP-IDF v6.0.2）",
   "compiler_warnings": 0,

@@ -60,6 +60,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `agent/src/deskhub_agent/`（`management.py`、`management_models.py`、`cli.py`）、`agent/tests/`（`conftest.py`、`test_management.py`、`test_pairing_grants.py`、`test_power_report.py`）、`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`） | 管理员密码登录（R8）：设置会话、密码会话、脚本会话；`GET /admin/auth`、`POST /admin/login`、`PUT /admin/password`；`deskhubctl admin-password-reset`。现有测试改成真实的起步方式（口令、设置密码、再用密码）。新增 `admin_auth.py` 和 `agent/tests/test_admin_password.py` |
 | `firmware/components/core/`（`core.cpp`、`core.hpp`） | `network_hold`、`network_wifi_started`：热点配对期间 Wi-Fi 任务不抢无线电 |
 | `firmware/tests/CMakeLists.txt` | 新增测试目标 `pairing_glue_test`（`hotspot_pairing_glue`） |
+| `tools/create_tls.py`、`tools/tests/test_create_tls_reuse.py` | `--ca-dir`：沿用已有的 CA 签发新的服务器证书（服务器证书只有 397 天，到期后设备会全部拒绝 Agent；原来每次生成新 CA，只能重新配对）。旧目录只读；CA 不到 30 天过期、已过期、不是 CA、私钥不配、私钥可被别人读、符号链接、加密的私钥等都拒绝且什么都不写 |
 | `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`）、`tools/provision.py` | 启动 `pairing_device`；USB 状态加 `pairing` 对象（`open`、`phase`、`why`）；`--status` 只打印检查过的 `pairing` 对象；新增 `tools/tests/test_provision_pairing.py` |
 | `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
@@ -89,7 +90,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 设备端的接线做完了（2026-10-29）：热点、配网页、TLS 兑换、保存路径、按键，`firmware/components/pairing_device/`；能在主机上测的部分在 `pairing_glue`（测试 `pairing_glue_test`，变异检查 46 处全部报红）。K1 复审在 [配对接口设计](pairing-design.md) 第 13 节。固件完整构建通过。**没有在真机上验证任何一步**：按键引脚（GPIO0）没有核对原理图，热点与 Wi-Fi 同信道、堆内存、手机能否打开配网页都要看真机。USB 状态的 `pairing` 对象（`tools/provision.py --status`）用来读它做到哪一步。
 - 有：管理员密码登录（R8，`admin_auth.py`：scrypt、锁定、命令行重置，40 条测试，64 处变异全部报红）和网页管理台（`agent/src/deskhub_agent/web/`，九个页面）。管理台用真实的 Agent 加真实的 Chrome 走过整套流程（`scripts/e2e/console.e2e.mjs`，62 项通过，证据在 `docs/evidence/console-e2e/`）；没有接真实设备和显示器。
 - 没有：声音（N2 要先确认扬声器是否接在板上）；网页上开关充电保护（设备的上报里没有这一项）。
-- 固件版本 0.3.5（2026-10-29）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.4 多：电池数字居中、设备端热点配网接线（没有真机验证）、配网时屏幕不熄灭、首页没有动作时不画设置卡片、USB 状态的 pairing 对象。**还没有刷到任何设备**。不生成签名 OTA 包。记录在 [docs/evidence/firmware-0.3.5.json](evidence/firmware-0.3.5.json)。
+- 固件版本 0.3.6（2026-10-29）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.4 多：电池数字居中、首页圆环加说明（点圆环看四段的意思）、设备端热点配网接线（没有真机验证）、配网时屏幕不熄灭、首页没有动作时不画设置卡片、USB 状态的 pairing 对象。**还没有刷到任何设备**。不生成签名 OTA 包。记录在 [docs/evidence/firmware-0.3.6.json](evidence/firmware-0.3.6.json)；0.3.5 从未刷到设备，已被它取代（[firmware-0.3.5.json](evidence/firmware-0.3.5.json)）。
 - 上一个版本 0.3.4（图标顶栏、电池里写百分比、圆环粗细可调、没有“实验功能”字样）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**。不生成签名 OTA 包（你决定不需要）。哈希和做过的检查记在 [docs/evidence/firmware-0.3.4.json](evidence/firmware-0.3.4.json)。上一个版本 0.3.3 的记录在 [docs/evidence/firmware-0.3.3.json](evidence/firmware-0.3.3.json)。
 - 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](evidence/firmware-0.3.1.json)。
 - 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
@@ -107,7 +108,7 @@ python3 firmware/tests/ui_preview/render.py
 
 最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
 
-变异检查（故意改坏实现，看测试会不会报红）：`scripts/mutation/` 下有配对（Agent 端、设备端、设备端接线的纯逻辑）、充电保护（策略、界面）、屏幕圆角、顶栏图标、管理员密码和网页管理台。用法和输出的含义见 [scripts/mutation/README.md](../scripts/mutation/README.md)。
+变异检查（故意改坏实现，看测试会不会报红）：`scripts/mutation/` 下有配对（Agent 端、设备端、设备端接线的纯逻辑）、充电保护（策略、界面）、屏幕圆角、顶栏图标、圆环说明、管理员密码、证书续期和网页管理台。用法和输出的含义见 [scripts/mutation/README.md](../scripts/mutation/README.md)。
 
 完整构建固件（独立目录，不碰别的构建）：
 
