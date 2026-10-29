@@ -236,7 +236,7 @@ void refresh_home(const Frame &f) {
             const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
             lv_point_t size{};
             lv_text_get_size(&size, n.c_str(), look.caption, 0, 0, kContentW, LV_TEXT_FLAG_NONE);
-            lv_obj_set_pos(w.notice_dot, std::max(0, (kContentW - size.x) / 2 - 18), 226 + (lh(look.caption) - 10) / 2);
+            lv_obj_set_pos(w.notice_dot, std::max<int>(0, static_cast<int>((kContentW - size.x) / 2 - 18)), 226 + (lh(look.caption) - 10) / 2);
             lv_obj_set_style_bg_color(w.notice_dot, hex(colors[info.first_problem]), 0);
         }
         if (lv_obj_has_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN) == dot) { if (dot) lv_obj_remove_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); }
