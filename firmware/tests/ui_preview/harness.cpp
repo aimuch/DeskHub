@@ -30,6 +30,8 @@
 //  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
 //      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
 //  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
+//  A21 The digits sit in the middle of the battery icon, measured on the pixels that are drawn (a text box that is
+//      centred is not enough: the line of a font has room under the digits).
 //  A20 No "experimental" word anywhere on the power pages and in the confirm dialog.
 //  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
@@ -1032,6 +1034,31 @@ static void case_no_experimental_word() {   // A20
     goto_view(Page::Power, PowerTab::Protect);
     EXPECT(!contains("xperimental") && !contains("实验"));
 }
+static void case_battery_digits() {   // A21
+    fresh();
+    struct Case { int soc; const char *battery; };
+    const Case cases[] = {{5, "present"}, {67, "present"}, {88, "present"}, {100, "present"}, {-1, "present"}};   // 1 digit, 2, 2, 3, and the question mark
+    for (const Case &c : cases) {
+        mock_power.soc_percent = c.soc; mock_power.battery = c.battery;
+        step(); step();
+        for (int i = 0; i < 3; ++i) { lv_obj_invalidate(lv_screen_active()); lv_refr_now(display); }
+        int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        EXPECT(detail::header_battery_body(&x1, &y1, &x2, &y2));
+        int min_x = 9999, max_x = -1, min_y = 9999, max_y = -1;
+        for (int y = y1 + 3; y <= y2 - 3; ++y)
+            for (int x = x1 + 3; x <= x2 - 3; ++x) {
+                const size_t at = (static_cast<size_t>(y) * 480 + static_cast<size_t>(x)) * 3;
+                if ((framebuffer[at] + framebuffer[at + 1] + framebuffer[at + 2]) / 3 > 150) {   // ink is bright; the fill and the background are not
+                    min_x = std::min(min_x, x); max_x = std::max(max_x, x);
+                    min_y = std::min(min_y, y); max_y = std::max(max_y, y);
+                }
+            }
+        EXPECT(max_y >= 0);
+        const double dy = (min_y + max_y) / 2.0 - (y1 + y2) / 2.0, dx = (min_x + max_x) / 2.0 - (x1 + x2) / 2.0;
+        NOTE(std::fabs(dy) <= 1.0 && std::fabs(dx) <= 1.5,
+             "battery digits for level " << c.soc << " are off centre: ink [" << min_x << "," << min_y << "," << max_x << "," << max_y << "] in body [" << x1 << "," << y1 << "," << x2 << "," << y2 << "] dx " << dx << " dy " << dy);
+    }
+}
 static void case_screenshots() {
     if (out_dir.empty()) return;
     for (const char *theme : {"mint", "ocean", "amber"}) {
@@ -1079,7 +1106,8 @@ int main(int argc, char **argv) {
         {"actions", case_actions}, {"appearance", case_appearance}, {"reset_restart", case_reset_restart},
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
-        {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word}, {"screenshots", case_screenshots}};
+        {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
+        {"battery_digits", case_battery_digits}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

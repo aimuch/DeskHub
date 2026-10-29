@@ -57,6 +57,8 @@ PAGES = [
     ("the gauge ignores the tier", PG, "gauge(c, 112, ring_px(look.appearance.ring).gauge, P().power)", "gauge(c, 112, 11, P().power)"),
     ("the percent button is the wrong way round", PG, "a.show_percent = data_of(e) == 0;", "a.show_percent = data_of(e) != 0;"),
     ("the ring button always picks standard", PG, "a.ring = static_cast<RingTier>(data_of(e));", "(void)e; a.ring = RingTier::Standard;"),
+    ("the digits are centred as a text box, not as ink", PG, "digits_y = 12 - (btr_ui_16.line_height - btr_ui_16.base_line - zero.box_h - zero.ofs_y) - (zero.box_h + 1) / 2;", "digits_y = 1 + (22 - lh(&btr_ui_16)) / 2;"),
+    ("the digits are a pixel too low", PG, "- (zero.box_h + 1) / 2;   // 12", "- (zero.box_h + 1) / 2 + 3;   // 12"),
     ("the percent section shows the wrong choice", PG, "a.show_percent ? 0 : 1, on_percent", "a.show_percent ? 1 : 0, on_percent"),
     ("the ring section shows the wrong choice", PG, "static_cast<int>(a.ring), on_ring", "static_cast<int>(RingTier::Standard), on_ring"),
 ]

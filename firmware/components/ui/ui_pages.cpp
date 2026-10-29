@@ -661,7 +661,12 @@ void build_shell(lv_obj_t *screen) {
     lv_obj_add_flag(sh.fill, LV_OBJ_FLAG_HIDDEN);
     sh.tip = panel(sh.box, 3, 9, p.muted, p.muted, 1);
     lv_obj_set_pos(sh.tip, 47, 7);
-    sh.digits = label_at(sh.box, "", 2, 1 + (22 - lh(&btr_ui_16)) / 2, 42, &btr_ui_16, p.ink);   // the digits are drawn over the fill
+    // Centre the ink, not the line: the line of the font has room under the digits, so a centred box puts them too high.
+    int digits_y = 1 + (22 - lh(&btr_ui_16)) / 2;
+    lv_font_glyph_dsc_t zero;
+    if (lv_font_get_glyph_dsc(&btr_ui_16, &zero, '0', 0))
+        digits_y = 12 - (btr_ui_16.line_height - btr_ui_16.base_line - zero.box_h - zero.ofs_y) - (zero.box_h + 1) / 2;   // 12: the middle of the body
+    sh.digits = label_at(sh.box, "", 2, digits_y, 42, &btr_ui_16, p.ink);   // the digits are drawn over the fill
     lv_obj_set_style_text_align(sh.digits, LV_TEXT_ALIGN_CENTER, 0);
     single_line(sh.digits, lh(&btr_ui_16));
     slash(sh.box, 0, 0, kSlashBattery, sh.bat_cut);
@@ -917,6 +922,13 @@ lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int), void (*
 // ---------------------------------------------------------------- test hooks
 int header_fill_width() { return sh.fill && !lv_obj_has_flag(sh.fill, LV_OBJ_FLAG_HIDDEN) ? lv_obj_get_width(sh.fill) : 0; }
 static bool visible(lv_obj_t *o) { return o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN); }
+bool header_battery_body(int *x1, int *y1, int *x2, int *y2) {
+    if (!sh.body) return false;
+    lv_area_t a;
+    lv_obj_get_coords(sh.body, &a);
+    *x1 = a.x1; *y1 = a.y1; *x2 = a.x2; *y2 = a.y2;
+    return true;
+}
 std::string header_battery_text() { return visible(sh.digits) ? lv_label_get_text(sh.digits) : ""; }
 bool header_bolt_shown() { return visible(sh.bolt); }
 bool header_usb_shown() { return visible(sh.usb); }

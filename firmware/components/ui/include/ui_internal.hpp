@@ -125,6 +125,7 @@ std::string header_battery_text();  // the digits inside the battery icon of the
 bool header_bolt_shown();
 bool header_usb_shown();
 bool header_slashed(int which);     // 0 Wi-Fi, 1 computer, 2 battery: the slash is drawn
+bool header_battery_body(int *x1, int *y1, int *x2, int *y2);   // where the battery outline is on the screen
 int header_icon_opa(int which);     // 0 Wi-Fi: how strong the icon is drawn now, 255 steady, low in the dim half of a blink
 int home_ring_width();              // px thickness of the status ring on the Home page, 0 without one
 int power_gauge_width();            // px thickness of the gauge on the Level tab, 0 without one
