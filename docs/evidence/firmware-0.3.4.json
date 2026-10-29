@@ -1,0 +1,56 @@
+{
+  "version": "0.3.4",
+  "built_from": "提交 57b98eb（升版）；构建时 firmware/ 目录与该提交一致",
+  "build_dir": "firmware/build-0.3.4（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.3": [
+    "顶栏全部用图标：Wi-Fi、电脑（没配置或没连上加斜杠；Wi-Fi 正在连接时闪烁）、USB、闪电（充电中）、电池",
+    "电池图标里写电量（不带 %），“设置 → 外观 → 电池百分比”可以隐藏；未知是问号、无电池是斜杠、故障是感叹号",
+    "外观多了“圆环粗细”：细、标准、粗（总览的状态环 12、20、28 px，电量页的仪表 7、11、15 px）",
+    "屏幕上不再有“实验功能”字样（规则 R1 已按你的决定改）",
+    "设计稿在设计画布里做，源文件在 docs/design/（Dev-Header、Dev-Rings、Dev-AppearanceMore）"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4352848,
+    "sha256": "57e88ea490a8b0791c0dee01c2f46cafb324b80c3a0c3172cfd3bb2e6cdcd4a5",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 31
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.4-esp32s3.zip",
+      "size_bytes": 2684209,
+      "sha256": "b1f9b9ded38cd041218229670b27fe0d2c7b19ef9f051bd146184a8f794f74e9",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.4",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要（签名只用于无线更新 OTA；USB 刷机不需要，OTA 也没有真机验证）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.4",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.4，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "包内 README.txt 已改成新的顶栏、电量和外观说明",
+    "主机测试 11 组、Agent 339 条、tools 87 条、协议检查全部通过；界面预览 18 组通过（含 A17 四角、A18 顶栏图标、A19 外观选项、A20 没有“实验”二字）",
+    "变异检查：顶栏、外观和圆环 42 处（模型 24、页面 18）、充电界面 40 处、圆角 5 处，全部报红；上一轮的充电策略 85 处、配对 70 处加 35 处没有改动相关代码"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到任何设备，也没有连接设备。刷机等用户说“刷”，或用户自己刷",
+    "没有在真机上看过新顶栏：图标的大小、斜杠、闪烁的节奏、电池里数字的可读性、四角是否还被切（圆角半径是猜的 80 像素）",
+    "图标里的 USB 和闪电是 LVGL 自带的符号字体，和设计稿里画的略有差别；Wi-Fi 的斜杠、电脑图标、电池是用线条和面板画的",
+    "充电保护仍然没有在真机上验证；电量计的估算没对照过这颗电芯",
+    "没有生成签名 .dhfw，没有做 OTA 与回滚"
+  ],
+  "hardware_verified": false
+}
