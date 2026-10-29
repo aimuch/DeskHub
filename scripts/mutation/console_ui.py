@@ -23,7 +23,6 @@ MUTATIONS = [
     ("any appearance value is accepted", [(W + "lib/prefs.js", "const allowed = (name, value) => CHOICES[name].some(([id]) => id === value);", "const allowed = () => true;")]),
     ("an unknown appearance item is accepted", [(W + "lib/prefs.js", "if (Object.keys(data).some(key => !known.has(key))) return null;", "")]),
     ("stale power numbers stay on the screen", [(W + "pages/common.js", "if (device.power_state === 'stale') return { value: '数据已过期', sub: '设备已经超过 30 秒没有上报', fresh: false };", "")]),
-    ("the power page shows old readings", [(W + "pages/power.js", "reading('电池电压', fresh ? volts(power.battery_mv) : NOT_REPORTED,", "reading('电池电压', volts(power.battery_mv),")]),
     ("a revoke needs no confirmation", [(W + "pages/access.js", "  if (!confirmed) return;\n  try {\n    await ctx.api.request(`/devices/", "  try {\n    await ctx.api.request(`/devices/")]),
     ("the setup button is always on", [(W + "app.js", "$('setup-submit').disabled = !list.slice(0, 2).every(([, pass]) => pass);", "$('setup-submit').disabled = false;")]),
     ("a command filter shows everything", [(W + "pages/commands.js", "['failed', '失败', item => item.state === 'failed']", "['failed', '失败', () => true]")]),

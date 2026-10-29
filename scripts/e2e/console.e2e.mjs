@@ -298,11 +298,21 @@ try {
     await browser.waitFor('document.querySelector("#grant-list")?.innerText.includes("已取消")', '取消授权');
     check('无线配对：取消授权', true);
     await browser.click('.btn.danger', 1);   // 第二行是 desk-02；desk-01 要留着在线
+    await browser.waitFor('document.getElementById("confirm-dialog").open', '吊销确认框（取消）');
+    await browser.click('#confirm-dialog button[value="cancel"]');
+    await sleep(500);
+    // 页脚的提示里本来就有“已吊销”三个字，所以只看 desk-02 那一行。
+    const rowOf = id => browser.evaluate(`[...document.querySelectorAll('#content tbody tr')].find(tr => tr.innerText.includes(${JSON.stringify(id)}))?.innerText ?? ''`);
+    const before = await rowOf('desk-02');
+    check('在确认框里点“取消”：desk-02 没有被吊销', before.includes('desk-02') && !before.includes('已吊销'), before);
+    await browser.click('.btn.danger', 1);
     await browser.waitFor('document.getElementById("confirm-dialog").open', '吊销确认框');
     check('吊销前有确认框，写明是哪一台', (await browser.textOf('#confirm-title') || '').includes('desk-02'));
     await browser.click('#confirm-submit');
-    await waitText('已吊销', 'desk-02 被吊销');
-    check('吊销 desk-02 之后，它显示“已吊销”', true);
+    await browser.waitFor(`[...document.querySelectorAll('#content tbody tr')].find(tr => tr.innerText.includes('desk-02'))?.innerText.includes('已吊销')`, 'desk-02 被吊销');
+    const after = await rowOf('desk-02');
+    const first = await rowOf('desk-01');
+    check('吊销 desk-02 之后，它那一行显示“已吊销”，desk-01 没有', after.includes('已吊销') && !first.includes('已吊销'), after);
   });
 
   await step('修改密码', async () => {

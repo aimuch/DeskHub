@@ -1,6 +1,6 @@
 {
   "kind": "console-e2e",
-  "finished_at": "2026-10-29T09:11:36.049Z",
+  "finished_at": "2026-10-29T09:42:42.007Z",
   "chrome": "Chrome/156.0.8078.74",
   "node": "v26.13.0",
   "stand_ins": [
@@ -13,8 +13,8 @@
     "HTTPS（本测试用本机 HTTP，Cookie 的 Secure 标志在 pytest 里测）",
     "其他浏览器（只用了 Chrome）"
   ],
-  "total": 62,
-  "passed": 62,
+  "total": 63,
+  "passed": 63,
   "failed": 0,
   "checks": [
     {
@@ -45,7 +45,7 @@
     {
       "name": "设置会话访问其他管理接口：403 PASSWORD_REQUIRED",
       "ok": true,
-      "detail": "{\"status\":403,\"body\":{\"error\":{\"code\":\"PASSWORD_REQUIRED\",\"message\":\"Set the administrator password first\",\"retryable\":false,\"request_id\":\"req-d4429ca000f2450181308e81942afc49\"}}}"
+      "detail": "{\"status\":403,\"body\":{\"error\":{\"code\":\"PASSWORD_REQUIRED\",\"message\":\"Set the administrator password first\",\"retryable\":false,\"request_id\":\"req-d5a54982e0af4b6abe3318e51a689037\"}}}"
     },
     {
       "name": "设置会话不能上传固件",
@@ -155,7 +155,7 @@
     {
       "name": "命令行执行显示器动作：已确认",
       "ok": true,
-      "detail": "{\n  \"request_id\": \"0a96171a-7cb0-4d05-bbbd-dce633c34c77\",\n  \"command_id\": \"cmd-0677e840b3ca45c193eb21e838b379c3\",\n  \"sta"
+      "detail": "{\n  \"request_id\": \"b6aeb4fa-8916-4d2c-91c6-2c51ee488e0c\",\n  \"command_id\": \"cmd-5ffb43d1f5a54363ba76bee6e89ee705\",\n  \"sta"
     },
     {
       "name": "命令记录：筛选和细节",
@@ -203,14 +203,19 @@
       "detail": ""
     },
     {
+      "name": "在确认框里点“取消”：desk-02 没有被吊销",
+      "ok": true,
+      "detail": "desk-02\n配对于 10/29 17:41:46\n\t离线\t\nread:status\ndevice:sync\n\t\n全部目标\n\t未上报\t吊销…"
+    },
+    {
       "name": "吊销前有确认框，写明是哪一台",
       "ok": true,
       "detail": ""
     },
     {
-      "name": "吊销 desk-02 之后，它显示“已吊销”",
+      "name": "吊销 desk-02 之后，它那一行显示“已吊销”，desk-01 没有",
       "ok": true,
-      "detail": ""
+      "detail": "desk-02\n配对于 10/29 17:41:46\n\t已吊销\t\nread:status\ndevice:sync\n\t\n全部目标\n\t未上报\t已吊销"
     },
     {
       "name": "另一个会话（密码登录）可以读概览",
