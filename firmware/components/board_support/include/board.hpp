@@ -31,4 +31,17 @@ PowerState board_power();
 bool board_rtc_read(time_t &);
 bool board_rtc_write(time_t);
 void board_sample_power();
+// The charge switch of the power chip (AXP2101 register 0x18 bit 1, docs/rules.md R3). It is the only thing here that
+// can stop a battery from charging, and the only write that is not part of measuring.
+enum class ChargeWrite {
+    Ok,            // the chip now has the requested value
+    NotIdentified, // not an AXP2101, not answering, or the board is not ready: nothing was read from 0x18 or written
+    ReadFailed,    // 0x18 could not be read: nothing was written
+    WriteFailed,   // the write did not go through
+    NotConfirmed,  // written, but the read-back differs or could not be read
+};
+// The switch as the chip reports it. false means it could not be read; `enabled` is then not touched.
+bool board_charge_enabled(bool &enabled);
+// Read, change bit 1 only, write, read back. Nothing is written when the bit already has the value.
+ChargeWrite board_set_charging(bool enable);
 }

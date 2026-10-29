@@ -23,6 +23,18 @@
 //   M7  no battery / no USB: nothing to measure, and no VBAT/VBUS read is even attempted
 //   M8  a measurement problem must never change USB/battery/charging/level or raise a power fault
 //   M9  a slow ADC read must not block the cached read the UI uses
+//
+// The charge switch (docs/charge-protection-design.md, rules R3 row 0x18 bit 1):
+//   C1  only bit 1 of 0x18 changes; the other seven bits (bit 3, the fuel gauge, in particular) keep their value
+//   C2  the switch is already at the requested value: no write at all
+//   C3  a chip that does not identify itself as AXP2101, or does not answer: not a single write, not even a read of 0x18
+//   C4  0x18 cannot be read: no write on a guess
+//   C5  the write fails on the bus, or the chip ignores it: different answers, one write each
+//   C6  the read-back cannot be read: not confirmed
+//   C7  the switch can be read back as a fact, and only from a chip that identified itself
+//   C8  the sampler never writes 0x18, not even to "repair" a stopped switch
+//   C9  no other register is touched by a charge write
+//   C10 before the board is initialized: refused, with no null mutex touched
 #include "board.hpp"
 #include "core.hpp"
 #include "bsp/esp-bsp.h"
@@ -67,6 +79,8 @@ static WriteMode write_mode=WriteMode::Apply;
 struct PmicWrite { uint8_t reg,old,value; };
 static std::vector<PmicWrite> pmic_write_log;
 static uint8_t pmic_id_value=0x4a;
+static bool charge_write_allowed=false,charge_read_fails=false;
+static int charge_reads=0,charge_read_number=0,charge_fail_read_number=0;
 static uint16_t vbat_raw=4120,vbus_raw=5030,temp_raw=6874;
 static bool pmic_id_fails=false,adc_enable_read_fails=false,detection_read_fails=false,vbat_read_fails=false,vbus_read_fails=false,temp_read_fails=false;
 static int adc_enable_reads=0,vbat_reads=0,vbus_reads=0,temp_reads=0;
@@ -81,6 +95,7 @@ static dh::Snapshot core_state;
 static bool write_is_whitelisted(const PmicWrite &w) {
     if(w.reg==0x30)return (w.value&0x15)==0x15&&(w.value&~0x15)==(w.old&~0x15);
     if(w.reg==0x68)return (w.value&0x01)==0x01&&(w.value&~0x01)==(w.old&~0x01);
+    if(w.reg==0x18)return charge_write_allowed&&(w.value^w.old)==0x02;   // only while a charge test runs, and only bit 1
     return false;
 }
 
@@ -136,6 +151,11 @@ esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t dev,const uint8_t 
         else if(reg==0&&size==2){out[0]=power_status;out[1]=charge_status;}
         else if(reg==0x68&&size==1){if(detection_read_fails)return ESP_ERR_TIMEOUT;*out=pmic_regs[0x68];}
         else if(reg==0xa4&&size==1){++gauge_reads;if(gauge_read_fails)return ESP_ERR_TIMEOUT;*out=gauge_register;}
+        else if(reg==0x18&&size==1){
+            ++charge_reads;++charge_read_number;
+            if(charge_read_fails||charge_read_number==charge_fail_read_number)return ESP_ERR_TIMEOUT;
+            *out=pmic_regs[0x18];
+        }
         else if(reg==0x30&&size==1){++adc_enable_reads;if(adc_enable_read_fails)return ESP_ERR_TIMEOUT;*out=pmic_regs[0x30];}
         else if(reg==0x34&&size==2){++vbat_reads;if(vbat_read_fails)return ESP_ERR_TIMEOUT;out[0]=0xe0|((vbat_raw>>8)&0x1f);out[1]=vbat_raw&0xff;}
         else if(reg==0x38&&size==2){++vbus_reads;if(vbus_read_fails)return ESP_ERR_TIMEOUT;out[0]=0xc0|((vbus_raw>>8)&0x3f);out[1]=vbus_raw&0xff;}
@@ -202,6 +222,9 @@ static void check_initialization_failure(){
     dh::board_sample_power();time_t t=0;
     check(!dh::board_rtc_read(t)&&!dh::board_rtc_write(1793174950),"uninitialized RTC accepted operation");
     check(dh::board_power().observed_ms==0,"missing hardware invented a sample timestamp");
+    bool enabled=true;   // C10
+    check(dh::board_set_charging(false)==dh::ChargeWrite::NotIdentified&&dh::board_set_charging(true)==dh::ChargeWrite::NotIdentified,"C10: a charge write was attempted before the board was ready");
+    check(!dh::board_charge_enabled(enabled),"C10: the charge switch was read before the board was ready");
     check(null_lock_attempts.load()==0,"initialization failure touched null mutex");
 }
 static bool near(float a,float b){return std::isfinite(a)&&std::fabs(a-b)<0.01f;}
@@ -375,6 +398,61 @@ int main(int argc,char **argv) {
      check(dh::board_power().observed_ms==600&&near(dh::board_power().chip_temp_c,32.0f),"M9: the finished sample was not published whole");}
     // Back to the state the remaining checks expect: one healthy sample at t = 100 ms.
     current_ms=100;healthy();
+
+    // ---- the charge switch ----
+    using dh::ChargeWrite;
+    auto charge_reset=[&]{
+        healthy();charge_write_allowed=true;charge_read_fails=false;charge_reads=charge_read_number=charge_fail_read_number=0;
+        pmic_regs[0x18]=0x0a;pmic_write_log.clear();
+    };
+    charge_reset();   // C1
+    check(dh::board_set_charging(false)==ChargeWrite::Ok&&pmic_regs[0x18]==0x08&&pmic_write_log.size()==1,"C1: stopping charging changed more than bit 1, or did not write once");
+    check(dh::board_set_charging(true)==ChargeWrite::Ok&&pmic_regs[0x18]==0x0a&&pmic_write_log.size()==2,"C1: restoring charging changed more than bit 1");
+    for(const uint8_t before:{0x00,0xff,0xfd,0x02,0x55,0xaa}){
+        charge_reset();pmic_regs[0x18]=before;
+        check(dh::board_set_charging(false)==ChargeWrite::Ok&&pmic_regs[0x18]==static_cast<uint8_t>(before&~0x02),"C1: a stop dropped or flipped another bit");
+        check(dh::board_set_charging(true)==ChargeWrite::Ok&&pmic_regs[0x18]==static_cast<uint8_t>(before|0x02),"C1: a restore dropped or flipped another bit");
+    }
+    charge_reset();   // C2
+    pmic_regs[0x18]=0x08;check(dh::board_set_charging(false)==ChargeWrite::Ok&&pmic_write_log.empty(),"C2: a stopped switch was written to again");
+    pmic_regs[0x18]=0x0a;check(dh::board_set_charging(true)==ChargeWrite::Ok&&pmic_write_log.empty(),"C2: a running switch was written to again");
+    charge_reset();   // C3
+    pmic_id_value=0x12;
+    check(dh::board_set_charging(false)==ChargeWrite::NotIdentified&&pmic_write_log.empty()&&charge_reads==0&&pmic_regs[0x18]==0x0a,"C3: a different chip was written to or read at 0x18");
+    pmic_id_value=0x4a;pmic_id_fails=true;
+    check(dh::board_set_charging(false)==ChargeWrite::NotIdentified&&pmic_write_log.empty()&&charge_reads==0,"C3: a chip that does not answer was written to");
+    pmic_id_fails=false;
+    charge_reset();   // C4
+    charge_read_fails=true;
+    check(dh::board_set_charging(false)==ChargeWrite::ReadFailed&&pmic_write_log.empty(),"C4: an unreadable switch led to a write");
+    charge_reset();   // C5
+    write_mode=WriteMode::Error;
+    check(dh::board_set_charging(false)==ChargeWrite::WriteFailed&&pmic_write_log.size()==1&&pmic_regs[0x18]==0x0a,"C5: a failed write was not reported as failed");
+    write_mode=WriteMode::Ignore;
+    check(dh::board_set_charging(false)==ChargeWrite::NotConfirmed&&pmic_write_log.size()==2&&pmic_regs[0x18]==0x0a,"C5: an ignored write was not caught by the read-back");
+    write_mode=WriteMode::Apply;
+    charge_reset();   // C6: the read before the write works, the read-back fails
+    charge_fail_read_number=2;
+    check(dh::board_set_charging(false)==ChargeWrite::NotConfirmed&&pmic_write_log.size()==1,"C6: a read-back that could not be read was taken as good");
+    charge_reset();   // C7
+    {bool enabled=false;
+     pmic_regs[0x18]=0x0a;check(dh::board_charge_enabled(enabled)&&enabled,"C7: a running switch was not read");
+     pmic_regs[0x18]=0x08;check(dh::board_charge_enabled(enabled)&&!enabled,"C7: a stopped switch was not read");
+     pmic_regs[0x18]=0xfd;check(dh::board_charge_enabled(enabled)&&!enabled,"C7: bit 1 was not the one read");
+     pmic_regs[0x18]=0x02;check(dh::board_charge_enabled(enabled)&&enabled,"C7: bit 1 alone was not enough");
+     charge_read_fails=true;enabled=true;check(!dh::board_charge_enabled(enabled),"C7: an unreadable switch was reported as read");
+     charge_read_fails=false;pmic_id_value=0x12;charge_reads=0;enabled=true;
+     check(!dh::board_charge_enabled(enabled)&&charge_reads==0,"C7: a different chip was believed");
+     pmic_id_value=0x4a;}
+    charge_reset();   // C8: the sampler leaves 0x18 alone, also when the switch is stopped
+    charge_write_allowed=false;pmic_regs[0x18]=0x08;
+    for(int i=0;i<5;++i)dh::board_sample_power();
+    check(pmic_write_log.empty()&&pmic_regs[0x18]==0x08&&charge_reads==0,"C8: the sampler touched the charge switch");
+    charge_reset();   // C9
+    pmic_regs[0x30]=0x15;pmic_regs[0x68]=0x01;pmic_regs[0x64]=0x55;
+    (void)dh::board_set_charging(false);(void)dh::board_set_charging(true);
+    check(pmic_regs[0x30]==0x15&&pmic_regs[0x68]==0x01&&pmic_regs[0x64]==0x55&&pmic_write_log.size()==2,"C9: a charge write touched another register");
+    charge_write_allowed=false;healthy();current_ms=100;dh::board_sample_power();
 
     // Block on a PMIC register in the middle of a sample: partial hardware reads cannot leak into
     // the cache, and a new timestamp is not visible before sampling completes.

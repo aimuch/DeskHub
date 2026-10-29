@@ -28,11 +28,13 @@ static bool add(uint8_t addr, i2c_master_dev_handle_t *dev) {
 // Checked against XPowersLib's XPowersAXP2101 on 2026-10-28:
 //   0x30 bits 0, 2, 4  enableBattVoltageMeasure, enableVbusVoltageMeasure, enableTemperatureMeasure
 //   0x68 bit 0         enableBattDetection
-// Not written on purpose: 0x18 bit 3 (fuel gauge: no XPowersLib function, not verified), 0x18 bit 1
-// (charge enable: charging protection only), charge voltage, the TS pin, current limits, timers, BATFET.
+// Not written by the sampler on purpose: 0x18 bit 3 (fuel gauge: no XPowersLib function, not verified), 0x18 bit 1
+// (charge enable: only board_set_charging, for charge protection; checked 2026-10-28 as enableCellbatteryCharge),
+// charge voltage, the TS pin, current limits, timers, BATFET.
 static constexpr uint8_t kAdcReg = 0x30, kAdcBits = 0x15, kDetectReg = 0x68, kDetectBit = 0x01;
 static constexpr int kMaxEnableFailures = 3;
 static int enable_failures = 0;  // failed enable attempts in a row; reset when the bits are seen set
+static constexpr uint8_t kChargeReg = 0x18, kChargeBit = 0x02;  // charge switch, written only by board_set_charging
 static esp_err_t write_register(i2c_master_dev_handle_t dev, uint8_t reg, uint8_t value) {
     if (!dev) return ESP_ERR_INVALID_STATE;
     const uint8_t data[2] = {reg, value};
@@ -216,6 +218,37 @@ void board_sample_power() {
     power = std::move(next);
     xSemaphoreGive(power_mutex);
     xSemaphoreGive(io_mutex);
+}
+// Both charge functions take the I/O lock, so a sample and a charge write never interleave. The chip must identify
+// itself as an AXP2101 first, every time.
+static bool pmic_identified() {
+    uint8_t id = 0;
+    return read(pmic,0x03,&id,1) == ESP_OK && (id & 0xcf) == 0x4a;
+}
+bool board_charge_enabled(bool &enabled) {
+    if (!io_mutex || !pmic) return false;
+    xSemaphoreTake(io_mutex,portMAX_DELAY);
+    uint8_t value = 0;
+    const bool ok = pmic_identified() && read(pmic,kChargeReg,&value,1) == ESP_OK;
+    xSemaphoreGive(io_mutex);
+    if (ok) enabled = (value & kChargeBit) != 0;
+    return ok;
+}
+ChargeWrite board_set_charging(bool enable) {
+    if (!io_mutex || !pmic) return ChargeWrite::NotIdentified;
+    xSemaphoreTake(io_mutex,portMAX_DELAY);
+    ChargeWrite result;
+    uint8_t before = 0, after = 0;
+    if (!pmic_identified()) result = ChargeWrite::NotIdentified;
+    else if (read(pmic,kChargeReg,&before,1) != ESP_OK) result = ChargeWrite::ReadFailed;
+    else {
+        const uint8_t wanted = enable ? static_cast<uint8_t>(before | kChargeBit) : static_cast<uint8_t>(before & ~kChargeBit);
+        if (wanted == before) result = ChargeWrite::Ok;
+        else if (write_register(pmic,kChargeReg,wanted) != ESP_OK) result = ChargeWrite::WriteFailed;
+        else result = read(pmic,kChargeReg,&after,1) == ESP_OK && after == wanted ? ChargeWrite::Ok : ChargeWrite::NotConfirmed;
+    }
+    xSemaphoreGive(io_mutex);
+    return result;
 }
 PowerState board_power() {
     if (!power_mutex) {
