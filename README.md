@@ -208,6 +208,24 @@ python3 -m venv .flash-venv
 
 **刷机以后设备一直不充电。** 你可能带着“停充”状态刷了旧固件。刷回新固件，它启动时会恢复充电。
 
+**设备怎么找到电脑？** 靠配对时存进设备的 Agent 地址（`https://IP:8765`）；设备不会自己发现电脑。所以请给这台 Mac 在路由器里固定一个 IP。地址变了，设备就显示“电脑离线”，要重新配对。建议用 IP，不要用 `xxx.local` 这样的名字：固件里没有 mDNS，设备可能解析不了（没有在真机上试过）。
+
+**服务器证书到期了怎么办？** 它只有 397 天。到期后设备会拒绝 Agent，显示“电脑离线”。到期前用同一个 CA 续期，设备和浏览器都不用动：
+
+```sh
+openssl x509 -enddate -noout -in ~/.config/deskhub/tls/server.pem        # 看哪天到期
+.venv/bin/python tools/create_tls.py --ca-dir ~/.config/deskhub/tls --out ~/.config/deskhub/tls-new \
+    --ip 你的Mac局域网IP --dns 你的Mac主机名.local                        # --ip、--dns 和第一次一样
+```
+
+然后把 `agent.json` 里的 `tls_cert`、`tls_key` 改成 `tls-new/server.pem`、`tls-new/server-key.pem`，重启 Agent。`--ca-dir` 只读旧目录；新目录里的 `ca.pem` 和 `ca-key.pem` 和旧的一字不差。CA 本身不到 30 天就过期时，工具会拒绝（那时只能重新生成 CA，重新配对）。
+
+**换一台电脑怎么办？** 设备里存着 Agent 的地址、CA 证书和令牌：CA 和令牌属于“那个 Agent”（它的 `tls/` 目录和数据库），不属于某台电脑的硬件。
+
+- **设备不用动：** 停掉旧 Agent，把整个 `~/.config/deskhub/`（`agent.json`、`tls/`、`state/`）复制到新电脑的同一位置，让新电脑用**和旧电脑相同的 IP**（在路由器里把这个 IP 改给新电脑），再启动。
+- **IP 换了：** 设备里存的是旧地址，设备要重新配对（USB，已配对的加 `--replace`）。用 `create_tls.py --ca-dir` 沿用旧 CA，浏览器里信任的 CA 就不用重新信任。
+- **什么都不搬：** 在新电脑上重新 `init`、生成证书，所有设备重新配对。旧电脑上的令牌作废。
+
 ## 还没有的功能
 
 声音（要先确认这块板上有没有接扬声器：板上有扬声器接口，但不知道你的板接没接），设备上的无线配网的真机验证，Windows 和 Linux 的显示器支持。网页上还不能开关充电保护：设备的上报里没有这一项。
