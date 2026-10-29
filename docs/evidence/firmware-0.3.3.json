@@ -1,0 +1,50 @@
+{
+  "version": "0.3.3",
+  "built_from": "提交 802705c（升版）；构建时 firmware/ 目录与该提交一致",
+  "build_dir": "firmware/build-0.3.3（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.2": [
+    "屏幕是圆角的（半径未公布）：顶栏第一行下移 6 像素，状态点、电池图标、配网页标题按曲线往里收。靠近四角的位置都由 kCornerR（80 像素）和 corner_inset() 算出（提交 2c91b3c）"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4352080,
+    "sha256": "b9a780fa3dee0dd2f4f74982f112003ed7d07e9af21e1286ca42cce28a82e023",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 31
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.3-esp32s3.zip",
+      "size_bytes": 2683296,
+      "sha256": "a3bf353e2b2887453794021d27cecbadc407e670069085baad994622635ebf1e",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.3",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "没有生成 .dhfw：只打了 USB 包。需要时用 tools/firmware_package.py sign（它自己读取 .state/signing 的密钥）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.3",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.3，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "主机测试 11 组、Agent 339 条、tools 87 条、协议检查全部通过；界面预览 16 组通过，其中 A17 检查每页、三个主题、两种语言、三档字号的四个角",
+    "圆角变异检查 6 处全部报红（scripts/mutation/corners_ui.py）；预览里把半径假设放大到 84 仍然通过"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到任何设备，也没有连接设备。设备 deskhub-44bd8d60c598 上是用户自己刷上的 0.3.2（不带圆角修复）。刷机等用户说“刷”",
+    "圆角半径是猜的（80 像素）。真机上还有没有被切的文字或图标，只有看过才知道；如果有，要知道哪个角、哪个字，再调 kCornerR",
+    "充电保护仍然没有在真机上验证；电量计的估算没对照过这颗电芯",
+    "没有生成签名 .dhfw，没有做 OTA 与回滚"
+  ],
+  "hardware_verified": false
+}
