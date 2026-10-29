@@ -101,7 +101,7 @@ Wi-Fi 密码只用隐藏输入。令牌不进命令行参数、日志和网址�
 | 0x30 | 位 0、2、4 | 打开电池电压、USB 电压、芯片温度的 ADC | 启动时，如果这几位是 0 |
 | 0x68 | 位 0 | 打开电池检测 | 启动时，如果这位是 0 |
 | 0x18 | 位 3 | 打开电量计 | **暂不写。** 核对没有通过：XPowersLib 没有对应函数，手册还没取得，而 0x18 的寄存器名字里带着看门狗（WDT）。核对前不写，电量百分比先沿用现状。 |
-| 0x18 | 位 1 | 充电使能 | 只在充电保护开启时。XPowersLib 已核对（`enableCellbatteryCharge`），充电保护阶段才用 |
+| 0x18 | 位 1 | 充电使能 | 只在充电保护开启时，以及用来恢复正常充电（启动时发现已关、保护关闭、读不到数据、写入失败）。XPowersLib 已核对（`enableCellbatteryCharge`）。已实现：`board_set_charging`，细节见 [charge-protection-design.md](charge-protection-design.md)。采样代码仍然从不写它 |
 
 来源是 SmartHub 的 `power.c`，它对应微雪的例程。**实现前，必须再用 XPowersLib 和 AXP2101 手册逐位核对。** 核对结果记在代码注释和本表里。
 

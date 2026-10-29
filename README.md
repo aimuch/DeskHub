@@ -36,7 +36,7 @@ Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_m
 检查“原样”：
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json'
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/tests/charge_test.cpp' ':!firmware/main/CMakeLists.txt' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!tools/tests/test_provision_charge.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json'
 ```
 
 输出为空，就表示这些文件与归档逐字节相同。
@@ -53,6 +53,10 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `agent/src/deskhub_agent/models.py`、`management.py`、`app.py`；`protocol/`（`schemas/agent-config.schema.json`、新示例 `examples/pairing-package.json`） | 热点配网的 Agent 端：Settings 新增 `public_url` 和 `pairing_ca`；新增 `pairing.py`（授权、配对包、兑换）和 `agent/tests/test_pairing_grants.py` |
 | `agent/src/deskhub_agent/pairing.py`；`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`、`examples/pairing-package.json`） | 配对包升到版本 2，直接带 CA 证书，删除 `GET /api/v1/pairing/ca`：固件里不留不验证的 TLS 连接，也不改 `sdkconfig.defaults`（见 `docs/pairing-design.md` 第 11 节）；向量重新生成，`export_openapi.py` 的实现校验同步 |
 | `tools/provision.py` | `--status` 只打印检查过的电源对象；新增 `tools/tests/test_provision_power.py` |
+| `firmware/components/board_support/`（`board.cpp`、`board.hpp`）、`firmware/tests/board_cache_test.cpp` | 充电保护用的充电开关：`board_charge_enabled`、`board_set_charging`。只写 0x18 位 1（R3 的白名单行），先认芯片型号，读出整个字节只改这一位，写后读回；采样代码仍然从不写它。新增 C1 到 C10 十组失败模式测试 |
+| `firmware/tests/CMakeLists.txt`、`firmware/tests/ui_preview/`（`CMakeLists.txt`、`harness.cpp`）、`firmware/tests/ui_model_test.cpp` | 新增测试目标 `charge_test`（`charge_protection_logic`）；界面测试加入充电保护的视图和流程（T19、A16） |
+| `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`） | 启动时 `charge::init()`，每 250 毫秒 `charge::tick()`；能力 `charge_limit` 报实验（`unverified`）；USB 状态加只读的 `charge` 对象；常驻任务的栈从 4096 加到 6144 |
+| `tools/provision.py` | `--status` 另外打印检查过的 `charge` 对象；新增 `tools/tests/test_provision_charge.py` |
 | `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
@@ -67,9 +71,10 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 ## 现状
 
 - 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
-- 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.1 MiB，应用分区 6 MiB）。
+- 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.4 MiB，应用分区 6 MiB）。
 - 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
-- 界面里已做好但设备上看不到的两处：配网页（后端 R7 还没做，没有代码调用它），充电保护确认框（充电控制 N1 还没做；保护页的开启按钮是禁用的，并写明原因）。
+- 界面里已做好但设备上看不到的一处：配网页（后端 R7 还没做，没有代码调用它）。
+- 有：充电保护（N1，实验功能）的完整实现，设计见 [docs/charge-protection-design.md](docs/charge-protection-design.md)：策略和失败方向、电源芯片充电开关的读写（只写 0x18 位 1）、保存、界面（保护页、确认框、状态文字）、USB 状态里的 `charge` 对象。主机测试、界面预览和变异检查（`scripts/mutation/`）都通过。**还没有刷到设备，没有在真机上停过充电**；电量计的估算也没对照过这颗电芯。刷旧固件之前要先关闭它，见 [docs/flashing.md](docs/flashing.md)。
 - 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。固件这一侧已随 0.3.1 刷到设备：USB 状态里读到了电源对象（电池 4183 mV、USB 5156 mV、芯片温度 40.3 °C、电量 100%、已充满）。读数只读了一次，没有和仪表对照；设备没有配置 Wi-Fi 和 Agent，所以设备到 Agent 的上报没有在真机上试过。
 - 有：热点配网的 Agent 端（授权、配对包版本 2 带 CA、无凭据兑换；没有 CA 下载接口）和设备端的纯逻辑（配对包解码、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
 - **设备端的接线还没有做**：热点、配网页的 HTTP、兑换的 TLS 客户端（用配对包里的 CA 验证）、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](docs/pairing-design.md) 第 10 节。
@@ -88,6 +93,8 @@ python3 firmware/tests/ui_preview/render.py
 ```
 
 最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
+
+变异检查（故意改坏配对的实现，看测试会不会报红）：`scripts/mutation/pairing_agent.py` 和 `scripts/mutation/pairing_firmware.py`。用法和输出的含义见 [scripts/mutation/README.md](scripts/mutation/README.md)。
 
 完整构建固件（独立目录，不碰别的构建）：
 
