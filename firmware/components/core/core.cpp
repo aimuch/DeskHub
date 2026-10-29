@@ -34,6 +34,7 @@ static bool schema_unsupported = false;
 static bool wifi_started = false;
 static bool reconnect_requested = false;
 static bool wifi_reconfigure = false;
+static bool network_held = false;   // hotspot pairing owns the radio
 static int64_t reconnect_at = 0;
 static Backoff backoff;
 static bool ntp_started = false;
@@ -304,6 +305,7 @@ static void wifi_event(void *, esp_event_base_t base, int32_t id, void *data) {
 }
 static void wifi_task(void *) {
     while (true) {
+        { bool held; { Guard g; held = network_held; } if (held) { vTaskDelay(pdMS_TO_TICKS(500)); continue; } }   // pairing owns the radio
         bool reconfigure,start_ntp; { Guard g; reconfigure = wifi_reconfigure; wifi_reconfigure = false;start_ntp=ntp_start_requested;ntp_start_requested=false; }
         if (reconfigure) {
             auto s = secrets();
@@ -336,4 +338,6 @@ void network_start() {
     wifi_reconfigure = true; xTaskCreate(wifi_task,"dh_wifi",4096,nullptr,4,nullptr);
 }
 void network_reconfigure() { Guard g; wifi_reconfigure = true; }
+void network_hold(bool hold) { Guard g; network_held = hold; }
+bool network_wifi_started() { Guard g; return wifi_started; }
 }

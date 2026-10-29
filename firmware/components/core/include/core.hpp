@@ -74,4 +74,9 @@ bool set_time_utc(const char *, const char *quality);
 std::string utc_now();
 void network_start();
 void network_reconfigure();
+// While hotspot pairing runs it owns the radio (docs/pairing-design.md section 13): the Wi-Fi task neither reconnects nor
+// reconfigures until the hold is released, and then applies the stored configuration. `network_wifi_started` tells whether
+// the Wi-Fi driver runs; an unconfigured device keeps it off.
+void network_hold(bool);
+bool network_wifi_started();
 }
