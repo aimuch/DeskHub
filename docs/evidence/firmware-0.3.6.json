@@ -48,7 +48,23 @@
     "变异检查：圆环说明 26 处、设备端配对接线的纯逻辑 46 处、管理员密码 64 处、证书续期 16 处，全部报红；网页管理台前端 13 处（一整轮里 12 处报红，修了测试以后“吊销不需要确认”那一处单独重跑也报红；另有 1 处是等价变异，已删）",
     "网页管理台：真实的 Agent 进程加真实的 Chrome，63 项检查通过（docs/evidence/console-e2e/）"
   ],
-  "flashed": false,
+  "flashed": true,
+  "flash_record": {
+    "when": "2026-10-29，用户说“设备已经接入本机，你来刷”之后",
+    "device": "deskhub-44bd8d60c598（刷之前用 provision.py --identify 核对过，固件 0.3.4）",
+    "how": "解压后的 USB 包，包内 flash.py --port /dev/cu.usbmodem21101（ESP-IDF 的 esptool）",
+    "result": "写入 4 个镜像，esptool 校验数据哈希通过；没有擦除配置（设备上原来的主题、方向、充电保护设置都还在）"
+  },
+  "observed_on_device": {
+    "note": "刷机约 40 秒后读 USB 状态（tools/provision.py --status）。这是设备自己报告的数值，没有用别的仪表对照；没有人看屏幕，我也看不到屏幕。",
+    "firmware_version": "0.3.6",
+    "ui_alive": true,
+    "time_quality": "rtc",
+    "wifi_and_agent": "未配置、未配对（设备从来没有用 USB 配对过）",
+    "pairing": "phase open，open true，why none：未配对的设备开机后自动开了热点（驱动启动、会话打开、热点和配网页服务启动都没有报错）。手机连不连得上，没有试",
+    "power": "电量 96%，电池 4105 mV，USB 5154 mV，芯片 38.3 °C，measurement ok，无故障，充电状态 idle",
+    "charge_protection": "已开启（上限 90%，回充 85%），状态 holding，开关 stopped，原因 LEVEL_AT_LIMIT；事件：开机发现开关停着（BOOT_FOUND_STOPPED），随后因电量到上限请求停充，写入与读回都是 ok"
+  },
   "not_done": [
     "没有刷到任何设备，也没有连接设备。刷机等用户说“刷”，或用户自己刷",
     "设备端热点配对没有在真机上验证任何一步：按键引脚用的是 GPIO0（BOOT），没有核对原理图；热点与 Wi-Fi 同信道时手机会不会断开、堆内存够不够、手机能不能打开 http://192.168.4.1/、失败后 Wi-Fi 能不能恢复，都要看真机。首次配对请先用 USB",
@@ -61,5 +77,5 @@
     "没有生成签名 .dhfw，没有做 OTA 与回滚",
     "网页管理台没有接真实设备和显示器，只用了 Chrome"
   ],
-  "hardware_verified": false
+  "hardware_verified": "部分：只有上面 observed_on_device 里的几项是在真机上读到的；其余见 not_done"
 }
