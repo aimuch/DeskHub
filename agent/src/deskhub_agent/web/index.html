@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="DeskHub 本地管理台：设备状态、显示器动作、命令记录、布局与显示、电源、固件、访问管理与外观。">
+  <title>DeskHub 管理台</title>
+  <link rel="icon" href="/manage/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/manage/styles.css">
+  <script type="module" src="/manage/app.js"></script>
+</head>
+<body>
+  <div id="boot" class="boot" role="status">正在连接 DeskHub…</div>
+
+  <!-- 登录：密码；第一次用口令 -->
+  <div id="login-view" class="auth" hidden>
+    <header class="auth-brand"><span class="mark" aria-hidden="true"></span><span>DeskHub 管理台</span></header>
+    <div class="auth-grid">
+      <section class="card auth-card" aria-labelledby="login-title">
+        <h1 id="login-title">管理员登录</h1>
+        <div class="tabs" role="tablist" aria-label="登录方式">
+          <button id="tab-password" class="tab" role="tab" type="button" aria-selected="true" aria-controls="password-form">密码登录</button>
+          <button id="tab-token" class="tab" role="tab" type="button" aria-selected="false" aria-controls="token-form">口令（首次）</button>
+        </div>
+        <form id="password-form" class="stack" role="tabpanel" aria-labelledby="tab-password">
+          <div class="field">
+            <label for="login-user">账户</label>
+            <input id="login-user" type="text" value="admin" autocomplete="username" readonly>
+          </div>
+          <div class="field">
+            <label for="login-password">密码</label>
+            <input id="login-password" type="password" autocomplete="current-password" placeholder="输入密码" required maxlength="256">
+          </div>
+          <div id="password-error" class="message error" role="alert" hidden></div>
+          <button id="password-submit" class="btn primary full" type="submit">登录</button>
+          <p class="small muted">还没设置过密码？切到“口令（首次）”登录，进去后设置。忘记密码，要在运行 Agent 的电脑上用命令行重置。</p>
+        </form>
+        <form id="token-form" class="stack" role="tabpanel" aria-labelledby="tab-token" hidden>
+          <p class="small muted">口令在管理员凭据文件的 <code>token</code> 字段里。复制过来，粘贴到下面。登录后会要求你马上设置密码。</p>
+          <div class="field">
+            <label for="login-token">管理员口令</label>
+            <input id="login-token" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴口令" required minlength="20" maxlength="256">
+          </div>
+          <div id="token-error" class="message error" role="alert" hidden></div>
+          <button id="token-submit" class="btn primary full" type="submit">用口令登录</button>
+          <p class="small muted">设置密码之后，网页就不再接受口令。口令继续给命令行和脚本用。</p>
+        </form>
+        <p class="small muted">口令和密码都不要放进网址、命令行参数或截图。浏览器只保留 30 分钟的会话，不保存它们。</p>
+      </section>
+      <section class="card auth-card" aria-labelledby="trust-title">
+        <div class="row"><h2 id="trust-title">信任证书</h2><span class="chip spacer">浏览器提示不受信任时</span></div>
+        <p class="small muted">管理台的证书由你自己的 CA 签发，浏览器默认不认识它。信任一次，以后就不再提示。</p>
+        <ol class="steps">
+          <li><div><h3>找到 CA 证书</h3><p>在运行 Agent 的电脑上，它是生成证书时得到的 <code>ca.pem</code>（例如 <code>~/.config/deskhub/tls/ca.pem</code>）。它是公开的证书，不含私钥。</p></div></li>
+          <li><div><h3>把它加入系统并设为信任</h3><p>macOS：双击 <code>ca.pem</code>，加入“登录”钥匙串，再在“钥匙串访问”里打开它，把“信任”设为“始终信任”。系统会请你输入自己的密码；这一步由你亲自做。</p></div></li>
+          <li><div><h3>重启浏览器，再打开管理台</h3><p>地址栏出现锁形图标，就表示信任生效。</p></div></li>
+        </ol>
+        <p class="small muted">管理台不提供证书下载：从一个还不被信任的页面下载“信任根”，等于没有验证。请直接从 Agent 所在的电脑上取文件。</p>
+      </section>
+    </div>
+    <p class="small muted auth-foot">只在本机使用、不接设备时，也可以改用本机回环地址 <code>http://127.0.0.1:8765/manage/</code>。它没有证书，设备连不上。</p>
+  </div>
+
+  <!-- 第一次用口令登录后：设置密码 -->
+  <div id="setup-view" class="auth" hidden>
+    <header class="auth-brand"><span class="mark" aria-hidden="true"></span><span>DeskHub 管理台</span></header>
+    <ol class="flow" aria-label="登录步骤">
+      <li class="done"><span>✓</span>口令登录</li>
+      <li class="now"><span>2</span>设置密码</li>
+      <li><span>3</span>用密码进入管理台</li>
+    </ol>
+    <div class="auth-grid">
+      <form id="setup-form" class="card auth-card stack" aria-labelledby="setup-title">
+        <h1 id="setup-title">设置管理员密码</h1>
+        <p class="small muted">第一次登录后必须设置密码。设置完成后，网页用密码登录；口令只留给命令行和脚本。</p>
+        <div class="field">
+          <label for="setup-user">账户</label>
+          <input id="setup-user" type="text" value="admin" autocomplete="username" readonly>
+        </div>
+        <div class="field">
+          <label for="setup-password">新密码</label>
+          <input id="setup-password" type="password" autocomplete="new-password" required maxlength="256" aria-describedby="setup-checks">
+        </div>
+        <div class="field">
+          <label for="setup-confirm">确认密码</label>
+          <input id="setup-confirm" type="password" autocomplete="new-password" placeholder="再输入一次" required maxlength="256">
+        </div>
+        <ul id="setup-checks" class="checks" aria-live="polite"></ul>
+        <div id="setup-error" class="message error" role="alert" hidden></div>
+        <button id="setup-submit" class="btn primary full" type="submit" disabled>设置密码并进入</button>
+      </form>
+      <section class="card auth-card" aria-labelledby="after-title">
+        <h2 id="after-title">设置之后会发生什么</h2>
+        <ul class="plain">
+          <li>网页登录只接受密码。口令不再能登录网页。</li>
+          <li>口令继续给命令行和脚本用，可以单独吊销。</li>
+          <li>密码用慢哈希保存，不保存明文，日志里也不出现。</li>
+          <li>其他已登录的会话会立即失效。</li>
+          <li>连续输错 5 次，这个账户的网页登录会锁定 15 分钟。</li>
+        </ul>
+        <div class="callout">
+          <strong>忘记密码</strong>
+          <p>网页上没有“忘记密码”。在运行 Agent 的电脑上执行：</p>
+          <pre class="snippet">deskhubctl admin-password-reset</pre>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="application" class="app" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="/manage/"><span class="mark" aria-hidden="true"></span>DeskHub</a>
+      <nav id="nav" class="nav" aria-label="主导航"></nav>
+      <div class="sidebar-foot">
+        <span id="connection-label" class="badge ok">Agent 已连接</span>
+        <span id="sidebar-agent" class="mono">本地 Agent</span>
+        <button id="logout" class="link-btn" type="button">退出管理台</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div id="global-message" class="message" role="status" hidden></div>
+      <div id="content" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="muted"></p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">取消</button>
+        <button id="confirm-submit" class="btn primary" value="confirm">确认</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

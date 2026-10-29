@@ -1,0 +1,331 @@
+{
+  "kind": "console-e2e",
+  "finished_at": "2026-10-29T05:37:40.649Z",
+  "chrome": "Chrome/156.0.8078.74",
+  "node": "v26.13.0",
+  "stand_ins": [
+    "设备上报由脚本模拟（真实的 /api/v1/device/sync）",
+    "显示器后端是 scripts/e2e/fake_betterdisplay.py（真实的子进程调用）"
+  ],
+  "not_covered": [
+    "真实设备",
+    "真实显示器",
+    "HTTPS（本测试用本机 HTTP，Cookie 的 Secure 标志在 pytest 里测）",
+    "其他浏览器（只用了 Chrome）"
+  ],
+  "total": 62,
+  "passed": 62,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "没有设置过密码时，默认停在“口令（首次）”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "登录页里没有控制台内容",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "错误的口令：只给一句话，输入框被清空",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "没有设置过密码时，密码登录和密码错的回答一样",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "口令登录后进入“设置密码”，不是控制台",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "设置会话访问其他管理接口：403 PASSWORD_REQUIRED",
+      "ok": true,
+      "detail": "{\"status\":403,\"body\":{\"error\":{\"code\":\"PASSWORD_REQUIRED\",\"message\":\"Set the administrator password first\",\"retryable\":false,\"request_id\":\"req-c93bc164c55c4dd993fd970bdf72179c\"}}}"
+    },
+    {
+      "name": "设置会话不能上传固件",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "重新载入页面，仍然停在“设置密码”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "一开始“设置密码并进入”不可点",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "太短时仍不可点",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "长度够且两次一致时可点",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "弱密码被拒绝，仍停在设置页，输入框里没有回显",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "两次不一致时不可点",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "设置密码后进入控制台（概览）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "会话 Cookie 对页面脚本不可见（HttpOnly）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "设置密码后，带 Origin 的口令登录被拒绝：403 TOKEN_LOGIN_DISABLED",
+      "ok": true,
+      "detail": "403 TOKEN_LOGIN_DISABLED"
+    },
+    {
+      "name": "概览：设备在线、电量、充电中",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "概览：状态环有说明文字",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "概览：四块色卡",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“设备”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“动作与显示器”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“命令记录”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“布局与显示”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“电源”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“固件升级”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“访问管理”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "页面“外观”打开，内容在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "命令行执行显示器动作：已确认",
+      "ok": true,
+      "detail": "{\n  \"request_id\": \"67d5b323-ac2c-4e0c-8eae-a5864a7ca9be\",\n  \"command_id\": \"cmd-cbdbdae82c93486fb562288a10759c93\",\n  \"sta"
+    },
+    {
+      "name": "命令记录：筛选和细节",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "预览跟着主题与方向变",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "保存后，设备页写“等待设备确认”，不写“已应用”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "设备上报同一个 revision 和完整配置后，才显示“设备已应用”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "电源：电量、电压、温度",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "电源：充电保护不放假开关",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "固件：无效的包被拒绝，没有入库",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无线配对：生成配对包（DHP2.…），只显示一次",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无线配对：取消授权",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "吊销前有确认框，写明是哪一台",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "吊销 desk-02 之后，它显示“已吊销”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "另一个会话（密码登录）可以读概览",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "修改密码：错的当前密码、不一致、弱密码都被拒绝；正确的通过",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "修改密码后，另一个会话立即失效",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "修改密码后，这个浏览器的会话继续有效（新 Cookie）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "旧密码不能再登录",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "外观：主题、强调色、文字大小立即生效",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "外观：对比度提示",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "外观：重新载入后还在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "浏览器里只存外观：一个键，没有任何登录信息",
+      "ok": true,
+      "detail": "{\"local\":[\"deskhub.appearance\"],\"session\":[],\"value\":\"{\\\"theme\\\":\\\"light\\\",\\\"accent\\\":\\\"sky\\\",\\\"font\\\":\\\"system\\\",\\\"density\\\":\\\"standard\\\",\\\"motion\\\":\\\"on\\\",\\\"size\\\":17}\"}"
+    },
+    {
+      "name": "外观：导出再导入一致；不合法的值、多余的项、不是 JSON 的文件都被拒绝",
+      "ok": true,
+      "detail": "{\"roundTrip\":true,\"badValue\":null,\"extra\":null,\"notJson\":null}"
+    },
+    {
+      "name": "外观：恢复默认",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "成功的登录把之前的失败次数清零",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "退出后回到登录页，默认是“密码登录”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "连续输错 5 次后，账户锁定；这时输对密码也进不去",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "命令行重置后：锁定解除，默认回到“口令（首次）”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重置后用口令登录，重新设置密码，进入控制台",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "命令行重置会结束已经打开的网页会话",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "窄屏：设置密码页没有横向滚动条",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "窄屏：概览没有横向滚动条",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "窄屏：布局页没有横向滚动条",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "超过 30 秒没有上报：设备离线，电源写“数据已过期”，不显示旧的 67%",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "电源页：过期后读数写“未上报”，不显示旧数字",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "全程没有脚本异常、CSP 违规或控制台错误",
+      "ok": true,
+      "detail": "[]"
+    }
+  ]
+}
