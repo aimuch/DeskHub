@@ -109,7 +109,7 @@ def main() -> int:
         '  设备信息、重启、恢复出厂：设置 → 设备信息。\n'
         '  时钟：点击总览中的时间，或设置 → 桌面时钟。\n'
         '  电脑指标、显示器动作：需另行完成当地 Agent 配对、显示器绑定和权限配置。\n'
-        '  日常使用通过 Wi-Fi 连接电脑 Agent，无需一直插 USB；设备端的无线配网页（配网后端）尚未实现。\n'
+        '  日常使用通过 Wi-Fi 连接电脑 Agent，无需一直插 USB；设备端的热点配网已经接线，但没有在真机上验证，首次配对请先用 USB。\n'
         '  网页管理台由电脑 Agent 提供，不是 ESP32 自带网页；USB 刷机不会自动完成配对。\n'
         '  音频、Windows/Linux 控制后端、HomeLab/网络 Provider、任意拖拽排版尚未实现。\n\n'
         'Software build verified. The device UI was checked only in an offscreen simulation on a computer.\n'
