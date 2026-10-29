@@ -100,7 +100,9 @@ def main() -> int:
         '  顶栏：左侧点按进入“连接与配对”，右侧点按进入“电池与电源”。\n'
         '  电量：显示电源芯片电量计的百分比，它是估算值，未对照实际电芯验证；读不到、数据过期时显示“电量未知”，\n'
         '  无电池和读取故障分别说明，不会显示成 0%。“读数”分段显示电池电压、USB 电压和芯片温度（是电源芯片的温度，不是电池温度）。\n'
-        '  充电保护：此版本还不能限制充电，保护页的开启按钮是禁用的；80%/90% 充电上限尚未实现。\n'
+        '  充电保护（实验功能，默认关闭）：电池与电源 → 保护 → 开启…，选 80% 或 90% 上限。电量到上限停止充电，低于回充线恢复；\n'
+        '  读不到电量、数据过期或写入失败时恢复正常充电。尚未在真机上验证，电量是估算值。\n'
+        '  停充状态留在电源芯片里，重启和刷机都不会清除：刷回 0.3.1 或更早的固件之前，先在这里关闭它。\n'
         '  屏幕常亮：设置 → 显示与亮度 → 屏幕常亮；开启后不进入时钟、不调暗、不息屏，夜间亮度上限与屏幕保护仍然生效，手动关屏仍然有效。\n'
         '  外观：设置 → 外观，可选三个主题（薄荷夜色/深海蓝/暖橙）、六种强调色、中文/English、三档文字大小。\n'
         '  设备信息、重启、恢复出厂：设置 → 设备信息。\n'
@@ -110,7 +112,7 @@ def main() -> int:
         '  网页管理台由电脑 Agent 提供，不是 ESP32 自带网页；USB 刷机不会自动完成配对。\n'
         '  音频、Windows/Linux 控制后端、HomeLab/网络 Provider、任意拖拽排版尚未实现。\n\n'
         'Software build verified. The device UI was checked only in an offscreen simulation on a computer.\n'
-        'Screen, touch, power readings, always-on, signed OTA with rollback and long-duration operation\n'
+        'Screen, touch, power readings, charge protection, always-on, signed OTA with rollback and long-duration operation\n'
         'have not been verified on the hardware.\n'
     ).encode('utf-8')
     args.output.parent.mkdir(parents=True, exist_ok=True)
