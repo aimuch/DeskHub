@@ -596,37 +596,45 @@ void build_shell(lv_obj_t *screen) {
     lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(screen, hex(p.ink), 0);
-    const int hh = 62, line2 = 4 + lh(look.caption) + 4;
+    // The corners of the panel are rounded (kCornerR): the first line of the header starts a little lower, and a mark that
+    // still reaches into a corner moves in by just what the curve needs.
+    const int top = 10, hh = 62, line2 = top + lh(look.caption) + 2;
+    const int dot_y = top + (lh(look.caption) - 10) / 2, outline_y = top + (lh(look.caption) - 17) / 2, terminal_y = top + (lh(look.caption) - 8) / 2;
+    const int dot_x = std::max(2, corner_inset(dot_y) - kMargin);
+    const int agent_x = std::max(dot_x + 18, corner_inset(top) - kMargin);       // the status text
+    const int wifi_x = std::max(0, corner_inset(line2) - kMargin);               // the second line, normally clear of the curve
+    const int shift_right = std::max({0, corner_inset(outline_y) - 30, corner_inset(terminal_y) - 26});
+    const int charge_in = std::max(0, corner_inset(line2) - kMargin);
     sh.left = button(screen, on_page, data(static_cast<int>(Page::Connect)), 212, hh);
     lv_obj_set_pos(sh.left, kMargin, 0);
     flat(sh.left);
     sh.agent_dot = dot(sh.left, 10, p.edge, false);
-    lv_obj_set_pos(sh.agent_dot, 2, 4 + (lh(look.caption) - 10) / 2);
-    sh.agent = label_at(sh.left, "", 20, 4, 190, look.caption, p.muted);
+    lv_obj_set_pos(sh.agent_dot, dot_x, dot_y);
+    sh.agent = label_at(sh.left, "", agent_x, top, 210 - agent_x, look.caption, p.muted);
     single_line(sh.agent, lh(look.caption));
-    sh.wifi_icon = label_at(sh.left, LV_SYMBOL_WIFI, 0, line2 + (lh(look.caption) - 14) / 2, 22, &lv_font_montserrat_14, p.muted);
-    sh.wifi = label_at(sh.left, "", 26, line2, 186, look.caption, p.muted);
+    sh.wifi_icon = label_at(sh.left, LV_SYMBOL_WIFI, wifi_x, line2 + (lh(look.caption) - 14) / 2, 22, &lv_font_montserrat_14, p.muted);
+    sh.wifi = label_at(sh.left, "", wifi_x + 26, line2, 212 - 26 - wifi_x, look.caption, p.muted);
     single_line(sh.wifi, lh(look.caption));
     sh.right = button(screen, on_page, data(static_cast<int>(Page::Power)), 212, hh);
     lv_obj_set_pos(sh.right, 244, 0);
     flat(sh.right);
-    sh.battery = label_at(sh.right, "", 0, 4, 168, look.caption, p.muted);
+    sh.battery = label_at(sh.right, "", 0, top, 168 - shift_right, look.caption, p.muted);
     lv_obj_set_style_text_align(sh.battery, LV_TEXT_ALIGN_RIGHT, 0);
     single_line(sh.battery, lh(look.caption));
     sh.outline = panel(sh.right, 32, 17, p.bg, p.muted, 4);
-    lv_obj_set_pos(sh.outline, 174, 4 + (lh(look.caption) - 17) / 2);
+    lv_obj_set_pos(sh.outline, 174 - shift_right, outline_y);
     lv_obj_set_style_bg_opa(sh.outline, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(sh.outline, 2, 0);
     sh.terminal = panel(sh.right, 3, 8, p.muted, p.muted, 1);
     lv_obj_set_style_border_width(sh.terminal, 0, 0);
-    lv_obj_set_pos(sh.terminal, 207, 4 + (lh(look.caption) - 8) / 2);
+    lv_obj_set_pos(sh.terminal, 207 - shift_right, terminal_y);
     sh.fill = holder(sh.outline, 4, 9);
     lv_obj_set_pos(sh.fill, 1, 2);
     lv_obj_set_style_radius(sh.fill, 2, 0);
     lv_obj_set_style_bg_color(sh.fill, hex(p.agent), 0);
     lv_obj_set_style_bg_opa(sh.fill, LV_OPA_COVER, 0);
     lv_obj_add_flag(sh.fill, LV_OBJ_FLAG_HIDDEN);
-    sh.charge = label_at(sh.right, "", 0, line2, 212, look.caption, p.muted);
+    sh.charge = label_at(sh.right, "", 0, line2, 212 - charge_in, look.caption, p.muted);
     lv_obj_set_style_text_align(sh.charge, LV_TEXT_ALIGN_RIGHT, 0);
     single_line(sh.charge, lh(look.caption));
 
@@ -752,8 +760,9 @@ lv_obj_t *build_pairing(lv_obj_t *screen, const PairingInfo &info, int64_t, void
     lv_obj_set_style_bg_opa(root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(root, 0, 0);
     lv_obj_set_pos(root, 0, 0);
-    label_at(root, T(Str::PairingTitle), kMargin, 20, kContentW, look.title, p.accent);
-    label_at(root, T(Str::PairingSub), kMargin, 20 + lh(look.title), kContentW, look.caption, p.muted);
+    const int title_x = std::max(kMargin, corner_inset(20)), sub_x = std::max(kMargin, corner_inset(20 + lh(look.title)));   // rounded corners
+    label_at(root, T(Str::PairingTitle), title_x, 20, kContentW + kMargin - title_x, look.title, p.accent);
+    label_at(root, T(Str::PairingSub), sub_x, 20 + lh(look.title), kContentW + kMargin - sub_x, look.caption, p.muted);
     // The vertical budget is tight in the large text size, so the page is laid out from the font heights.
     const int code_h = 12 + lh(look.caption) + 8 + lh(&lv_font_montserrat_48) + 12;
     const int code_y = 20 + lh(look.title) + lh(look.caption) + 8;

@@ -25,6 +25,8 @@
 //      shell is hidden, cancel calls back, hide restores the normal page. It fits in every theme, language and size.
 //  A14 Protect dialog: dims everything, offers 80 % and 90 %, passes the chosen limit, cancel closes it.
 //  A15 Power page: a control that would do nothing is disabled and explained, never silently inert.
+//  A17 Rounded corners: every text and small mark that sits in one of the four corners of the screen is inside the visible
+//      quarter circle (detail::kCornerR), on every page, theme, language and text size.
 //  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
@@ -343,6 +345,55 @@ static std::vector<uint32_t> codepoints(const std::string &s) {
 
 // ---------------------------------------------------------------- the checks shared by many cases
 // A3: static text must fit. Labels that clip or dot must be wide enough for their text; no label leaves its holder.
+// A17: the panel's corners are rounded. A point in a corner square is visible only if it is inside the quarter circle.
+static bool corner_visible(int x, int y) {
+    const int r = detail::kCornerR;
+    const bool left = x < r, right = x > 479 - r, top = y < r, bottom = y > 479 - r;
+    if (!(left || right) || !(top || bottom)) return true;
+    const int cx = left ? r : 479 - r, cy = top ? r : 479 - r;
+    return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
+}
+static bool body_clips(lv_obj_t *o, const lv_area_t &a) {   // inside the body but outside what it shows: hidden, not cut by a corner
+    auto *body = detail::body_object();
+    for (auto *p = o; p; p = lv_obj_get_parent(p)) {
+        if (p != body) continue;
+        lv_area_t b;
+        lv_obj_get_coords(body, &b);
+        return a.y1 < b.y1 || a.y2 > b.y2;
+    }
+    return false;
+}
+static void check_corners(const std::string &where) {
+    auto all_visible = [&](int x1, int y1, int x2, int y2) {
+        return corner_visible(x1, y1) && corner_visible(x2, y1) && corner_visible(x1, y2) && corner_visible(x2, y2);
+    };
+    for (auto *l : labels()) {   // the rectangle the text really fills, not the label's whole box
+        const std::string text = lv_label_get_text(l);
+        if (text.empty()) continue;
+        lv_area_t a;
+        lv_obj_get_coords(l, &a);
+        if (a.y1 < 0 || a.y2 >= 480) continue;   // scrolled out of the body, clipped there and not by the corner
+        if (lv_obj_get_parent(l) != lv_layer_top() && body_clips(l, a)) continue;
+        lv_point_t size;
+        lv_text_get_size(&size, text.c_str(), lv_obj_get_style_text_font(l, LV_PART_MAIN), lv_obj_get_style_text_letter_space(l, LV_PART_MAIN),
+                         lv_obj_get_style_text_line_space(l, LV_PART_MAIN), lv_obj_get_width(l), LV_TEXT_FLAG_NONE);
+        const int w = std::min<int>(size.x, lv_obj_get_width(l)), align = lv_obj_get_style_text_align(l, LV_PART_MAIN);
+        int x1 = a.x1;
+        if (align == LV_TEXT_ALIGN_RIGHT) x1 = a.x2 - w + 1;
+        else if (align == LV_TEXT_ALIGN_CENTER) x1 = (a.x1 + a.x2 - w) / 2;
+        NOTE(all_visible(x1, a.y1, x1 + w - 1, a.y1 + size.y - 1), where << " cut by a rounded corner: \"" << text << "\" [" << x1 << "," << a.y1 << "," << x1 + w - 1 << "," << a.y1 + size.y - 1 << "]");
+    }
+    for (lv_obj_t *root : {lv_screen_active(), lv_layer_top()})   // small marks: the status dot, the battery outline
+        walk(root, [&](lv_obj_t *o) {
+            if (lv_obj_check_type(o, &lv_label_class) || !shown(o) || lv_obj_has_flag(o, LV_OBJ_FLAG_CLICKABLE)) return;
+            lv_area_t a;
+            lv_obj_get_coords(o, &a);
+            const int w = lv_area_get_width(&a), h = lv_area_get_height(&a);
+            if (w > 40 || h > 20 || a.y1 < 0 || a.y2 >= 480) return;
+            if (lv_obj_get_style_bg_opa(o, LV_PART_MAIN) == LV_OPA_TRANSP && lv_obj_get_style_border_width(o, LV_PART_MAIN) == 0) return;
+            NOTE(all_visible(a.x1, a.y1, a.x2, a.y2), where << " mark cut by a rounded corner [" << a.x1 << "," << a.y1 << "," << a.x2 << "," << a.y2 << "]");
+        });
+}
 static void check_layout(const std::string &where) {
     const auto glyphs = font_glyphs();
     const bool english = detail::look.lang == dh::ui::Lang::EnUS;
@@ -372,6 +423,7 @@ static void check_layout(const std::string &where) {
             else NOTE(glyphs.count(cp) > 0, where << " glyph U+" << std::hex << cp << std::dec << " is not in the font: \"" << text << "\"");
         }
     }
+    check_corners(where);
 }
 // A4: touch areas.
 static void check_targets(const std::string &where) {
@@ -948,8 +1000,9 @@ int main(int argc, char **argv) {
         std::printf("%s %s\n", ok ? "PASS" : "FAIL", c.name);
         if (!ok) {
             ++failed;
-            for (size_t i = 0; i < failures_now.size() && i < 12; ++i) std::printf("    %s\n", failures_now[i].c_str());
-            if (failures_now.size() > 12) std::printf("    ... %zu more\n", failures_now.size() - 12);
+            const size_t shown_max = std::getenv("DESKHUB_PREVIEW_ALL") ? failures_now.size() : 12;   // all of them when asked
+            for (size_t i = 0; i < failures_now.size() && i < shown_max; ++i) std::printf("    %s\n", failures_now[i].c_str());
+            if (failures_now.size() > shown_max) std::printf("    ... %zu more\n", failures_now.size() - shown_max);
         }
         report << (first ? "" : ",\n") << "    {\"name\": \"" << c.name << "\", \"passed\": " << (ok ? "true" : "false") << ", \"failed_checks\": " << failures_now.size() << "}";
         first = false;

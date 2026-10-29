@@ -10,6 +10,7 @@ scripts/mutation/pairing_agent.py      # Agent 端配对：改 agent/src/deskhub
 scripts/mutation/pairing_firmware.py   # 设备端配对：改 firmware/components/pairing/，跑主机上的 pairing_test
 scripts/mutation/charge_firmware.py    # 充电保护的策略：改 firmware/components/charge/，跑 charge_test
 scripts/mutation/charge_ui.py          # 充电保护的界面：改 ui_model.cpp、ui_pages.cpp、ui.cpp，跑 ui_model_test 和界面预览
+scripts/mutation/corners_ui.py          # 屏幕圆角：改 ui_pages.cpp 里避开圆角的位置，跑界面预览里的圆角几何测试
 ```
 
 这些脚本都可以带名字片段，只跑名字里含这些片段的变异：

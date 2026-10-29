@@ -7,6 +7,7 @@
 #include "ui.hpp"
 #include "ui_model.hpp"
 #include <array>
+#include <cmath>
 #include <string>
 
 LV_FONT_DECLARE(btr_ui_16);
@@ -18,6 +19,16 @@ namespace dh::ui::detail {
 enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device };
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
+// The panel has rounded corners (Waveshare does not publish the radius). Text and marks in the four corners must stay
+// inside a quarter circle of this radius, so they are not cut off. One number; make it bigger if a corner still cuts.
+constexpr int kCornerR = 80;
+// How far from the left or right edge of the screen a mark must be if the outer edge of the mark is `from_edge` px from
+// the top (or the bottom) of the screen, so it stays inside the rounded corner. 0 where the corner no longer matters.
+inline int corner_inset(int from_edge) {
+    if (from_edge >= kCornerR) return 0;
+    const int d = kCornerR - (from_edge < 0 ? 0 : from_edge);
+    return kCornerR - static_cast<int>(std::sqrt(static_cast<double>(kCornerR * kCornerR - d * d)));
+}
 constexpr int kBodyTop = 62, kBodyH = 340, kNavTop = 408;
 
 // The look in force: the palette and fonts that follow the Appearance.
