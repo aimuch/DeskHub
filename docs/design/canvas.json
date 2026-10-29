@@ -208,6 +208,13 @@
       "w": 1520,
       "h": 560,
       "title": "设备 · 状态环说明（点圆环）"
+    },
+    "Dev-Sound.dc.html": {
+      "x": 4480,
+      "y": 2760,
+      "w": 2040,
+      "h": 560,
+      "title": "设备 · 声音（设置里多一行、关、开、没有扬声器）"
     }
   },
   "createdOnFiles": {
@@ -285,6 +292,7 @@
     "Dev-Header.dc.html",
     "Dev-Rings.dc.html",
     "Dev-RingInfo.dc.html",
+    "Dev-Sound.dc.html",
     "Web-Overview.dc.html",
     "Web-Devices.dc.html",
     "Web-Actions.dc.html",
