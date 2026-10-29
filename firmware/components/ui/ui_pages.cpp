@@ -27,7 +27,7 @@ struct Shell {
 } sh;
 struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring;
 struct Widgets {
-    lv_obj_t *clock{}, *date{}, *notice{}, *meta{};
+    lv_obj_t *clock{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{};
     lv_obj_t *cpu_gauge{}, *mem_gauge{}, *cpu_value{}, *mem_value{}, *rx{}, *tx{}, *footer{}, *error{};
     lv_obj_t *soc_gauge{}, *soc_value{}, *soc_title{}, *soc_charge{}, *soc_note{}, *strip{};
     lv_obj_t *protect_head{}, *protect_note{}, *protect_button{}, *protect_label{}, *protect_error{};
@@ -165,9 +165,23 @@ void build_home(lv_obj_t *body, const Frame &f) {
         ring.seg[i] = arc_segment(body, d, kStart[i], kStart[i] + kSweep, colors[i], width, LV_OPA_TRANSP);
         lv_obj_set_pos(ring.seg[i], x, 0);
     }
-    auto *hit = button(body, on_page, data(static_cast<int>(Page::Clock)), 176, 124);
+    // One button for the ring and the clock in it, so that no two touch areas overlap: a tap on the clock opens the clock page,
+    // a tap anywhere else on the ring explains the ring. The area is a circle, not its square.
+    auto *ring_hit = button(body, [](lv_event_t *) {
+        lv_point_t at{};
+        lv_indev_get_point(lv_indev_active(), &at);
+        lv_area_t clock{};
+        lv_obj_get_coords(w.clock_hit, &clock);
+        if (at.x >= clock.x1 && at.x <= clock.x2 && at.y >= clock.y1 && at.y <= clock.y2) request_page(Page::Clock);
+        else request_ring_info();
+    }, data(0), d, d);
+    lv_obj_set_pos(ring_hit, x, 0);
+    flat(ring_hit);
+    lv_obj_set_style_radius(ring_hit, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_flag(ring_hit, LV_OBJ_FLAG_ADV_HITTEST);
+    auto *hit = holder(body, 176, 124);   // the place of the clock and the date; it takes no touch of its own
+    w.clock_hit = hit;
     lv_obj_set_pos(hit, (kContentW - 176) / 2, 40);
-    flat(hit);
     w.clock = label_at(hit, "--:--", 0, 22, 176, &lv_font_montserrat_48, P().ink);
     centered(w.clock);
     w.date = label_at(hit, "", 0, 22 + 54 + 6, 176, look.caption, P().muted);
@@ -176,6 +190,10 @@ void build_home(lv_obj_t *body, const Frame &f) {
     w.notice = label_at(body, "", 0, 226, kContentW, look.caption, P().muted);
     centered(w.notice);
     single_line(w.notice, lh(look.caption));
+    w.notice_dot = holder(body, 10, 10);   // in the colour of the dark segment that the line names
+    lv_obj_set_style_radius(w.notice_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(w.notice_dot, LV_OPA_COVER, 0);
+    lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN);
     const auto actions = make_actions(look.lang, f.s);
     const int top = 256, h = 80;
     // With no actions the home page draws nothing in their place: the ring and the header icons already say what is missing.
@@ -185,7 +203,8 @@ void build_home(lv_obj_t *body, const Frame &f) {
         if (i == 0) w.first_action = b;
     }
 }
-std::string notice_for(const Frame &f, Tone &tone) {
+std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
+    ring_line = false;
     tone = Tone::Warn;
     if (!f.s.error.empty()) return dynamic_text(look.lang, f.s.error);
     const std::string &u = f.s.update_state;
@@ -198,16 +217,30 @@ std::string notice_for(const Frame &f, Tone &tone) {
     const std::string n = notice_text(look.lang, f.s.command, f.now_ms, f.command_changed_ms);
     if (!n.empty()) return n;
     if (!f.s.agent_ready && f.s.sampled_ms != 0 && !metrics_fresh(f.s, f.now_ms)) { tone = Tone::Warn; return T(Str::MetricsExpired); }
-    return "";
+    ring_line = true;   // nothing else to say: name the first dark segment, or say where to tap (docs/design Dev-RingInfo)
+    return ring_note(look.lang, make_ring_info(look.lang, f.s, f.power, f.now_ms));
 }
 void refresh_home(const Frame &f) {
     const ClockView c = make_clock(look.lang, f.s.time_valid, f.wall);
     set_text(w.clock, c.hhmm);
     set_text(w.date, c.date);
     Tone tone;
-    const std::string n = notice_for(f, tone);
+    bool ring_line = false;
+    const std::string n = notice_for(f, tone, ring_line);
     set_optional_text(w.notice, n);
     set_ink(w.notice, tone_color(tone));
+    const RingInfoView info = make_ring_info(look.lang, f.s, f.power, f.now_ms);
+    if (w.notice_dot) {
+        const bool dot = ring_line && info.first_problem >= 0 && !n.empty();
+        if (dot) {   // a dot before the words, in the colour of the segment: it is the dark one on the ring
+            const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
+            lv_point_t size{};
+            lv_text_get_size(&size, n.c_str(), look.caption, 0, 0, kContentW, LV_TEXT_FLAG_NONE);
+            lv_obj_set_pos(w.notice_dot, std::max(0, (kContentW - size.x) / 2 - 18), 226 + (lh(look.caption) - 10) / 2);
+            lv_obj_set_style_bg_color(w.notice_dot, hex(colors[info.first_problem]), 0);
+        }
+        if (lv_obj_has_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN) == dot) { if (dot) lv_obj_remove_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); }
+    }
     const RingView r = make_ring(f.s, f.power, f.now_ms);
     const bool lit[4] = {r.wifi, r.agent, r.power, r.time};
     for (size_t i = 0; i < 4; ++i) {
@@ -909,6 +942,80 @@ lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int), void (*
     return dimmer;
 }
 
+// The ring explained (docs/design Dev-RingInfo): one row per segment, in the colour of the segment.
+static lv_obj_t *g_ring_sheet = nullptr, *g_ring_dots[4] = {nullptr, nullptr, nullptr, nullptr};
+bool ring_info_open() { return g_ring_sheet && lv_obj_is_valid(g_ring_sheet) && !lv_obj_has_flag(g_ring_sheet, LV_OBJ_FLAG_HIDDEN); }
+static void close_ring_sheet() {
+    static void (*closed)() = nullptr;
+    (void)closed;
+    if (!ring_info_open()) return;
+    auto *d = g_ring_sheet;
+    g_ring_sheet = nullptr;
+    lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_delete_async(d);
+}
+lv_obj_t *build_ring_info(lv_obj_t *layer, const RingInfoView &v, void (*on_close)()) {
+    const Palette &p = P();
+    static void (*closed)() = nullptr;
+    closed = on_close;
+    if (ring_info_open()) close_ring_sheet();
+    auto *dimmer = lv_obj_create(layer);
+    g_ring_sheet = dimmer;
+    lv_obj_remove_style_all(dimmer);
+    lv_obj_set_size(dimmer, kScreen, kScreen);
+    lv_obj_set_pos(dimmer, 0, 0);
+    lv_obj_set_style_bg_color(dimmer, hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(dimmer, LV_OPA_60, 0);
+    lv_obj_add_flag(dimmer, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(dimmer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(dimmer, [](lv_event_t *e) {
+        if (lv_event_get_target(e) != lv_event_get_current_target(e)) return;   // a tap on the sheet itself stays on the sheet
+        close_ring_sheet();
+        if (closed) closed();
+    }, LV_EVENT_CLICKED, nullptr);
+    auto *box = panel(dimmer, 408, LV_SIZE_CONTENT, p.card, p.edge, 28);
+    lv_obj_set_pos(box, 36, 40);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(box, 20, 0);
+    lv_obj_set_style_pad_row(box, 6, 0);
+    lv_obj_set_style_max_height(box, kScreen - 48, 0);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);   // a tap on the sheet stays on the sheet; only the space around it closes it
+    label(box, T(Str::RingTitle), 360, look.body, p.ink);
+    label(box, T(Str::RingLegend), 360, look.caption, p.muted);
+    const uint32_t colors[4] = {p.wifi, p.agent, p.power, p.clock};
+    for (int i = 0; i < 4; ++i) {
+        const RingRow &r = v.row[i];
+        if (i > 0) {
+            auto *line = holder(box, 360, 1);
+            lv_obj_set_style_bg_color(line, hex(p.edge), 0);
+            lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
+        }
+        auto *row = holder(box, 360, lh(look.caption) * 2 + 8);
+        auto *dot = holder(row, 18, 18);   // filled in the colour of its segment when it is lit, an empty ring when it is dark
+        lv_obj_set_pos(dot, 0, 4);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(dot, hex(colors[i]), 0);
+        lv_obj_set_style_bg_opa(dot, r.ok ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+        g_ring_dots[i] = dot;
+        lv_obj_set_style_border_width(dot, r.ok ? 0 : 2, 0);
+        lv_obj_set_style_border_color(dot, hex(p.muted), 0);
+        label_at(row, r.name, 34, 0, 150, look.caption, p.ink);
+        auto *state = label_at(row, r.state, 34, 0, 326, look.caption, r.ok ? colors[i] : p.muted);
+        lv_obj_set_style_text_align(state, LV_TEXT_ALIGN_RIGHT, 0);
+        auto *note = label_at(row, r.note, 34, lh(look.caption) + 4, 326, look.caption, p.muted);
+        single_line(note, lh(look.caption));
+    }
+    auto *b = button(box, [](lv_event_t *) {
+        close_ring_sheet();
+        if (closed) closed();
+    }, data(0), 360, 56);
+    lv_obj_set_style_radius(b, 28, 0);
+    auto *l = label(b, T(Str::Close), 356, look.body, p.ink);
+    centered(l);
+    lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    return dimmer;
+}
+
 // ---------------------------------------------------------------- test hooks
 int header_fill_width() { return sh.fill && !lv_obj_has_flag(sh.fill, LV_OBJ_FLAG_HIDDEN) ? lv_obj_get_width(sh.fill) : 0; }
 static bool visible(lv_obj_t *o) { return o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN); }
@@ -921,6 +1028,8 @@ bool header_battery_body(int *x1, int *y1, int *x2, int *y2) {
 }
 std::string header_battery_text() { return visible(sh.digits) ? lv_label_get_text(sh.digits) : ""; }
 bool header_bolt_shown() { return visible(sh.bolt); }
+bool ring_info_dot_filled(int i) { return ring_info_open() && i >= 0 && i < 4 && g_ring_dots[i] && lv_obj_get_style_bg_opa(g_ring_dots[i], LV_PART_MAIN) == LV_OPA_COVER; }
+bool notice_dot_shown() { return visible(w.notice_dot); }
 bool header_usb_shown() { return visible(sh.usb); }
 bool header_slashed(int which) { return visible(which == 0 ? sh.wifi_cut[1] : which == 1 ? sh.pc_cut[1] : which == 2 ? sh.bat_cut[1] : nullptr); }
 int header_icon_opa(int which) { return which == 0 && sh.wifi ? lv_obj_get_style_text_opa(sh.wifi, LV_PART_MAIN) : 255; }

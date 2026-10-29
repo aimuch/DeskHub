@@ -191,6 +191,35 @@ RingView make_ring(const Snapshot &s, const PowerState &p, int64_t now_ms) {
     return r;
 }
 
+RingInfoView make_ring_info(Lang l, const Snapshot &s, const PowerState &p, int64_t now_ms) {
+    const RingView r = make_ring(s, p, now_ms);
+    RingInfoView v;
+    auto set = [&](int i, Str name, bool ok, const std::string &good_state, Str good_note, const std::string &bad_state, const std::string &bad_note) {
+        v.row[i] = RingRow{T(l, name), ok ? good_state : bad_state, ok ? T(l, good_note) : bad_note, ok};
+    };
+    set(0, Str::RingNetwork, r.wifi, T(l, Str::ValueConnected), Str::RingNoteWifi, T(l, Str::RingNotConnected), wifi_text(l, wifi_kind(s)));
+    const std::string agent_why = !s.wifi_ready ? T(l, Str::RingNoteNeedWifi) : contains(s.agent, "未配对") ? T(l, Str::ValueNotPaired) : T(l, Str::ValueNotConnected);
+    set(1, Str::RingComputer, r.agent, T(l, Str::ValueConnected), Str::RingNoteAgent, T(l, Str::RingNotConnected), agent_why);
+    v.power_fault = !r.power && power_fresh(p, now_ms) && p.fault;
+    set(2, Str::RingPower, r.power, T(l, Str::RingNormal), Str::RingNotePower, v.power_fault ? T(l, Str::RingFault) : T(l, Str::RingNoReading),
+        v.power_fault ? T(l, Str::RingNoteFault) : T(l, Str::RingNoteNoPower));
+    set(3, Str::RingTime, r.time, T(l, Str::RingValid), Str::RingNoteTime, T(l, Str::RingNotSet), T(l, Str::RingNoteTimeFix));
+    for (int i = 0; i < 4; ++i) {
+        if (!v.row[i].ok) { v.first_problem = i; break; }
+    }
+    return v;
+}
+std::string ring_note(Lang l, const RingInfoView &v) {
+    switch (v.first_problem) {
+    case 0: return T(l, Str::RingProblemWifi);
+    case 1: return T(l, Str::RingProblemAgent);
+    case 2: return T(l, v.power_fault ? Str::RingNoteFault : Str::RingProblemPower);
+    case 3: return T(l, Str::RingProblemTime);
+    default: break;
+    }
+    return T(l, Str::RingHint);
+}
+
 // ---- clock ----
 ClockView make_clock(Lang l, bool time_valid, time_t utc_now) {
     ClockView c;

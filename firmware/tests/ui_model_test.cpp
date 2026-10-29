@@ -710,6 +710,85 @@ static void t18_notice() {
     CHECK_EQ(notice_text(Lang::ZhCN, "已接收，等待执行", NOW, NOW + 5), std::string(""));  // time must not run backwards
 }
 
+// ---- T21: the ring, explained (docs/design Dev-RingInfo) ----
+// Failure modes: a row that says "fine" for a segment that is dark; a reason that is made up (the Wi-Fi and pairing words come
+// from what the device knows, the power words from the sample); a power fault read as "no reading"; the order of the rows
+// not the order of the ring (Wi-Fi, computer, power, time); the line under the ring naming the wrong segment, or naming
+// one when all four are lit; a missing English text; any row without a name, a state and a note.
+static void t21_ring_info() {
+    const Snapshot s = online_snapshot();
+    for (Lang l : {Lang::ZhCN, Lang::EnUS}) {
+        RingInfoView v = make_ring_info(l, s, fresh_power(), NOW);
+        CHECK_EQ(v.first_problem, -1);
+        for (const RingRow &r : v.row) CHECK(r.ok && !r.name.empty() && !r.state.empty() && !r.note.empty());
+        CHECK_EQ(ring_note(l, v), tr(l, Str::RingHint));
+    }
+    const RingInfoView ok = make_ring_info(Lang::ZhCN, s, fresh_power(), NOW);
+    CHECK_EQ(ok.row[0].name, "网络"); CHECK_EQ(ok.row[1].name, "电脑"); CHECK_EQ(ok.row[2].name, "电源"); CHECK_EQ(ok.row[3].name, "时间");
+    CHECK_EQ(ok.row[0].state, "已连接"); CHECK_EQ(ok.row[1].state, "已连接"); CHECK_EQ(ok.row[2].state, "正常"); CHECK_EQ(ok.row[3].state, "有效");
+    CHECK_EQ(ring_note(Lang::ZhCN, ok), "点圆环看说明");
+    // Every segment on its own, and the ring agrees: a row is dark exactly when make_ring says the segment is dark.
+    struct Case { int segment; const char *name; const char *state; const char *note; const char *line; };
+    const Case cases[] = {{0, "网络", "没连上", nullptr, "网络没连上"}, {1, "电脑", "没连上", nullptr, "电脑没连上"},
+                          {2, "电源", "无读数", "还没有新的电源读数", "电源没有读数"}, {3, "时间", "未校准", "请用 USB 校时", "时间没校准"}};
+    for (const Case &c : cases) {
+        Snapshot w = s; PowerState p = fresh_power();
+        if (c.segment == 0) { w.wifi_ready = false; w.wifi = "未配置"; }
+        if (c.segment == 1) { w.agent_ready = false; }
+        if (c.segment == 2) p.observed_ms = NOW - 7000;
+        if (c.segment == 3) w.time_valid = false;
+        const RingInfoView v = make_ring_info(Lang::ZhCN, w, p, NOW);
+        const RingView r = make_ring(w, p, NOW);
+        const bool lit[4] = {r.wifi, r.agent, r.power, r.time};
+        for (int i = 0; i < 4; ++i) CHECK_EQ(v.row[i].ok, lit[i]);
+        CHECK_EQ(v.first_problem, c.segment);
+        CHECK_EQ(v.row[c.segment].name, c.name); CHECK_EQ(v.row[c.segment].state, c.state);
+        if (c.note) CHECK_EQ(v.row[c.segment].note, c.note);
+        CHECK_EQ(ring_note(Lang::ZhCN, v), c.line);
+        CHECK(!ring_note(Lang::EnUS, make_ring_info(Lang::EnUS, w, p, NOW)).empty());
+        CHECK(ring_note(Lang::EnUS, make_ring_info(Lang::EnUS, w, p, NOW)) != ring_note(Lang::ZhCN, v));
+    }
+    // The reasons that come from the device. Wi-Fi: what the core reports. Computer: first the Wi-Fi it needs, then the pairing.
+    Snapshot w = s; w.wifi_ready = false; w.agent_ready = false; w.wifi = "Wi-Fi密码错误";
+    RingInfoView v = make_ring_info(Lang::ZhCN, w, fresh_power(), NOW);
+    CHECK_EQ(v.row[0].note, "连接异常");
+    CHECK_EQ(v.row[1].note, "要先连上 Wi-Fi");
+    CHECK_EQ(v.first_problem, 0);                               // the first dark segment of the ring is the one named
+    w.wifi = "正在连接Wi-Fi"; CHECK_EQ(make_ring_info(Lang::ZhCN, w, fresh_power(), NOW).row[0].note, "正在连接");
+    w = s; w.agent_ready = false; w.agent = "未配对";
+    CHECK_EQ(make_ring_info(Lang::ZhCN, w, fresh_power(), NOW).row[1].note, "未配对");
+    w = s; w.agent_ready = false; w.agent = "AGENT_UNREACHABLE";
+    CHECK_EQ(make_ring_info(Lang::ZhCN, w, fresh_power(), NOW).row[1].note, "未连接");
+    // A power fault is a fault, not a missing reading; an old sample is a missing reading, not a fault.
+    PowerState p = fresh_power(); p.fault = true;
+    v = make_ring_info(Lang::ZhCN, s, p, NOW);
+    CHECK(!v.row[2].ok); CHECK_EQ(v.row[2].state, "故障"); CHECK_EQ(v.row[2].note, "电源有故障");
+    CHECK_EQ(ring_note(Lang::ZhCN, v), "电源有故障");              // the line says fault, not "no reading"
+    CHECK_EQ(v.first_problem, 2);
+    p = fresh_power(); p.fault = true; p.observed_ms = NOW - 7000;
+    v = make_ring_info(Lang::ZhCN, s, p, NOW);
+    CHECK_EQ(v.row[2].state, "无读数");
+    // Several at once: all of them are dark, the line names the first.
+    w = s; w.wifi_ready = false; w.time_valid = false; w.agent_ready = false;
+    v = make_ring_info(Lang::ZhCN, w, fresh_power(), NOW);
+    CHECK(!v.row[0].ok && !v.row[1].ok && v.row[2].ok && !v.row[3].ok);
+    CHECK_EQ(ring_note(Lang::ZhCN, v), "网络没连上");
+    // No text is empty in either language, for any combination of the four.
+    for (int mask = 0; mask < 16; ++mask) {
+        Snapshot c = s; PowerState q = fresh_power();
+        if (mask & 1) c.wifi_ready = false;
+        if (mask & 2) c.agent_ready = false;
+        if (mask & 4) q.observed_ms = NOW - 7000;
+        if (mask & 8) c.time_valid = false;
+        for (Lang l : {Lang::ZhCN, Lang::EnUS}) {
+            const RingInfoView x = make_ring_info(l, c, q, NOW);
+            for (const RingRow &r : x.row) CHECK(!r.name.empty() && !r.state.empty() && !r.note.empty());
+            CHECK_EQ(x.first_problem == -1, mask == 0);
+            CHECK(!ring_note(l, x).empty());
+        }
+    }
+}
+
 // ---- T20: the digits in the battery icon stay readable; the ring tiers ----
 static void t20_battery_fill_and_rings() {
     CHECK_EQ(blend(0xffffff, 0x000000, 50), 0x808080u);      // half way, rounded half up
@@ -859,6 +938,7 @@ int main() {
     t19_charge_view();
     t10b_blink();
     t20_battery_fill_and_rings();
+    t21_ring_info();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

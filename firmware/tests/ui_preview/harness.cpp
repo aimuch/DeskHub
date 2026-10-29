@@ -30,6 +30,9 @@
 //  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
 //      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
 //  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
+//  A24 The ring is explained (docs/design Dev-RingInfo): the line under it says "tap the ring" or names the first dark segment;
+//      a tap on the ring opens a sheet with one row per segment; "close", or a tap outside the sheet, closes it; the clock in
+//      the middle still opens the clock page; another note under the ring (a command, an error) has priority over the line.
 //  A23 No "set up network and pairing" card: with no actions, the home page draws nothing in their place and the Actions
 //      page says there are none in one line of text. The header icons and the Connect page already say what is missing.
 //  A22 While the pairing page is shown the screen stays awake: the person has to read the code and the hotspot password,
@@ -1087,6 +1090,61 @@ static void case_no_setup_card() {   // A23
         check_layout("no-actions"); check_targets("no-actions");
     }
 }
+static void case_ring_info() {   // A24
+    fresh(); step(); step();
+    EXPECT(has("点圆环看说明") && !detail::ring_info_open());
+    tap(240, 150); EXPECT(detail::current_page() == Page::Clock);              // the clock in the middle is unchanged
+    fresh(); step(); step();
+    EXPECT(!detail::notice_dot_shown());                                         // the hint has no dot
+    tap(142, 170); step();                                                       // on the ring, outside the clock
+    EXPECT(detail::ring_info_open() && detail::ring_info_dot_filled(0) && detail::ring_info_dot_filled(1) && detail::ring_info_dot_filled(2) && detail::ring_info_dot_filled(3));
+    EXPECT(has("状态环") && has("网络") && has("电脑") && has("电源") && has("时间") && has("关闭"));
+    EXPECT(has("设备连上了 Wi-Fi") && has("设备能和电脑上的 Agent 通话") && has("读数是新的，没有故障") && has("时间已校准"));
+    check_layout("ring-info"); save_png_source("state-ring-info");
+    EXPECT(click_text("关闭")); step();
+    EXPECT(!detail::ring_info_open() && !has("状态环"));
+    tap(142, 170); step(); EXPECT(detail::ring_info_open());
+    tap(240, 90); step(); EXPECT(detail::ring_info_open());                      // a tap on the sheet itself does not close it
+    tap(240, 470); step(); EXPECT(!detail::ring_info_open());                    // a tap outside the sheet closes it
+    // A dark segment is named under the ring and explained in the sheet.
+    fresh(); mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; step(); step();
+    EXPECT(has("电脑没连上") && !has("点圆环看说明") && detail::notice_dot_shown());   // the dot is the colour of the dark segment
+    tap(142, 170); step();
+    EXPECT(detail::ring_info_open() && has("没连上") && has("未配对") && has("已连接"));
+    {   // the rows are in the order of the ring, each with its own state, and its dot is filled only when its segment is lit
+        auto y = [](const std::string &t) {   // the highest label with this text: the navigation bar has a "电脑" of its own, lower down
+            int best = 100000;
+            std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
+                if (lv_obj_check_type(o, &lv_label_class) && t == lv_label_get_text(o)) { lv_area_t a{}; lv_obj_get_coords(o, &a); best = std::min<int>(best, a.y1); }
+                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, i));
+            };
+            walk(detail::screen_object());
+            return best;
+        };
+        EXPECT(y("网络") < y("电脑") && y("电脑") < y("电源") && y("电源") < y("时间"));
+        EXPECT(std::abs(y("已连接") - y("网络")) < 6 && std::abs(y("没连上") - y("电脑")) < 6 && std::abs(y("正常") - y("电源")) < 6 && std::abs(y("有效") - y("时间")) < 6);
+        EXPECT(y("设备连上了 Wi-Fi") > y("网络") && y("设备连上了 Wi-Fi") < y("电脑") && y("未配对") > y("电脑") && y("未配对") < y("电源"));
+        EXPECT(detail::ring_info_dot_filled(0) && !detail::ring_info_dot_filled(1) && detail::ring_info_dot_filled(2) && detail::ring_info_dot_filled(3));
+    }
+    check_layout("ring-info-problem"); save_png_source("state-ring-info-problem");
+    EXPECT(click_text("关闭")); step();
+    // Another note has priority over the line under the ring.
+    mock_snapshot.command = "已接收，等待执行"; step();
+    EXPECT(has("已接收，等待执行") && !has("电脑没连上") && !detail::notice_dot_shown());   // another note has no dot
+    // Wi-Fi down names the network, and the computer row says it needs Wi-Fi first.
+    fresh(); mock_snapshot.wifi_ready = false; mock_snapshot.agent_ready = false; mock_snapshot.wifi = "未配置"; step(); step();
+    EXPECT(has("网络没连上"));
+    tap(142, 170); step();
+    EXPECT(has("未配置网络") && has("要先连上 Wi-Fi"));
+    EXPECT(click_text("关闭")); step();
+    // English.
+    fresh("mint|-|en-US|standard|pct|standard"); step(); step();
+    EXPECT(has("Tap the ring for details"));
+    tap(142, 170); step();
+    EXPECT(has("Status ring") && has("Network") && has("Computer") && has("Close"));
+    EXPECT(click_text("Close")); step();
+    EXPECT(!detail::ring_info_open());
+}
 static void case_screenshots() {
     if (out_dir.empty()) return;
     for (const char *theme : {"mint", "ocean", "amber"}) {
@@ -1135,7 +1193,7 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

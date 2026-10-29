@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 状态环说明</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} width: 1520px; height: 560px; display: flex; gap: 40px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: var(--ink)">
+
+  <div style="width: 480px; flex: none">
+    <div style="width: 480px; height: 480px; overflow: hidden"><dc-import name="Dev-Home" theme="{{theme}}" note="problem" hint-size="480px,480px"></dc-import></div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">① 首页。圆环下面那一行：没有别的话要说时写“点圆环看说明”；某一段暗了，就写它的名字（电脑没连上），前面的点是那一段的颜色。点圆环的任何地方，打开说明。点中间的时钟还是进时钟页。</div>
+  </div>
+
+  <div style="width: 480px; flex: none">
+    <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+      <svg width="216" height="216" viewBox="0 0 216 216" style="position: absolute; left: 132px; top: 62px; opacity: 0.4"><circle cx="108" cy="108" r="98" fill="none" stroke-width="20" style="stroke: var(--track)"></circle><g fill="none" stroke-linecap="round" stroke-width="20"><path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path><path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent)"></path><path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path><path d="M11.0 94.4 A98 98 0 0 1 94.4 11.0" style="stroke: var(--time)"></path></g></svg>
+      <div style="position: absolute; left: 0; top: 0; width: 480px; height: 480px; background: rgba(0, 0, 0, 0.55)"></div>
+      <div style="position: absolute; left: 36px; top: 40px; width: 408px; box-sizing: border-box; padding: 20px 24px 20px; border-radius: 28px; border: 1px solid var(--edge); background: var(--card); box-shadow: 0 12px 40px rgba(0,0,0,0.5)">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 26px; font-weight: 500">状态环</span><span style="font-size: 14px; color: var(--muted)">亮：正常　暗：没有数据或有问题</span></div>
+        <div style="margin-top: 10px">
+          <sc-for list="{{okRows}}" as="r" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 14px; height: 56px; border-top: 1px solid var(--edge)">
+              <span style="width: 18px; height: 18px; flex: none; border-radius: 50%; box-sizing: border-box; background: {{r.fill}}; border: {{r.border}}; box-shadow: {{r.glow}}"></span>
+              <div style="flex: 1 1 0; min-width: 0">
+                <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 21px; font-weight: 500">{{r.name}}</span><span style="font-size: 19px; color: {{r.stateInk}}">{{r.state}}</span></div>
+                <div style="font-size: 14px; color: var(--muted)">{{r.note}}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top: 12px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500">关闭</div>
+      </div>
+    </div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">② 说明页，四段都正常。每一行：这一段的颜色、名字、现在的状态，和它是什么意思。点说明页以外的地方，或点“关闭”，回到首页。</div>
+  </div>
+
+  <div style="width: 480px; flex: none">
+    <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+      <svg width="216" height="216" viewBox="0 0 216 216" style="position: absolute; left: 132px; top: 62px; opacity: 0.4"><circle cx="108" cy="108" r="98" fill="none" stroke-width="20" style="stroke: var(--track)"></circle><g fill="none" stroke-linecap="round" stroke-width="20"><path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path><path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path></g></svg>
+      <div style="position: absolute; left: 0; top: 0; width: 480px; height: 480px; background: rgba(0, 0, 0, 0.55)"></div>
+      <div style="position: absolute; left: 36px; top: 40px; width: 408px; box-sizing: border-box; padding: 20px 24px 20px; border-radius: 28px; border: 1px solid var(--edge); background: var(--card); box-shadow: 0 12px 40px rgba(0,0,0,0.5)">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 26px; font-weight: 500">状态环</span><span style="font-size: 14px; color: var(--muted)">亮：正常　暗：没有数据或有问题</span></div>
+        <div style="margin-top: 10px">
+          <sc-for list="{{badRows}}" as="r" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 14px; height: 56px; border-top: 1px solid var(--edge)">
+              <span style="width: 18px; height: 18px; flex: none; border-radius: 50%; box-sizing: border-box; background: {{r.fill}}; border: {{r.border}}; box-shadow: {{r.glow}}"></span>
+              <div style="flex: 1 1 0; min-width: 0">
+                <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 21px; font-weight: 500">{{r.name}}</span><span style="font-size: 19px; color: {{r.stateInk}}">{{r.state}}</span></div>
+                <div style="font-size: 14px; color: var(--muted)">{{r.note}}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top: 12px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500">关闭</div>
+      </div>
+    </div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">③ 说明页，有问题。暗的那一行点是空心的，状态写原因：网络和电脑写设备自己知道的原因（密码错误、没配对），电源写没有新的读数，时间写怎么办。</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":1520,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    const theme = this.props.theme || 'mint';
+    const rows = (list) => list.map((r) => ({
+      name: r.name, state: r.state, note: r.note,
+      fill: r.ok ? 'var(--' + r.v + ')' : 'transparent',
+      border: r.ok ? '0' : '2px solid var(--muted)',
+      glow: r.ok ? '0 0 10px var(--' + r.v + ')' : 'none',
+      stateInk: r.ok ? 'var(--' + r.v + ')' : 'var(--muted)'
+    }));
+    return {
+      vars: T[theme] || T.mint,
+      theme,
+      okRows: rows([
+        { name: '网络', state: '已连接', note: '设备连上了 Wi-Fi', v: 'wifi', ok: true },
+        { name: '电脑', state: '已连接', note: '设备能和电脑上的 Agent 通话', v: 'agent', ok: true },
+        { name: '电源', state: '正常', note: '读数是新的，没有故障', v: 'power', ok: true },
+        { name: '时间', state: '有效', note: '时间已校准', v: 'time', ok: true }
+      ]),
+      badRows: rows([
+        { name: '网络', state: '已连接', note: '设备连上了 Wi-Fi', v: 'wifi', ok: true },
+        { name: '电脑', state: '没连上', note: '未配对', v: 'agent', ok: false },
+        { name: '电源', state: '无读数', note: '还没有新的电源读数', v: 'power', ok: false },
+        { name: '时间', state: '未校准', note: '请用 USB 校时', v: 'time', ok: true }
+      ].map((r, i) => (i === 3 ? { ...r, state: '未校准', note: '请用 USB 校时', ok: false } : r)))
+    };
+  }
+}
+</script>
+</body>
+</html>

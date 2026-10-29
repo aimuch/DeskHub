@@ -201,6 +201,13 @@
       "w": 1360,
       "h": 620,
       "title": "设备 · 圆环粗细（细、标准、粗）"
+    },
+    "Dev-RingInfo.dc.html": {
+      "x": 4480,
+      "y": 2040,
+      "w": 1520,
+      "h": 560,
+      "title": "设备 · 状态环说明（点圆环）"
     }
   },
   "createdOnFiles": {
@@ -277,6 +284,7 @@
     "Dev-Protect.dc.html",
     "Dev-Header.dc.html",
     "Dev-Rings.dc.html",
+    "Dev-RingInfo.dc.html",
     "Web-Overview.dc.html",
     "Web-Devices.dc.html",
     "Web-Actions.dc.html",

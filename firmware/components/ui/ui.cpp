@@ -278,6 +278,12 @@ void protect_confirm(int limit) {
     request_update();
 }
 void protect_cancel() { request_update(); }
+// A tap on the ring: the sheet that says what each of the four segments means and why one is dark (docs/design Dev-RingInfo).
+void request_ring_info() {
+    note_activity();
+    if (ring_info_open()) return;
+    build_ring_info(screen, make_ring_info(look.lang, snapshot(), board_power(), monotonic_ms()), [] { request_update(); });
+}
 void request_protect_toggle() {
     note_activity();
     const charge::Status now = charge::status();

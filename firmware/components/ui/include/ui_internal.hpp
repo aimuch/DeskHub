@@ -95,6 +95,11 @@ lv_obj_t *build_pairing(lv_obj_t *screen, const PairingInfo &, int64_t deadline_
 void refresh_pairing(const PairingInfo &, int64_t deadline_ms, int64_t now_ms);
 // The dialog of Dev-Protect: opened by request_protect_toggle() when protection is off.
 lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int limit), void (*on_cancel)());
+// The sheet of Dev-RingInfo: opened by a tap on the ring, closed by its button or a tap outside it.
+lv_obj_t *build_ring_info(lv_obj_t *layer, const RingInfoView &, void (*on_close)());
+bool ring_info_open();
+bool ring_info_dot_filled(int row);   // the dot of a row of the open sheet is filled (the segment is lit)
+bool notice_dot_shown();             // the dot before the line under the ring
 int body_scroll_y();
 void remember_scroll(int y);
 
@@ -103,6 +108,7 @@ void request_page(Page);
 void request_power_tab(PowerTab);
 void request_update();
 void request_protect_toggle();       // the button of the Protect tab: off opens the dialog, on turns it off
+void request_ring_info();            // a tap on the ring of the home page
 void note_activity();
 void user_screen_off();
 void schedule_brightness(int percent);

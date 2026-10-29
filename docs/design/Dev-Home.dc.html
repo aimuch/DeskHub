@@ -24,13 +24,13 @@ body{margin:0}
     <circle cx="108" cy="108" r="98" fill="none" stroke-width="20" style="stroke: var(--track)"></circle>
     <g fill="none" stroke-linecap="round" stroke-width="26" opacity="0.35" filter="url(#glow)">
       <path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path>
-      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent)"></path>
+      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent); opacity: {{agentOp}}"></path>
       <path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path>
       <path d="M11.0 94.4 A98 98 0 0 1 94.4 11.0" style="stroke: var(--time)"></path>
     </g>
     <g fill="none" stroke-linecap="round" stroke-width="20">
       <path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path>
-      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent)"></path>
+      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent); opacity: {{agentOp}}"></path>
       <path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path>
       <path d="M11.0 94.4 A98 98 0 0 1 94.4 11.0" style="stroke: var(--time)"></path>
     </g>
@@ -40,7 +40,7 @@ body{margin:0}
     <div style="margin-top: 14px; font-size: 17px; color: var(--muted)">10月28日 星期三</div>
   </div>
 
-  <div style="position: absolute; left: 24px; top: 288px; width: 432px; text-align: center; font-size: 16px; color: var(--muted)">命令已发送，状态未确认</div>
+  <div style="position: absolute; left: 24px; top: 288px; width: 432px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; color: var(--muted)"><span style="{{noteDot}}"></span><span>{{noteText}}</span></div>
 
   <div style="position: absolute; left: 24px; top: 318px; width: 210px; height: 80px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-radius: 24px; border: 1.5px solid var(--accent); background: var(--sel)">
     <span style="font-size: 22px">切到 Mac</span><span style="width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent)"></span>
@@ -57,7 +57,7 @@ body{margin:0}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":480,"height":480}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"note":{"editor":"enum","default":"command","options":["command","hint","problem"]},"$preview":{"width":480,"height":480}}'>
 class Component extends DCLogic {
   renderVals() {
     const T = {
@@ -67,8 +67,14 @@ class Component extends DCLogic {
     };
     const names = ['总览', '动作', '电脑', '设置'];
     const active = 0;
+    const note = this.props.note || 'command';
+    // The line under the ring: a note about the last command; else, when nothing else is said, where to tap; else the first dim segment, named.
+    const texts = { command: '命令已发送，状态未确认', hint: '点圆环看说明', problem: '电脑没连上' };
     return {
       vars: T[this.props.theme] || T.mint,
+      noteText: texts[note] || texts.command,
+      noteDot: note === 'problem' ? 'width: 10px; height: 10px; border-radius: 50%; background: var(--agent); box-shadow: 0 0 10px var(--agent)' : 'display: none',
+      agentOp: note === 'problem' ? '0.22' : '1',
       tabs: names.map((label, i) => ({
         label,
         bg: i === active ? 'var(--sel)' : 'transparent',

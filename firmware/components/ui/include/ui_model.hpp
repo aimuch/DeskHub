@@ -62,6 +62,13 @@ bool blink_on(int64_t now_ms);
 // The four ring segments: a lit segment means that channel is healthy.
 struct RingView { bool wifi = false, agent = false, power = false, time = false; };
 RingView make_ring(const Snapshot &, const PowerState &, int64_t now_ms);
+// The ring explained (docs/design Dev-RingInfo). One row per segment in the order of the ring: Wi-Fi, computer, power, time.
+// A row is dark exactly when make_ring says the segment is dark. The reasons are what the device knows; none is invented.
+struct RingRow { std::string name, state, note; bool ok = false; };
+struct RingInfoView { std::array<RingRow, 4> row; int first_problem = -1; bool power_fault = false; };
+RingInfoView make_ring_info(Lang, const Snapshot &, const PowerState &, int64_t now_ms);
+// The line under the ring: the first dark segment by name, else where to tap.
+std::string ring_note(Lang, const RingInfoView &);
 
 // ---- clock ----
 struct ClockView { bool valid = false; std::string hhmm = "--:--", seconds, date; };
