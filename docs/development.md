@@ -89,7 +89,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 设备端的接线做完了（2026-10-29）：热点、配网页、TLS 兑换、保存路径、按键，`firmware/components/pairing_device/`；能在主机上测的部分在 `pairing_glue`（测试 `pairing_glue_test`，变异检查 46 处全部报红）。K1 复审在 [配对接口设计](pairing-design.md) 第 13 节。固件完整构建通过。**没有在真机上验证任何一步**：按键引脚（GPIO0）没有核对原理图，热点与 Wi-Fi 同信道、堆内存、手机能否打开配网页都要看真机。USB 状态的 `pairing` 对象（`tools/provision.py --status`）用来读它做到哪一步。
 - 有：管理员密码登录（R8，`admin_auth.py`：scrypt、锁定、命令行重置，40 条测试，64 处变异全部报红）和网页管理台（`agent/src/deskhub_agent/web/`，九个页面）。管理台用真实的 Agent 加真实的 Chrome 走过整套流程（`scripts/e2e/console.e2e.mjs`，62 项通过，证据在 `docs/evidence/console-e2e/`）；没有接真实设备和显示器。
 - 没有：声音（N2 要先确认扬声器是否接在板上）；网页上开关充电保护（设备的上报里没有这一项）。
-- 固件版本 0.3.5（2026-10-29）：已构建（0 个警告）并打成 USB 刷机包，包在 （不在 git 里），离线校验通过。比 0.3.4 多：电池数字居中、设备端热点配网接线（没有真机验证）、配网时屏幕不熄灭、首页没有动作时不画设置卡片、USB 状态的 pairing 对象。**还没有刷到任何设备**。不生成签名 OTA 包。记录在 [docs/evidence/firmware-0.3.5.json](evidence/firmware-0.3.5.json)。
+- 固件版本 0.3.5（2026-10-29）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.4 多：电池数字居中、设备端热点配网接线（没有真机验证）、配网时屏幕不熄灭、首页没有动作时不画设置卡片、USB 状态的 pairing 对象。**还没有刷到任何设备**。不生成签名 OTA 包。记录在 [docs/evidence/firmware-0.3.5.json](evidence/firmware-0.3.5.json)。
 - 上一个版本 0.3.4（图标顶栏、电池里写百分比、圆环粗细可调、没有“实验功能”字样）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**。不生成签名 OTA 包（你决定不需要）。哈希和做过的检查记在 [docs/evidence/firmware-0.3.4.json](evidence/firmware-0.3.4.json)。上一个版本 0.3.3 的记录在 [docs/evidence/firmware-0.3.3.json](evidence/firmware-0.3.3.json)。
 - 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](evidence/firmware-0.3.1.json)。
 - 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
