@@ -376,6 +376,61 @@ def safe_power(value: Any) -> dict[str, Any] | None:
     return cleaned
 
 
+CHARGE_STATES = {"off", "charging", "holding", "safety_stop", "failsafe", "unconfirmed"}
+CHARGE_WORDS = {"switch": {"charging", "stopped", "unknown"}}
+EVENT_WORDS = {"request": {"charge", "stop"}, "result": {"ok", "failed", "mismatch", "refused"}}
+CHARGE_RANGES = {"limit": (70, 100), "resume": (1, 95), "stop_failures": (0, 99)}
+MAX_CHARGE_EVENTS = 16
+REASON_CODE = re.compile(r"[A-Z_]{0,40}\Z")
+
+
+def safe_charge_event(value: Any) -> dict[str, Any] | None:
+    """One write to the charge switch, or None. An event with anything wrong in it is dropped whole, never repaired."""
+    if not isinstance(value, dict) or set(value) != {"at_ms", "request", "result", "reason"}:
+        return None
+    at_ms, reason = value["at_ms"], value["reason"]
+    if type(at_ms) is not int or at_ms < 0 or not isinstance(reason, str) or not REASON_CODE.match(reason):
+        return None
+    for key, words in EVENT_WORDS.items():
+        if not isinstance(value[key], str) or value[key] not in words:
+            return None
+    return dict(value)
+
+
+def safe_charge(value: Any) -> dict[str, Any] | None:
+    """The charge protection object of a status reply, reduced to what can be vouched for (docs/charge-protection-design.md).
+
+    Same rules as the power object: unknown keys, words the tool does not know, mistyped or implausible numbers and
+    values that contradict each other are dropped, not corrected.
+    """
+    if not isinstance(value, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    for key in ("enabled", "faulted"):
+        if isinstance(value.get(key), bool):
+            cleaned[key] = value[key]
+    for key, (low, high) in CHARGE_RANGES.items():
+        number = value.get(key)
+        if type(number) is int and low <= number <= high:
+            cleaned[key] = number
+    state, switch, reason = value.get("state"), value.get("switch"), value.get("reason")
+    if isinstance(state, str) and state in CHARGE_STATES:
+        cleaned["state"] = state
+    if isinstance(switch, str) and switch in CHARGE_WORDS["switch"]:
+        cleaned["switch"] = switch
+    if isinstance(reason, str) and REASON_CODE.match(reason):
+        cleaned["reason"] = reason
+    if "enabled" in cleaned and "state" in cleaned and cleaned["enabled"] != (cleaned["state"] != "off"):
+        del cleaned["state"]  # protection off cannot be in an "on" state, and on cannot be "off"
+    if cleaned.get("state") == "unconfirmed" and cleaned.get("switch") not in (None, "unknown"):
+        del cleaned["switch"]  # a controller that is unsure does not know the switch
+    events = value.get("events")
+    if isinstance(events, list):
+        checked = [event for event in map(safe_charge_event, events) if event is not None]
+        cleaned["events"] = checked[-MAX_CHARGE_EVENTS:]
+    return cleaned
+
+
 def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     # Allowlist scalar diagnostics; no arbitrary echoed remote fields are printed.
     keys = {"device_id", "firmware_version", "protocol_version", "board_model", "configured", "wifi", "agent", "wifi_state", "agent_state", "time_quality", "config_revision", "provision_revision", "update_key_fingerprint", "applied_revision", "ui_alive", "theme", "rotation"}
@@ -398,6 +453,9 @@ def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     power = safe_power(result.get("power"))
     if power is not None:
         cleaned["power"] = power
+    charge = safe_charge(result.get("charge"))
+    if charge is not None:
+        cleaned["charge"] = charge
     return cleaned
 
 
