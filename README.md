@@ -1,111 +1,212 @@
 # DeskHub
 
-桌面中枢：Waveshare ESP32-S3-Touch-AMOLED-2.16 触摸屏设备、电脑端 Host Agent、网页管理台。
-这个分支是**从头重新设计**的版本。
+DeskHub 是放在电脑桌上的一块触摸屏，加上电脑里跑的一个小程序（Agent）。
 
-## 分支
+它做三件事：
 
-| 分支 | 内容 |
+1. 用触摸屏切换显示器的输入源（只支持 macOS + BetterDisplay）。
+2. 显示电脑的状态：CPU、内存、网络。
+3. 当桌面时钟，并显示和管理设备自己的亮度、电池和连接。
+
+硬件是 Waveshare ESP32-S3-Touch-AMOLED-2.16（480×480 圆角 AMOLED 触摸屏，带电池）。
+电脑端只支持 macOS。
+
+## 现在能用什么
+
+| 功能 | 状态 |
 | --- | --- |
-| `main` | 新设计。第一个提交只有 `.gitignore`、`LICENSE` 和本文件。第二个提交把下面的“安全基线”原样带入。 |
-| `archive/v0.2`（标签 `legacy-v0.2.6`） | 旧版的完整归档：固件 0.2.6、Agent 0.2.0a1、旧管理台、旧设备界面、全部文档与证据、`dist/` 里每个发布包。只读保留，不合并进 `main`。 |
+| 设备界面：总览、动作、电脑、设置、电池与电源、连接、外观、显示、时钟 | 做完了。你在真机上看过“显示正常”；触摸、旋转、逐页检查还没有逐项验证。 |
+| 用 USB 把设备连到电脑（Wi-Fi、Agent 地址、证书） | 工具在。重做之后的版本还没有在真机上完整走过一遍。 |
+| 电脑端 Agent：接口、命令行、显示器动作 | 做完了，本机跑通过。显示器真的切出、切回，没有证据。 |
+| 看电脑状态（CPU、内存、网络） | 代码在。要设备连上 Agent；没有真机验证。 |
+| 充电保护（实验功能，默认关） | 做完了，主机测试全过；**没有在真机上验证**。 |
+| 无线配网（长按按键开热点） | 电脑端做完了，**设备端没接线，不能用**。现在只能用 USB 配对。 |
+| 网页管理台 | **没有**。旧版有，在 `archive/v0.2` 分支。 |
+| 管理员密码登录 | **没有**。 |
+| 无线固件更新（OTA） | 代码在，没有真机验证。不要依赖它。 |
+| 声音 | 没做。 |
 
-- 取回旧文件：`git checkout archive/v0.2 -- <路径>`
-- 运行旧版：`git worktree add ../DeskHub-legacy archive/v0.2`
-- 仓库目录外有单文件备份：`DeskHub-archive-v0.2.bundle`。
+详细的范围和决定在 [产品范围](docs/product-scope.md)。
 
-## 安全基线
+## 你需要什么
 
-下面的文件从 `archive/v0.2` **原样**带入，连同它们的测试。它们是已经验证过的安全与硬件事实，不从头重写。
-修改其中任何文件，要单独提交，写明原因，并补测试。
+- 一台 Mac（macOS）。
+- Python 3.12 到 3.14，和 [uv](https://docs.astral.sh/uv/)。
+- 一块 Waveshare ESP32-S3-Touch-AMOLED-2.16，一根能传数据的 USB-C 线。
+- 一个 2.4 GHz 的 Wi-Fi，电脑和设备要在同一个局域网里。
+- 要切换显示器输入：BetterDisplay（见“显示器切换”）。
 
-| 部分 | 路径 |
-| --- | --- |
-| 签名与 OTA 校验 | `tools/firmware_package.py`、`agent/src/deskhub_agent/firmware_packages.py`、`firmware/components/management/` |
-| USB 配对与秘密处理 | `tools/provision.py`、`tools/flash_bundle.py`、`tools/backup_flash.py`、`firmware/main/`、`firmware/components/core/include/json_util.hpp` |
-| TLS 与 CA | `tools/create_tls.py`、`firmware/components/agent_client/` |
-| 认证与访问控制 | `agent/src/deskhub_agent/` 下的 `app.py`、`management.py`、`models.py`、`storage.py`、`config.py` |
-| 命令执行安全 | `agent/src/deskhub_agent/` 下的 `backend.py`、`scheduler.py`、`errors.py` |
-| 固件安全底线 | `firmware/components/core/`、`firmware/partitions.csv`、`firmware/sdkconfig.defaults`、`firmware/dependencies.lock`、`firmware/CMakeLists.txt` |
-| 真机得来的硬件事实 | `firmware/components/board_support/`、`scripts/ui_preview/touch_orientation_test.cpp` |
-| 验收测试 | `firmware/tests/`、`agent/tests/`（不含旧管理台的 `test_web_assets.py`）、`tools/tests/`、`protocol/` |
+## 快速开始
 
-Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_models.py`）和 `scripts/package_firmware.py`
-也一并带入，因为上面的部分依赖它们。
+下面的命令都在仓库根目录运行。第 1 到 3 步的命令，和第 6 步里 Agent 一侧的命令，我在干净的临时目录里实际跑过（装、生成证书、配对、启动、查询）。
+第 4、5 步需要真机，重做之后的版本没有完整走过，出问题请看“常见问题”。
 
-检查“原样”：
+### 1. 安装 Agent
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/tests/charge_test.cpp' ':!firmware/main/CMakeLists.txt' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!tools/tests/test_provision_charge.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json'
+uv venv --python 3.13 .venv
+UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --project agent --frozen
+uv pip install --python .venv/bin/python -r tools/requirements.txt
 ```
 
-输出为空，就表示这些文件与归档逐字节相同。
+第三行装的是 USB 工具要用的串口库。
 
-已按规则 K7 单独提交改动的基线文件（所以上面的命令不含它们）：
+### 2. 生成配置和证书
 
-| 文件 | 改动 |
+设备只信你自己生成的证书，所以先生成一个：
+
+```sh
+mkdir -p ~/.config/deskhub
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json init
+.venv/bin/python tools/create_tls.py --out ~/.config/deskhub/tls \
+    --dns 你的Mac主机名.local --ip 你的Mac局域网IP
+```
+
+`--dns` 和 `--ip` 可以重复写。**以后设备连 Agent 用的地址，必须出现在这里。** 地址对不上，连接会失败。
+
+然后打开 `~/.config/deskhub/agent.json`，改这几项，其余不动：
+
+```json
+"bind": "你的Mac局域网IP",
+"lan_enabled": true,
+"tls_cert": "tls/server.pem",
+"tls_key": "tls/server-key.pem",
+"allowed_networks": ["127.0.0.0/8", "你的局域网网段，例如 192.168.1.0/24"]
+```
+
+局域网必须用 HTTPS，所以证书和私钥一起填。私钥只留在这台 Mac 上。
+
+### 3. 启动 Agent
+
+```sh
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json serve
+```
+
+它在前台运行，按 Ctrl-C 停止。macOS 可能会问你要不要允许它接收网络连接，选允许。
+想让它开机自启，看 [agent/README.md](agent/README.md) 的“macOS 自启动”。
+
+### 4. 刷固件
+
+要有固件包 `deskhub-<版本>-esp32s3.zip`。它由 `scripts/package_firmware.py` 生成，见 [开发笔记](docs/development.md)。
+解压后，在解压目录：
+
+```sh
+python3 -m venv .flash-venv
+.flash-venv/bin/python -m pip install -r requirements-flash.txt
+.flash-venv/bin/python flash.py --check
+.flash-venv/bin/python flash.py --list
+.flash-venv/bin/python flash.py --port /dev/cu.usbmodem……    # 换成 --list 显示的端口
+```
+
+`--check` 不碰设备。`flash.py` 不会擦掉设备上已有的配置。
+端口找不到、写入失败，看 [docs/flashing.md](docs/flashing.md)。
+
+### 5. 用 USB 把设备连到电脑
+
+先确认设备在线：
+
+```sh
+.venv/bin/python tools/provision.py --port /dev/cu.usbmodem…… --identify
+```
+
+再配对。配对会在 Agent 里给这台设备建一份独立的凭据，连同 Wi-Fi、Agent 地址和证书一起写进设备：
+
+```sh
+.venv/bin/python tools/provision.py --port /dev/cu.usbmodem…… \
+    --agent-config ~/.config/deskhub/agent.json --ca ~/.config/deskhub/tls/ca.pem \
+    --url https://你的Mac局域网IP:8765 --scope read:status --scope device:sync
+```
+
+工具会问 Wi-Fi 名称（只认 2.4 GHz）和密码。密码不会出现在命令行里，也不写入日志。
+`--url` 里的地址要和第 2 步证书里的一致。
+
+以后要用设备切换显示器，再配对一次，加上 `--scope control:displays --target 显示器编号`（见“显示器切换”）。
+已经配对过的设备，要重新配对就加 `--replace`。
+
+### 6. 检查
+
+- 设备顶栏左上角显示“电脑在线”，说明设备连上了 Agent。刚开机要等十几秒。
+- `.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json devices` 能看到这台设备。
+- `.venv/bin/python tools/provision.py --port /dev/cu.usbmodem…… --status` 读设备的状态。刚开机十几秒内显示 `ui_alive: false` 是正常的。
+
+## 日常使用
+
+### 在设备上
+
+- 底部四个按钮：**总览、动作、电脑、设置**。
+- 顶栏左边（电脑和 Wi-Fi 状态）点一下，进“连接与配对”。顶栏右边（电量和 USB）点一下，进“电池与电源”。
+- **总览**：时钟、四段状态环（Wi-Fi、电脑、电源、时间）、两张常用动作卡片。点时钟进“桌面时钟”。点动作卡片执行动作。
+- **设置**里有：显示与亮度（亮度、常亮、息屏、夜间限亮、旋转）、外观（主题、强调色、中文或 English、文字大小）、连接与配对、电池与电源、桌面时钟、设备信息。
+- **设备信息**里可以重启和恢复出厂。恢复出厂要点两次，第一次不会删任何东西。
+- 屏幕关了以后，第一次触摸只唤醒屏幕，不会触发按钮。
+- 屏幕四角是圆角，界面会躲开它。如果你还看到有字被切，请告诉我哪个角、哪个字，我调一个参数（`kCornerR`）。
+
+### 电池与电源
+
+- **电量** 是电源芯片的估算，没有对照过这颗电芯。读不到时显示“电量未知”，不会显示成 0%。
+- **读数** 显示电池电压、USB 电压和芯片温度。芯片温度是电源芯片的温度，不是电池的。
+- **保护** 是充电保护，标着“实验功能”：电量到上限（80% 或 90%）就停止充电，低于回充线再恢复。默认关闭，开启要点“开启…”再确认。
+  读不到电量、数据过期或写入失败时，它会恢复正常充电，并在屏幕上说明。
+  **刷回 0.3.1 或更早的固件之前，先在这里关闭它**，原因见 [docs/flashing.md](docs/flashing.md)。
+
+### 在电脑上（命令行）
+
+先给命令行单独配一份凭据：
+
+```sh
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json pair desktop-cli --output ~/.config/deskhub/desktop-credential.json
+```
+
+打开这个文件，加两项：`"agent_url": "https://你的Mac局域网IP:8765"` 和 `"ca_file": "/Users/你/.config/deskhub/tls/ca.pem"`。然后：
+
+```sh
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json status  --credentials ~/.config/deskhub/desktop-credential.json
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json actions --credentials ~/.config/deskhub/desktop-credential.json
+.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json run desktop.switch_to_mac --credentials ~/.config/deskhub/desktop-credential.json --wait
+```
+
+触摸屏、命令行和快捷键（Shortcuts、Raycast 等）用同一套动作，同一个 `action_id`。
+
+### 显示器切换
+
+这一部分**没有真实显示器的证据**。它需要你自己实测：
+
+1. 安装 BetterDisplay，打开它的命令行集成。
+2. 在 `agent.json` 里设 `"backend": "betterdisplay"` 和 `"backend_path"`（可执行文件的绝对路径）。
+3. 运行 `.venv/bin/deskhubctl --config ~/.config/deskhub/agent.json list-displays`，读出显示器的 UUID、序列号和位置。
+4. 照 [agent/examples/display-binding.json](agent/examples/display-binding.json) 把 `displays` 填好。`inputs` 要填你这台显示器真实的输入源数值，**没有默认值**。
+5. 在 `actions` 里加动作（例子在 [agent/README.md](agent/README.md)），重启 Agent，再给设备配对 `control:displays`。
+
+细节和安全规则在 [agent/README.md](agent/README.md)。
+
+## 常见问题
+
+**找不到设备的串口。** 先换一根能传数据的 USB 线，关掉别的串口工具。还不行：按住 BOOT，插 USB，松开 BOOT，再 `flash.py --list`。
+
+**Agent 命令报 `ConnectError`。** 最常见的原因是地址和证书对不上：`--url` 或 `agent_url` 里的地址，要在第 2 步的 `--dns` 或 `--ip` 里。其次：Agent 没在运行；`allowed_networks` 没包含设备所在的网段；Mac 的防火墙挡住了。
+
+**设备显示“电脑离线”。** 同上。另外确认设备和 Mac 在同一个 2.4 GHz 网络，Wi-Fi 密码没输错。设备会自动重连。
+
+**想重新配对。** 再运行第 5 步的命令，加 `--replace`。`deskhubctl devices` 列出已配对的设备，`deskhubctl revoke 设备编号` 吊销一个。
+
+**刷机以后设备一直不充电。** 你可能带着“停充”状态刷了旧固件。刷回新固件，它启动时会恢复充电。
+
+## 还没有的功能
+
+网页管理台、管理员密码登录、设备上的无线配网、声音、Windows 和 Linux 的显示器支持。
+[产品范围](docs/product-scope.md)里写了每一项的状态和为什么。
+
+## 更多文档
+
+| 文档 | 内容 |
 | --- | --- |
-| `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
-| `firmware/tests/CMakeLists.txt` | 加入新测试目标 `ui_view_models`、`power_report_wire_format`、`hotspot_pairing_logic`，其余目标不变 |
-| `firmware/CMakeLists.txt` | 版本号 0.2.6 改为 0.3.0，再改为 0.3.1、0.3.2，各两处 |
-| `firmware/components/management/`（`management.cpp`、`CMakeLists.txt`）、`firmware/main/app_main.cpp` | 设备上报和 USB 状态带电源对象；新增纯函数 `power_wire.cpp/.hpp` 和 `firmware/tests/power_wire_test.cpp` |
-| `agent/src/deskhub_agent/management_models.py`、`management.py`；`protocol/`（`openapi.json`、`schemas/device-report.schema.json`、`export_openapi.py`、`README.md`、新示例） | Agent 接收并校验电源读数，设备记录带 `power_state`（未上报、新鲜、过期）；新增 `agent/tests/test_power_report.py` |
-| `agent/src/deskhub_agent/models.py`、`management.py`、`app.py`；`protocol/`（`schemas/agent-config.schema.json`、新示例 `examples/pairing-package.json`） | 热点配网的 Agent 端：Settings 新增 `public_url` 和 `pairing_ca`；新增 `pairing.py`（授权、配对包、兑换）和 `agent/tests/test_pairing_grants.py` |
-| `agent/src/deskhub_agent/pairing.py`；`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`、`examples/pairing-package.json`） | 配对包升到版本 2，直接带 CA 证书，删除 `GET /api/v1/pairing/ca`：固件里不留不验证的 TLS 连接，也不改 `sdkconfig.defaults`（见 `docs/pairing-design.md` 第 11 节）；向量重新生成，`export_openapi.py` 的实现校验同步 |
-| `tools/provision.py` | `--status` 只打印检查过的电源对象；新增 `tools/tests/test_provision_power.py` |
-| `firmware/components/board_support/`（`board.cpp`、`board.hpp`）、`firmware/tests/board_cache_test.cpp` | 充电保护用的充电开关：`board_charge_enabled`、`board_set_charging`。只写 0x18 位 1（R3 的白名单行），先认芯片型号，读出整个字节只改这一位，写后读回；采样代码仍然从不写它。新增 C1 到 C10 十组失败模式测试 |
-| `firmware/tests/CMakeLists.txt`、`firmware/tests/ui_preview/`（`CMakeLists.txt`、`harness.cpp`）、`firmware/tests/ui_model_test.cpp` | 新增测试目标 `charge_test`（`charge_protection_logic`）；界面测试加入充电保护的视图和流程（T19、A16） |
-| `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`） | 启动时 `charge::init()`，每 250 毫秒 `charge::tick()`；能力 `charge_limit` 报实验（`unverified`）；USB 状态加只读的 `charge` 对象；常驻任务的栈从 4096 加到 6144 |
-| `tools/provision.py` | `--status` 另外打印检查过的 `charge` 对象；新增 `tools/tests/test_provision_charge.py` |
-| `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
+| [产品范围](docs/product-scope.md) | 做什么、不做什么、每个功能的状态、决策记录 |
+| [规则](docs/rules.md) | 安全规则，以及放宽的规则和代替它的保护 |
+| [刷机说明](docs/flashing.md) | 在另一台电脑上用 USB 刷机；刷旧固件前的注意事项 |
+| [Agent 说明](agent/README.md) | Agent 的命令、权限、显示器后端、自启动（里面的“网页管理台”一节写的是旧版，main 上没有） |
+| [充电保护设计](docs/charge-protection-design.md) | 充电保护的规则、失败模式和验证状态 |
+| [配对接口设计](docs/pairing-design.md) | 无线配网（热点）的设计和进度 |
+| [设计稿](docs/design/README.md) | 设计稿源文件和设计变量 |
+| [开发笔记](docs/development.md) | 给改代码的人：分支、安全基线、构建、测试、改动记录 |
 
-`firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
-
-## 文档
-
-- [产品范围](docs/product-scope.md)：做什么、不做什么、每个功能的状态，以及 14 条决策记录。
-- [规则](docs/rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
-- [设计稿](docs/design/README.md)：设计稿源文件、画板清单和设计变量。
-- [配对接口设计](docs/pairing-design.md)：热点配网（R7）的设计，**待你审完才实现**。
-
-## 现状
-
-- 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
-- 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.4 MiB，应用分区 6 MiB）。
-- 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
-- 界面里已做好但设备上看不到的一处：配网页（后端 R7 还没做，没有代码调用它）。
-- 有：充电保护（N1，实验功能）的完整实现，设计见 [docs/charge-protection-design.md](docs/charge-protection-design.md)：策略和失败方向、电源芯片充电开关的读写（只写 0x18 位 1）、保存、界面（保护页、确认框、状态文字）、USB 状态里的 `charge` 对象。主机测试、界面预览和变异检查（`scripts/mutation/`）都通过。**还没有刷到设备，没有在真机上停过充电**；电量计的估算也没对照过这颗电芯。刷旧固件之前要先关闭它，见 [docs/flashing.md](docs/flashing.md)。
-- 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。固件这一侧已随 0.3.1 刷到设备：USB 状态里读到了电源对象（电池 4183 mV、USB 5156 mV、芯片温度 40.3 °C、电量 100%、已充满）。读数只读了一次，没有和仪表对照；设备没有配置 Wi-Fi 和 Agent，所以设备到 Agent 的上报没有在真机上试过。
-- 有：热点配网的 Agent 端（授权、配对包版本 2 带 CA、无凭据兑换；没有 CA 下载接口）和设备端的纯逻辑（配对包解码、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
-- **设备端的接线还没有做**：热点、配网页的 HTTP、兑换的 TLS 客户端（用配对包里的 CA 验证）、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](docs/pairing-design.md) 第 10 节。
-- 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
-- 固件版本 0.3.2（带充电保护）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**，设备 deskhub-44bd8d60c598 上跑的仍是 0.3.1。这次没有生成签名 OTA 包。哈希和做过的检查记在 [docs/evidence/firmware-0.3.2.json](docs/evidence/firmware-0.3.2.json)。
-- 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](docs/evidence/firmware-0.3.1.json)。
-- 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](docs/evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
-
-运行基线测试：
-
-```sh
-.venv/bin/python -m pytest agent/tests -q
-.venv/bin/python -m unittest discover -s tools/tests
-.venv/bin/python protocol/export_openapi.py --check
-cmake -S firmware/tests -B firmware/build-host && cmake --build firmware/build-host && ctest --test-dir firmware/build-host --output-on-failure
-python3 firmware/tests/ui_preview/render.py
-```
-
-最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
-
-变异检查（故意改坏配对的实现，看测试会不会报红）：`scripts/mutation/pairing_agent.py` 和 `scripts/mutation/pairing_firmware.py`。用法和输出的含义见 [scripts/mutation/README.md](scripts/mutation/README.md)。
-
-完整构建固件（独立目录，不碰别的构建）：
-
-```sh
-source ~/.espressif/tools/activate_idf_v6.0.2.sh
-unset IDF_COMPONENT_LOCAL_STORAGE_URL
-cd firmware && idf.py -B build-0.3.2 build
-```
-
-## 不在 git 里的东西
-
-`.state/` 存放签名私钥、管理员凭据、CA 与 TLS 私钥、Agent 数据库和原厂 Flash 备份。它被 `.gitignore` 排除，**不要提交，也不要复制进任何分支**。
-`dist/`、固件构建目录、`firmware/managed_components/` 同样被忽略。
+`.state/` 里存着签名私钥、凭据和 Agent 数据库，被 `.gitignore` 排除。**不要提交，也不要复制出去。**

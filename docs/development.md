@@ -1,0 +1,114 @@
+# 开发笔记
+
+给改代码的人看：分支、安全基线、基线文件的改动记录、构建和测试命令、现状的详细记录。
+怎么安装和使用，看项目根目录的 [README](../README.md)。下面的命令都在仓库根目录运行。
+
+## 分支
+
+| 分支 | 内容 |
+| --- | --- |
+| `main` | 新设计。第一个提交只有 `.gitignore`、`LICENSE` 和本文件。第二个提交把下面的“安全基线”原样带入。 |
+| `archive/v0.2`（标签 `legacy-v0.2.6`） | 旧版的完整归档：固件 0.2.6、Agent 0.2.0a1、旧管理台、旧设备界面、全部文档与证据、`dist/` 里每个发布包。只读保留，不合并进 `main`。 |
+
+- 取回旧文件：`git checkout archive/v0.2 -- <路径>`
+- 运行旧版：`git worktree add ../DeskHub-legacy archive/v0.2`
+- 仓库目录外有单文件备份：`DeskHub-archive-v0.2.bundle`。
+
+## 安全基线
+
+下面的文件从 `archive/v0.2` **原样**带入，连同它们的测试。它们是已经验证过的安全与硬件事实，不从头重写。
+修改其中任何文件，要单独提交，写明原因，并补测试。
+
+| 部分 | 路径 |
+| --- | --- |
+| 签名与 OTA 校验 | `tools/firmware_package.py`、`agent/src/deskhub_agent/firmware_packages.py`、`firmware/components/management/` |
+| USB 配对与秘密处理 | `tools/provision.py`、`tools/flash_bundle.py`、`tools/backup_flash.py`、`firmware/main/`、`firmware/components/core/include/json_util.hpp` |
+| TLS 与 CA | `tools/create_tls.py`、`firmware/components/agent_client/` |
+| 认证与访问控制 | `agent/src/deskhub_agent/` 下的 `app.py`、`management.py`、`models.py`、`storage.py`、`config.py` |
+| 命令执行安全 | `agent/src/deskhub_agent/` 下的 `backend.py`、`scheduler.py`、`errors.py` |
+| 固件安全底线 | `firmware/components/core/`、`firmware/partitions.csv`、`firmware/sdkconfig.defaults`、`firmware/dependencies.lock`、`firmware/CMakeLists.txt` |
+| 真机得来的硬件事实 | `firmware/components/board_support/`、`scripts/ui_preview/touch_orientation_test.cpp` |
+| 验收测试 | `firmware/tests/`、`agent/tests/`（不含旧管理台的 `test_web_assets.py`）、`tools/tests/`、`protocol/` |
+
+Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_models.py`）和 `scripts/package_firmware.py`
+也一并带入，因为上面的部分依赖它们。
+
+检查“原样”：
+
+```sh
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/tests/charge_test.cpp' ':!firmware/main/CMakeLists.txt' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!tools/tests/test_provision_charge.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json'
+```
+
+输出为空，就表示这些文件与归档逐字节相同。
+
+已按规则 K7 单独提交改动的基线文件（所以上面的命令不含它们）：
+
+| 文件 | 改动 |
+| --- | --- |
+| `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp` | 读取电池电压、USB 电压、芯片温度，并加入电源芯片写入白名单（规则 R3），附 18 条失败模式的测试 |
+| `firmware/tests/CMakeLists.txt` | 加入新测试目标 `ui_view_models`、`power_report_wire_format`、`hotspot_pairing_logic`，其余目标不变 |
+| `firmware/CMakeLists.txt` | 版本号 0.2.6 改为 0.3.0，再改为 0.3.1、0.3.2，各两处 |
+| `firmware/components/management/`（`management.cpp`、`CMakeLists.txt`）、`firmware/main/app_main.cpp` | 设备上报和 USB 状态带电源对象；新增纯函数 `power_wire.cpp/.hpp` 和 `firmware/tests/power_wire_test.cpp` |
+| `agent/src/deskhub_agent/management_models.py`、`management.py`；`protocol/`（`openapi.json`、`schemas/device-report.schema.json`、`export_openapi.py`、`README.md`、新示例） | Agent 接收并校验电源读数，设备记录带 `power_state`（未上报、新鲜、过期）；新增 `agent/tests/test_power_report.py` |
+| `agent/src/deskhub_agent/models.py`、`management.py`、`app.py`；`protocol/`（`schemas/agent-config.schema.json`、新示例 `examples/pairing-package.json`） | 热点配网的 Agent 端：Settings 新增 `public_url` 和 `pairing_ca`；新增 `pairing.py`（授权、配对包、兑换）和 `agent/tests/test_pairing_grants.py` |
+| `agent/src/deskhub_agent/pairing.py`；`protocol/`（`openapi.json`、`export_openapi.py`、`README.md`、`examples/pairing-package.json`） | 配对包升到版本 2，直接带 CA 证书，删除 `GET /api/v1/pairing/ca`：固件里不留不验证的 TLS 连接，也不改 `sdkconfig.defaults`（见 `docs/pairing-design.md` 第 11 节）；向量重新生成，`export_openapi.py` 的实现校验同步 |
+| `tools/provision.py` | `--status` 只打印检查过的电源对象；新增 `tools/tests/test_provision_power.py` |
+| `firmware/components/board_support/`（`board.cpp`、`board.hpp`）、`firmware/tests/board_cache_test.cpp` | 充电保护用的充电开关：`board_charge_enabled`、`board_set_charging`。只写 0x18 位 1（R3 的白名单行），先认芯片型号，读出整个字节只改这一位，写后读回；采样代码仍然从不写它。新增 C1 到 C10 十组失败模式测试 |
+| `firmware/tests/CMakeLists.txt`、`firmware/tests/ui_preview/`（`CMakeLists.txt`、`harness.cpp`）、`firmware/tests/ui_model_test.cpp` | 新增测试目标 `charge_test`（`charge_protection_logic`）；界面测试加入充电保护的视图和流程（T19、A16） |
+| `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`） | 启动时 `charge::init()`，每 250 毫秒 `charge::tick()`；能力 `charge_limit` 报实验（`unverified`）；USB 状态加只读的 `charge` 对象；常驻任务的栈从 4096 加到 6144 |
+| `tools/provision.py` | `--status` 另外打印检查过的 `charge` 对象；新增 `tools/tests/test_provision_charge.py` |
+| `scripts/package_firmware.py` | 只改 USB 包里 README.txt 的功能入口和验证边界文字，打包逻辑不变 |
+
+`firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
+
+## 文档
+
+- [产品范围](product-scope.md)：做什么、不做什么、每个功能的状态，以及 14 条决策记录。
+- [规则](rules.md)：保留的安全规则，以及放宽的规则和用来代替的保护。
+- [设计稿](design/README.md)：设计稿源文件、画板清单和设计变量。
+- [配对接口设计](pairing-design.md)：热点配网（R7）的设计，**待你审完才实现**。
+
+## 现状（开发记录）
+
+这是按时间写下来的详细记录；给使用者看的简表在 [README](../README.md)。
+
+- 有：Agent 的 API（没有管理台）、固件的核心、板级、管理、Agent 客户端和 USB 协议、签名与配对工具、测试。
+- 有：新设备界面（`firmware/components/ui`）。8 个主要页面（总览、动作、电脑、设置、电池与电源三个分段、连接、外观）、显示与亮度、桌面时钟、设备信息三个功能页，以及配网页、离线状态、充电保护确认三个状态页。固件可以完整构建（0 个编译警告，镜像约 4.4 MiB，应用分区 6 MiB）。
+- 界面验证只在电脑上做过：模型测试和原生 LVGL 离屏预览（见下面的命令）。**没有在真机上验证过**：屏幕、触摸、电源读数、常亮都还没有实测。
+- 屏幕是圆角的，Waveshare 没公布半径。界面用 `kCornerR`（现在是 80 像素）和 `corner_inset()` 躲开四角；预览测试 A17 检查每页、每个主题、语言和字号。半径是猜的，真机上是否还有被切的，要看过才知道。
+- 界面里已做好但设备上看不到的一处：配网页（后端 R7 还没做，没有代码调用它）。
+- 有：充电保护（N1，实验功能）的完整实现，设计见 [docs/charge-protection-design.md](charge-protection-design.md)：策略和失败方向、电源芯片充电开关的读写（只写 0x18 位 1）、保存、界面（保护页、确认框、状态文字）、USB 状态里的 `charge` 对象。主机测试、界面预览和变异检查（`scripts/mutation/`）都通过。**还没有刷到设备，没有在真机上停过充电**；电量计的估算也没对照过这颗电芯。刷旧固件之前要先关闭它，见 [docs/flashing.md](flashing.md)。
+- 有：电源读数的完整数据通路。固件把电量、电池电压、USB 电压、芯片温度和测量状态放进设备上报和 USB 状态；Agent 校验后保存，管理接口的设备记录带新鲜度；`tools/provision.py --status` 显示检查过的读数。固件这一侧已随 0.3.1 刷到设备：USB 状态里读到了电源对象（电池 4183 mV、USB 5156 mV、芯片温度 40.3 °C、电量 100%、已充满）。读数只读了一次，没有和仪表对照；设备没有配置 Wi-Fi 和 Agent，所以设备到 Agent 的上报没有在真机上试过。
+- 有：热点配网的 Agent 端（授权、配对包版本 2 带 CA、无凭据兑换；没有 CA 下载接口）和设备端的纯逻辑（配对包解码、会话状态机、输入校验、倒计时、长按），都有主机测试和变异检查；设备配网页有“热点密码”一行。
+- **设备端的接线还没有做**：热点、配网页的 HTTP、兑换的 TLS 客户端（用配对包里的 CA 验证）、保存路径、按键。所以热点配网没有端到端验证，设备上也看不到它。接线前代码要按 K1 复审。见 [配对接口设计](pairing-design.md) 第 10 节。
+- 没有：管理台前端。`agent/src/deskhub_agent/web/` 不存在时，Agent 只是不挂载 `/manage/`，API 照常工作。
+- 固件版本 0.3.2（带充电保护）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**，设备 deskhub-44bd8d60c598 上跑的仍是 0.3.1。这次没有生成签名 OTA 包。哈希和做过的检查记在 [docs/evidence/firmware-0.3.2.json](evidence/firmware-0.3.2.json)。
+- 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](evidence/firmware-0.3.1.json)。
+- 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
+
+运行基线测试：
+
+```sh
+.venv/bin/python -m pytest agent/tests -q
+.venv/bin/python -m unittest discover -s tools/tests
+.venv/bin/python protocol/export_openapi.py --check
+cmake -S firmware/tests -B firmware/build-host && cmake --build firmware/build-host && ctest --test-dir firmware/build-host --output-on-failure
+python3 firmware/tests/ui_preview/render.py
+```
+
+最后一条构建真实的界面代码，在原生 LVGL 里离屏运行 15 组检查，同时运行触摸方向回归测试，并把各页面、各主题的截图存到 `firmware/tests/ui_preview/out/`。结果全部是模拟数据。
+
+变异检查（故意改坏实现，看测试会不会报红）：`scripts/mutation/` 下有配对（Agent 端、设备端）、充电保护（策略、界面）和屏幕圆角五个脚本。用法和输出的含义见 [scripts/mutation/README.md](../scripts/mutation/README.md)。
+
+完整构建固件（独立目录，不碰别的构建）：
+
+```sh
+source ~/.espressif/tools/activate_idf_v6.0.2.sh
+unset IDF_COMPONENT_LOCAL_STORAGE_URL
+cd firmware && idf.py -B build-0.3.2 build
+```
+
+## 不在 git 里的东西
+
+`.state/` 存放签名私钥、管理员凭据、CA 与 TLS 私钥、Agent 数据库和原厂 Flash 备份。它被 `.gitignore` 排除，**不要提交，也不要复制进任何分支**。
+`dist/`、固件构建目录、`firmware/managed_components/` 同样被忽略。

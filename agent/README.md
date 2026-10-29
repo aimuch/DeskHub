@@ -35,6 +35,8 @@ Token 由 `secrets.token_urlsafe(32)` 生成；SQLite 只存 SHA-256，文件权
 
 ## 网页管理台
 
+> **main 分支没有网页管理台**（旧版在 `archive/v0.2` 分支）。这一节是从旧版带来的说明，只作参考；Agent 的接口、命令行和凭据在 main 上都可用。
+
 启动 Agent 后打开 [本机管理台](http://127.0.0.1:8765/manage/)。管理台与同一 Agent 部署，不需要云服务或额外进程。创建单独的管理凭据：
 
 ```sh
