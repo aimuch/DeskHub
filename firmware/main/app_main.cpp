@@ -5,6 +5,7 @@
 #include "charge.hpp"
 #include "agent_client.hpp"
 #include "management.hpp"
+#include "pairing_device.hpp"
 #include "json_util.hpp"
 #include "cJSON.h"
 #include "esp_log.h"
@@ -67,6 +68,10 @@ cJSON *handle(cJSON *request) {
                 cJSON_AddStringToObject(item,"request",e.charge?"charge":"stop");cJSON_AddStringToObject(item,"result",dh::charge::write_name(e.result));
                 cJSON_AddStringToObject(item,"reason",e.reason);cJSON_AddItemToArray(events,item);
             }
+            // Hotspot pairing: where it is and why the last attempt ended. Names only; no code, password or token.
+            const auto pairing=dh::pairing_device::status();
+            auto *pair=cJSON_AddObjectToObject(r,"pairing");
+            cJSON_AddBoolToObject(pair,"open",pairing.open);cJSON_AddStringToObject(pair,"phase",pairing.phase);cJSON_AddStringToObject(pair,"why",pairing.why);
             const auto configuration=dh::config();
             cJSON_AddStringToObject(r,"theme",configuration.layout.theme.c_str());
             cJSON_AddNumberToObject(r,"rotation",configuration.rotation);
@@ -147,5 +152,5 @@ extern "C" void app_main() {
     usb_serial_jtag_driver_config_t usb_cfg{};usb_cfg.rx_buffer_size=2048;usb_cfg.tx_buffer_size=2048;
     if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
-    dh::network_start();dh::agent_start();dh::management_start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
+    dh::network_start();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
 }

@@ -431,6 +431,33 @@ def safe_charge(value: Any) -> dict[str, Any] | None:
     return cleaned
 
 
+PAIRING_PHASES = {"closed", "open", "joining", "redeeming", "save_failed", "done"}
+PAIRING_OPEN_PHASES = {"open", "joining", "redeeming", "save_failed"}
+PAIRING_WHYS = {"none", "not_allowed", "random_failed", "wrong_phase", "wrong_code", "too_many_wrong_codes", "code_required", "timeout", "cancelled",
+                "invalid_input", "too_many_attempts", "wifi_failed", "agent_unreachable", "certificate_expired", "hostname_mismatch", "chain_invalid",
+                "redeem_refused", "bad_reply", "save_failed", "readback_mismatch"}
+
+
+def safe_pairing(value: Any) -> dict[str, Any] | None:
+    """The hotspot pairing object of a status reply (docs/pairing-design.md section 13): three members, nothing else.
+
+    The setup code, the hotspot password, the Wi-Fi name, the grant code and the token are not in it, and if a device
+    sends them anyway they are not echoed. Words the tool does not know are dropped, not passed on.
+    """
+    if not isinstance(value, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    if isinstance(value.get("phase"), str) and value["phase"] in PAIRING_PHASES:
+        cleaned["phase"] = value["phase"]
+    if isinstance(value.get("why"), str) and value["why"] in PAIRING_WHYS:
+        cleaned["why"] = value["why"]
+    if isinstance(value.get("open"), bool):
+        cleaned["open"] = value["open"]
+    if "open" in cleaned and "phase" in cleaned and cleaned["open"] != (cleaned["phase"] in PAIRING_OPEN_PHASES):
+        del cleaned["open"]  # a closed session cannot be open, and an open one cannot be closed
+    return cleaned or None
+
+
 def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     # Allowlist scalar diagnostics; no arbitrary echoed remote fields are printed.
     keys = {"device_id", "firmware_version", "protocol_version", "board_model", "configured", "wifi", "agent", "wifi_state", "agent_state", "time_quality", "config_revision", "provision_revision", "update_key_fingerprint", "applied_revision", "ui_alive", "theme", "rotation"}
@@ -456,6 +483,9 @@ def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     charge = safe_charge(result.get("charge"))
     if charge is not None:
         cleaned["charge"] = charge
+    pairing = safe_pairing(result.get("pairing"))
+    if pairing is not None:
+        cleaned["pairing"] = pairing
     return cleaned
 
 
