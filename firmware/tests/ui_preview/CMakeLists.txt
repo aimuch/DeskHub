@@ -17,11 +17,11 @@ add_subdirectory("${LVGL_ROOT}" lvgl)
 set(UI "${FIRMWARE}/components/ui")
 add_executable(deskhub_ui_preview harness.cpp
   "${UI}/ui.cpp" "${UI}/ui_kit.cpp" "${UI}/ui_pages.cpp" "${UI}/ui_model.cpp" "${UI}/ui_theme.cpp" "${UI}/ui_text.cpp"
-  "${FIRMWARE}/components/core/policy.cpp"
+  "${FIRMWARE}/components/core/policy.cpp" "${FIRMWARE}/components/charge/charge_policy.cpp"
   "${UI}/btr_ui_16.c" "${UI}/btr_ui_20.c" "${UI}/btr_ui_28.c" "${UI}/font_clock_72.c")
 target_include_directories(deskhub_ui_preview PRIVATE stubs
   "${FIRMWARE}/components/core/include" "${FIRMWARE}/components/board_support/include"
-  "${FIRMWARE}/components/agent_client/include" "${UI}/include")
+  "${FIRMWARE}/components/agent_client/include" "${FIRMWARE}/components/charge/include" "${UI}/include")
 target_compile_definitions(deskhub_ui_preview PRIVATE UI_CHARS_FILE="${FIRMWARE}/fonts/btr_ui.chars.txt")
 target_compile_options(deskhub_ui_preview PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Werror>)
 target_link_libraries(deskhub_ui_preview PRIVATE lvgl::lvgl)

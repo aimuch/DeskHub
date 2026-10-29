@@ -25,8 +25,11 @@
 //      shell is hidden, cancel calls back, hide restores the normal page. It fits in every theme, language and size.
 //  A14 Protect dialog: dims everything, offers 80 % and 90 %, passes the chosen limit, cancel closes it.
 //  A15 Power page: a control that would do nothing is disabled and explained, never silently inert.
+//  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
+//      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
 #include "board.hpp"
+#include "charge.hpp"
 #include "core.hpp"
 #include "esp_lv_adapter.h"
 #include "lvgl.h"
@@ -62,6 +65,10 @@ static uint64_t flush_calls = 0;
 static dh::Snapshot mock_snapshot;
 static dh::DisplayConfig mock_config;
 static dh::PowerState mock_power;
+static dh::charge::Status mock_charge;
+static dh::charge::Settings charge_last;
+static bool charge_apply_ok = true;
+static unsigned charge_applies = 0;
 static bool power_auto = true;
 static bool mock_paired = true;
 static int mock_brightness = -1;
@@ -106,6 +113,19 @@ Secrets secrets() {
     return s;
 }
 PowerState board_power() { return mock_power; }
+namespace charge {
+Status status() { return mock_charge; }
+bool apply(const Settings &s) {
+    ++charge_applies;
+    charge_last = s;
+    if (!charge_apply_ok && s.enabled) return false;       // saving fails: nothing changes
+    mock_charge.enabled = s.enabled && valid(s);
+    mock_charge.state = mock_charge.enabled ? State::Charging : State::Off;
+    mock_charge.limit = s.limit;
+    mock_charge.resume = s.resume;
+    return charge_apply_ok || s.enabled;
+}
+}  // namespace charge
 esp_err_t board_brightness(int percent) { ++brightness_calls; if (mock_brightness_result == ESP_OK) mock_brightness = percent; return mock_brightness_result; }
 esp_err_t board_rotation(int degrees) { ++rotation_calls; if (mock_rotation_result == ESP_OK) mock_rotation = degrees; return mock_rotation_result; }
 bool agent_submit(const Action &) {
@@ -276,6 +296,7 @@ static void reset_world() {
     mock_power.battery = "present"; mock_power.vbus = "present"; mock_power.charging = "charging"; mock_power.reason = "ok";
     mock_power.soc_percent = 67; mock_power.battery_mv = 3921; mock_power.vbus_mv = 5120; mock_power.chip_temp_c = 41.3f;
     mock_power.measure_reason = "ADC_OK"; mock_power.observed_ms = mock_ms - 100;
+    mock_charge = {}; mock_charge.charging_known = true; mock_charge.charging = true; charge_last = {}; charge_apply_ok = true; charge_applies = 0;
     mock_brightness = -1; mock_rotation = 0;
     mock_brightness_result = mock_rotation_result = mock_save_result = mock_lock_result = ESP_OK;
     rotation_calls = brightness_calls = save_calls = reset_calls = submit_calls = lock_calls = unlock_calls = restart_calls = 0;
@@ -810,14 +831,63 @@ static void case_protect_dialog() {
 static void case_protect_tab() {
     fresh();
     goto_view(Page::Power, PowerTab::Protect);
-    EXPECT(has("充电保护") && has("实验功能") && has("此版本还不能限制充电。"));
-    // The control that would turn it on is disabled and explained. It must not open a dialog that does nothing.
+    EXPECT(has("充电保护") && has("实验功能") && has("充电保护：未开启"));
+    // It works now: the button is enabled and opens the dialog. When it could not work it is disabled and says why.
     auto *button = clickable_ancestor(find("开启…"));
-    EXPECT(button && lv_obj_has_state(button, LV_STATE_DISABLED));
+    EXPECT(button && !lv_obj_has_state(button, LV_STATE_DISABLED));
+    mock_power.battery = "absent"; mock_power.soc_percent = -1; step(); step();
+    button = clickable_ancestor(find("开启…"));
+    EXPECT(button && lv_obj_has_state(button, LV_STATE_DISABLED) && has("未检测到电池。"));
     click_text("开启…");
-    EXPECT(!has("开启充电保护？"));
+    EXPECT(!has("开启充电保护？") && charge_applies == 0);
+    mock_power.battery = "present"; mock_power.soc_percent = 67; step(); step();   // it works again when the battery is back
+    button = clickable_ancestor(find("开启…"));
+    EXPECT(button && !lv_obj_has_state(button, LV_STATE_DISABLED));
     goto_view(Page::Power, PowerTab::Level);
     EXPECT(has("充电保护：未开启") && has("实验功能"));
+}
+static void case_protect_flow() {
+    fresh();
+    goto_view(Page::Power, PowerTab::Protect);
+    EXPECT(click_text("开启…"));
+    step();
+    EXPECT(has("开启充电保护？") && charge_applies == 0);        // asking first: nothing changes before the second tap
+    EXPECT(click_text("90%"));
+    EXPECT(click_text("开启"));
+    step(); step();
+    EXPECT(charge_applies == 1 && charge_last.enabled && charge_last.limit == 90 && charge_last.resume == 85);
+    EXPECT(!has("开启充电保护？") && has("充电保护中：上限 90%") && has("电量到上限后停止充电。") && has("关闭"));
+    check_layout("protect-on"); check_targets("protect-on");
+    goto_view(Page::Power, PowerTab::Level);
+    EXPECT(has("充电保护中：上限 90%"));
+    goto_view(Page::Power, PowerTab::Protect);
+    mock_charge.state = dh::charge::State::Holding; mock_charge.charging = false; step(); step();
+    EXPECT(has("已停止充电，低于回充线后恢复。"));
+    mock_charge.state = dh::charge::State::Failsafe; mock_charge.reason = "SAMPLE_STALE"; mock_charge.charging = true; step(); step();
+    EXPECT(has("充电保护失效，已恢复正常充电") && has("读不到电量。"));
+    check_layout("protect-failsafe"); check_targets("protect-failsafe");
+    mock_charge.state = dh::charge::State::Unconfirmed; mock_charge.reason = "SWITCH_UNCONFIRMED"; mock_charge.charging_known = false; step(); step();
+    EXPECT(has("无法确认充电状态") && !has("已停止") && !has("已恢复"));
+    check_layout("protect-unconfirmed"); check_targets("protect-unconfirmed");
+    EXPECT(click_text("关闭"));                                // off asks nothing
+    step(); step();
+    EXPECT(charge_applies == 2 && !charge_last.enabled && !has("开启充电保护？") && has("充电保护：未开启"));
+
+    fresh();                                                    // saving fails: the page says so and nothing is on
+    charge_apply_ok = false;
+    goto_view(Page::Power, PowerTab::Protect);
+    EXPECT(click_text("开启…"));
+    EXPECT(click_text("开启"));
+    step(); step();
+    EXPECT(charge_applies == 1 && !mock_charge.enabled && has("未能保存，充电保护没有开启。") && has("充电保护：未开启"));
+    fresh();                                                    // turning off is in force even when the setting cannot be saved, and the page says so
+    mock_charge.enabled = true; mock_charge.state = dh::charge::State::Charging; mock_charge.limit = 80; mock_charge.resume = 75;
+    charge_apply_ok = false;
+    goto_view(Page::Power, PowerTab::Protect);
+    EXPECT(has("充电保护中：上限 80%"));
+    EXPECT(click_text("关闭"));
+    step(); step();
+    EXPECT(charge_applies == 1 && !charge_last.enabled && !mock_charge.enabled && has("已关闭，但没有保存这个设置。") && has("充电保护：未开启"));
 }
 static void case_screenshots() {
     if (out_dir.empty()) return;
@@ -865,7 +935,7 @@ int main(int argc, char **argv) {
         {"state_fidelity", case_state_fidelity}, {"navigation", case_navigation}, {"wake_on_touch", case_wake},
         {"actions", case_actions}, {"appearance", case_appearance}, {"reset_restart", case_reset_restart},
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
-        {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"screenshots", case_screenshots}};
+        {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

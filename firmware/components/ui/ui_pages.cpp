@@ -29,6 +29,7 @@ struct Widgets {
     lv_obj_t *clock{}, *date{}, *notice{}, *meta{};
     lv_obj_t *cpu_gauge{}, *mem_gauge{}, *cpu_value{}, *mem_value{}, *rx{}, *tx{}, *footer{}, *error{};
     lv_obj_t *soc_gauge{}, *soc_value{}, *soc_title{}, *soc_charge{}, *soc_note{}, *strip{};
+    lv_obj_t *protect_head{}, *protect_note{}, *protect_button{}, *protect_label{}, *protect_error{};
     lv_obj_t *bat_v{}, *bat_note{}, *usb_v{}, *usb_note{}, *temp_v{}, *temp_note{}, *charge_card{};
     lv_obj_t *brightness{}, *detail{}, *slider{};
     lv_obj_t *first_action{};
@@ -51,7 +52,7 @@ void on_theme(lv_event_t *e) { Appearance a = current_appearance(); a.theme = st
 void on_accent(lv_event_t *e) { Appearance a = current_appearance(); a.accent = kAccentChoices[static_cast<size_t>(data_of(e))]; apply_appearance(a); }
 void on_lang(lv_event_t *e) { Appearance a = current_appearance(); a.lang = static_cast<Lang>(data_of(e)); apply_appearance(a); }
 void on_size(lv_event_t *e) { Appearance a = current_appearance(); a.size = static_cast<SizeTier>(data_of(e)); apply_appearance(a); }
-void on_nothing(lv_event_t *) {}
+void on_protect(lv_event_t *) { request_protect_toggle(); }
 
 // ---- small building blocks ----
 lv_obj_t *heading(lv_obj_t *parent, const std::string &text, uint32_t rgb) {
@@ -386,18 +387,19 @@ void build_power(lv_obj_t *body, PowerTab tab, const Frame &f) {
         auto *protect_name = label(title_row, T(Str::ProtectTitle), kContentW, look.body, P().ink);
         lv_obj_set_width(protect_name, LV_SIZE_CONTENT);
         pill(title_row, T(Str::Experimental), P().power, P().card, P().power, look.caption);
-        label(c, T(Str::ProtectionUnavailable), kContentW - 38, look.caption, P().power);
+        w.protect_head = label(c, "", kContentW - 38, look.caption, P().ink);
+        w.protect_note = label(c, "", kContentW - 38, look.caption, P().muted);
         label(c, T(Str::ProtectionRule1), kContentW - 38, look.caption, P().muted);
         label(c, T(Str::ProtectionRule2), kContentW - 38, look.caption, P().muted);
-        // Turning protection on needs the charge controller (docs/rules.md N1), which is not built yet.
-        // The control stays visible, disabled, and says why, instead of opening a dialog that does nothing.
-        auto *b = button(c, on_nothing, nullptr, kContentW - 38, 56);
-        select(b, true);
-        lv_obj_set_style_radius(b, 28, 0);
-        auto *l = label(b, T(Str::TurnOn) + (look.lang == Lang::ZhCN ? "…" : "..."), kContentW - 60, look.body, P().accent);
-        centered(l);
-        lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_add_state(b, LV_STATE_DISABLED);
+        // The button turns protection on (through the dialog) or off. While it cannot work it stays visible and disabled,
+        // and the note above says why. The text and the state come from make_charge in refresh_power.
+        w.protect_button = button(c, on_protect, nullptr, kContentW - 38, 56);
+        select(w.protect_button, true);
+        lv_obj_set_style_radius(w.protect_button, 28, 0);
+        w.protect_label = label(w.protect_button, "", kContentW - 60, look.body, P().accent);
+        centered(w.protect_label);
+        lv_obj_align(w.protect_label, LV_ALIGN_CENTER, 0, 0);
+        w.protect_error = label(c, "", kContentW - 38, look.caption, P().power);
     }
 }
 void refresh_power(PowerTab tab, const Frame &f) {
@@ -411,6 +413,20 @@ void refresh_power(PowerTab tab, const Frame &f) {
         set_ink(w.soc_charge, tone_color(v.charge_tone));
         set_border(w.soc_charge, v.charge_tone == Tone::Off ? P().edge : tone_color(v.charge_tone));
         set_optional_text(w.soc_note, v.level.valid ? v.level_note : std::string());
+        const ChargeView cv = make_charge(look.lang, f.charge, f.power, f.now_ms);
+        set_text(w.strip, cv.strip);
+        set_ink(w.strip, cv.tone == Tone::Off ? P().ink : tone_color(cv.tone));
+    } else if (tab == PowerTab::Protect) {
+        const ChargeView cv = make_charge(look.lang, f.charge, f.power, f.now_ms);
+        set_text(w.protect_head, cv.headline);
+        set_ink(w.protect_head, cv.tone == Tone::Off ? P().ink : tone_color(cv.tone));
+        set_optional_text(w.protect_note, cv.note.empty() ? cv.why_disabled : cv.note);
+        set_text(w.protect_label, cv.button);
+        if (cv.button_enabled == lv_obj_has_state(w.protect_button, LV_STATE_DISABLED)) {
+            if (cv.button_enabled) lv_obj_remove_state(w.protect_button, LV_STATE_DISABLED);
+            else lv_obj_add_state(w.protect_button, LV_STATE_DISABLED);
+        }
+        set_optional_text(w.protect_error, f.charge_error);
     } else if (tab == PowerTab::Readings) {
         set_text(w.bat_v, v.battery_v); set_optional_text(w.bat_note, v.battery_v_note);
         set_text(w.usb_v, v.usb_v); set_optional_text(w.usb_note, v.usb_v_note);

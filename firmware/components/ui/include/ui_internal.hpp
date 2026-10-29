@@ -37,6 +37,8 @@ struct Frame {
     Snapshot s;
     DisplayConfig c;
     PowerState power;
+    charge::Status charge;                // charge protection, as the controller reports it
+    std::string charge_error;             // result of the last try to turn it on or off
     int64_t now_ms = 0;
     time_t wall = 0;
     bool paired = false;
@@ -80,7 +82,7 @@ void refresh_page(Page, PowerTab, const Frame &);
 void shift_shell(int dx);               // burn-in protection moves the header with the clock page
 lv_obj_t *build_pairing(lv_obj_t *screen, const PairingInfo &, int64_t deadline_ms, void (*on_cancel)());
 void refresh_pairing(const PairingInfo &, int64_t deadline_ms, int64_t now_ms);
-// The dialog of Dev-Protect. Charge protection (docs/rules.md N1) is not implemented, so no page opens it yet.
+// The dialog of Dev-Protect: opened by request_protect_toggle() when protection is off.
 lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int limit), void (*on_cancel)());
 int body_scroll_y();
 void remember_scroll(int y);
@@ -89,6 +91,7 @@ void remember_scroll(int y);
 void request_page(Page);
 void request_power_tab(PowerTab);
 void request_update();
+void request_protect_toggle();       // the button of the Protect tab: off opens the dialog, on turns it off
 void note_activity();
 void user_screen_off();
 void schedule_brightness(int percent);

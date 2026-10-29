@@ -3,6 +3,7 @@
 // config, with no LVGL. The rules in docs/rules.md (K3: unknown stays unknown, stale stays stale) live here, so
 // they can be tested exhaustively on the host. The LVGL layer only draws what these structures say.
 #include "board.hpp"
+#include "charge_policy.hpp"
 #include "core.hpp"
 #include "ui_text.hpp"
 #include "ui_theme.hpp"
@@ -59,6 +60,20 @@ struct PowerView {
     Tone charge_tone = Tone::Off;
 };
 PowerView make_power(Lang, const PowerState &, int64_t now_ms);
+
+// ---- charge protection (N1, experimental) ----
+// Everything the power page says about it. It reports the controller's state as it is: "stopped" and "restored" are never
+// claimed when the switch is not known, and an unknown reason of a failure says nothing.
+struct ChargeView {
+    std::string strip;       // the line under the level gauge
+    std::string headline;    // the first line of the Protect tab
+    std::string note;        // the second line; empty when there is nothing to add
+    Tone tone = Tone::Off;
+    std::string button;      // "Turn on..." while off, "Turn off" while on
+    bool button_enabled = false;
+    std::string why_disabled;  // set when "Turn on..." cannot work
+};
+ChargeView make_charge(Lang, const charge::Status &, const PowerState &, int64_t now_ms);
 
 // ---- connection ----
 struct ConnectRow { std::string key, value; Tone tone = Tone::Off; };

@@ -266,6 +266,51 @@ PowerView make_power(Lang l, const PowerState &p, int64_t now_ms) {
     return v;
 }
 
+// ---- charge protection ----
+ChargeView make_charge(Lang l, const charge::Status &s, const PowerState &p, int64_t now_ms) {
+    using charge::State;
+    ChargeView v;
+    const std::string limit = fmt(" %d%%", s.limit);
+    if (s.state == State::Off) {
+        v.strip = v.headline = T(l, Str::ProtectionOff);
+        v.button = T(l, Str::TurnOn) + (l == Lang::ZhCN ? "…" : "...");
+        // Turning it on needs a battery, a fresh level and a charge switch that can be read.
+        const bool fresh = !p.fault && power_fresh(p, now_ms);
+        if (fresh && p.battery == "absent") v.why_disabled = T(l, Str::ProtectNoteNoBattery);
+        else if (!fresh || p.battery != "present" || !level_valid(p.soc_percent)) v.why_disabled = T(l, Str::ProtectNoteUnreadable);
+        else if (!s.charging_known) v.why_disabled = T(l, Str::ProtectNoteSwitch);
+        else v.button_enabled = true;
+        return v;
+    }
+    v.button = T(l, Str::TurnOff);
+    v.button_enabled = true;
+    switch (s.state) {
+    case State::Charging:
+    case State::Holding:
+    case State::SafetyStop:
+        v.strip = v.headline = T(l, Str::ProtectionOn) + limit;
+        v.tone = s.state == State::SafetyStop ? Tone::Warn : Tone::Info;
+        v.note = T(l, s.state == State::Charging ? Str::ProtectNoteCharging : s.state == State::Holding ? Str::ProtectNoteHolding : Str::ProtectNoteSafety);
+        break;
+    case State::Failsafe: {
+        v.strip = v.headline = T(l, Str::ProtectionFailsafe);
+        v.tone = Tone::Warn;
+        const std::string why = s.reason;
+        if (why == "SAMPLE_STALE" || why == "NO_SAMPLE" || why == "LEVEL_UNREADABLE" || why == "PMIC_FAULT") v.note = T(l, Str::ProtectNoteUnreadable);
+        else if (why == "NO_BATTERY") v.note = T(l, Str::ProtectNoteNoBattery);
+        else if (why == "STOP_FAILED" || why == "STOP_MISMATCH" || why == "REPEATED_FAILURE" || why == "RESTORED_AFTER_FAILURE") v.note = T(l, Str::ProtectNoteWrite);
+        break;
+    }
+    case State::Unconfirmed:
+        v.strip = v.headline = T(l, Str::ProtectionUnsure);
+        v.tone = Tone::Danger;
+        v.note = T(l, Str::ProtectNoteRetry);
+        break;
+    case State::Off: break;
+    }
+    return v;
+}
+
 // ---- connection, actions, notice ----
 std::vector<ConnectRow> make_connect(Lang l, const Snapshot &s, bool paired) {
     const WifiKind kind = wifi_kind(s);

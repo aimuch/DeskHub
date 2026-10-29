@@ -25,6 +25,10 @@
 // T16 Connection rows: no IP or signal while Wi-Fi is down; a signal outside -127..-1 is "--".
 // T17 Actions: at most 12, an empty label shows the id, offline actions are disabled with a reason.
 // T18 Command notice: only the last 15 seconds, only a real command, only forward in time.
+// T19 Charge protection view (docs/charge-protection-design.md, U1 to U4): every state has its words, in both languages;
+//     "stopped" and "restored" are never claimed when the state of the switch is not known; the switch-on button is
+//     disabled, with the reason, when it could not work; the switch-off button is always there while protection is on;
+//     the failsafe words say why, and say nothing when the reason is not known.
 #include "ui_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -688,6 +692,101 @@ static void t18_notice() {
     CHECK_EQ(notice_text(Lang::ZhCN, "已接收，等待执行", NOW, NOW + 5), std::string(""));  // time must not run backwards
 }
 
+static charge::Status charge_state(charge::State state, const char *reason = "", int limit = 80, bool switch_known = true) {
+    charge::Status s;
+    s.state = state;
+    s.reason = reason;
+    s.enabled = state != charge::State::Off;
+    s.limit = limit;
+    s.resume = limit - 5;
+    s.charging_known = switch_known;
+    s.charging = switch_known && state != charge::State::Holding && state != charge::State::SafetyStop;
+    return s;
+}
+static void t19_charge_view() {
+    using charge::State;
+    const PowerState good = fresh_power();
+    ChargeView v = make_charge(Lang::ZhCN, charge_state(State::Off), good, NOW);       // U2: off
+    CHECK_EQ(v.strip, std::string("充电保护：未开启"));
+    CHECK_EQ(v.headline, std::string("充电保护：未开启"));
+    CHECK_EQ(v.button, std::string("开启…"));
+    CHECK(v.button_enabled && v.tone == Tone::Off && v.why_disabled.empty());
+    v = make_charge(Lang::EnUS, charge_state(State::Off), good, NOW);
+    CHECK_EQ(v.strip, std::string("Charge protection: off"));
+    CHECK_EQ(v.button, std::string("Turn on..."));
+
+    PowerState p = good;                                                                // U3: it could not work
+    p.battery = "absent";
+    v = make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW);
+    CHECK(!v.button_enabled); CHECK_EQ(v.why_disabled, std::string("未检测到电池。"));
+    p = good; p.battery = "unknown";
+    CHECK(!make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW).button_enabled);
+    p = good; p.observed_ms = NOW - 6001;
+    v = make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW);
+    CHECK(!v.button_enabled); CHECK_EQ(v.why_disabled, std::string("读不到电量。"));
+    p = good; p.observed_ms = 0;
+    CHECK(!make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW).button_enabled);
+    p = good; p.fault = true;
+    CHECK(!make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW).button_enabled);
+    p = good; p.soc_percent = -1;
+    CHECK(!make_charge(Lang::ZhCN, charge_state(State::Off), p, NOW).button_enabled);
+    v = make_charge(Lang::ZhCN, charge_state(State::Off, "", 80, false), good, NOW);
+    CHECK(!v.button_enabled); CHECK_EQ(v.why_disabled, std::string("读不到充电开关。"));
+    CHECK_EQ(make_charge(Lang::EnUS, charge_state(State::Off, "", 80, false), good, NOW).why_disabled, std::string("The charge switch cannot be read."));
+
+    v = make_charge(Lang::ZhCN, charge_state(State::Charging), good, NOW);              // on
+    CHECK_EQ(v.strip, std::string("充电保护中：上限 80%"));
+    CHECK_EQ(v.headline, std::string("充电保护中：上限 80%"));
+    CHECK_EQ(v.note, std::string("电量到上限后停止充电。"));
+    CHECK_EQ(v.button, std::string("关闭"));
+    CHECK(v.button_enabled && v.tone == Tone::Info);
+    CHECK_EQ(make_charge(Lang::ZhCN, charge_state(State::Charging, "", 90), good, NOW).strip, std::string("充电保护中：上限 90%"));
+    CHECK_EQ(make_charge(Lang::EnUS, charge_state(State::Charging), good, NOW).strip, std::string("Charge protection on: limit 80%"));
+    CHECK_EQ(make_charge(Lang::EnUS, charge_state(State::Charging), good, NOW).button, std::string("Turn off"));
+    v = make_charge(Lang::ZhCN, charge_state(State::Holding, "LEVEL_AT_LIMIT"), good, NOW);
+    CHECK_EQ(v.strip, std::string("充电保护中：上限 80%"));
+    CHECK_EQ(v.note, std::string("已停止充电，低于回充线后恢复。"));
+    CHECK(v.tone == Tone::Info && v.button_enabled);
+    v = make_charge(Lang::ZhCN, charge_state(State::SafetyStop, "VOLTAGE_LIMIT"), good, NOW);
+    CHECK_EQ(v.note, std::string("电压或温度过高，已停止充电。"));
+    CHECK(v.tone == Tone::Warn && v.button_enabled);
+
+    p = good; p.battery = "absent";                                                     // switching off is always possible
+    CHECK(make_charge(Lang::ZhCN, charge_state(State::Failsafe, "NO_BATTERY"), p, NOW).button_enabled);
+    CHECK_EQ(make_charge(Lang::ZhCN, charge_state(State::Failsafe, "NO_BATTERY"), p, NOW).button, std::string("关闭"));
+
+    const char *unreadable[] = {"SAMPLE_STALE", "NO_SAMPLE", "LEVEL_UNREADABLE", "PMIC_FAULT"};   // failsafe says why
+    for (const char *why : unreadable) {
+        v = make_charge(Lang::ZhCN, charge_state(State::Failsafe, why), good, NOW);
+        CHECK_EQ(v.headline, std::string("充电保护失效，已恢复正常充电"));
+        CHECK_EQ(v.strip, v.headline);
+        CHECK_EQ(v.note, std::string("读不到电量。"));
+        CHECK(v.tone == Tone::Warn);
+    }
+    CHECK_EQ(make_charge(Lang::ZhCN, charge_state(State::Failsafe, "NO_BATTERY"), good, NOW).note, std::string("未检测到电池。"));
+    const char *writes[] = {"STOP_FAILED", "STOP_MISMATCH", "REPEATED_FAILURE", "RESTORED_AFTER_FAILURE"};
+    for (const char *why : writes) CHECK_EQ(make_charge(Lang::ZhCN, charge_state(State::Failsafe, why), good, NOW).note, std::string("写入充电开关失败。"));
+    CHECK_EQ(make_charge(Lang::ZhCN, charge_state(State::Failsafe, "SOMETHING_NEW"), good, NOW).note, std::string(""));
+    CHECK_EQ(make_charge(Lang::EnUS, charge_state(State::Failsafe, "SAMPLE_STALE"), good, NOW).headline,
+             std::string("Charge protection failed; normal charging is back"));
+
+    v = make_charge(Lang::ZhCN, charge_state(State::Unconfirmed, "SWITCH_UNCONFIRMED", 80, false), good, NOW);
+    CHECK_EQ(v.headline, std::string("无法确认充电状态"));                              // never "stopped" or "restored" here
+    CHECK_EQ(v.strip, std::string("无法确认充电状态"));
+    CHECK(v.strip.find("已停止") == std::string::npos && v.strip.find("已恢复") == std::string::npos);
+    CHECK(v.note.find("已停止") == std::string::npos && v.note.find("已恢复") == std::string::npos);
+    CHECK_EQ(v.note, std::string("已多次尝试恢复正常充电。"));
+    CHECK(v.tone == Tone::Danger && v.button_enabled);
+    CHECK_EQ(make_charge(Lang::EnUS, charge_state(State::Unconfirmed, "", 80, false), good, NOW).headline, std::string("The charge state cannot be confirmed"));
+
+    for (State st : {State::Off, State::Charging, State::Holding, State::SafetyStop, State::Failsafe, State::Unconfirmed}) {   // U4
+        for (Lang l : {Lang::ZhCN, Lang::EnUS}) {
+            v = make_charge(l, charge_state(st), good, NOW);
+            CHECK(!v.strip.empty() && !v.headline.empty() && !v.button.empty());
+        }
+    }
+}
+
 int main() {
     t1_palettes_readable();
     t2_contrast_maths();
@@ -707,6 +806,7 @@ int main() {
     t16_connect();
     t17_actions();
     t18_notice();
+    t19_charge_view();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

@@ -2,6 +2,7 @@
 #include "board.hpp"
 #include "ui.hpp"
 #include "power_wire.hpp"
+#include "charge.hpp"
 #include "agent_client.hpp"
 #include "management.hpp"
 #include "json_util.hpp"
@@ -40,17 +41,32 @@ cJSON *handle(cJSON *request) {
         auto *caps=cJSON_AddObjectToObject(r,"capabilities");
         // Battery level is the PMIC gauge's own reading: readable now, but never validated against this cell.
         const auto power=dh::board_power();
+        // Charge protection is an experiment (rules R1): implemented, never verified on a real cell.
+        const auto charge=dh::charge::status();
         for(auto key:{"usb_provisioning","charge_limit","battery_soc","audio"}){
             const bool usb=strcmp(key,"usb_provisioning")==0,soc=strcmp(key,"battery_soc")==0,soc_ready=soc&&power.soc_percent>=0;
+            const bool limit=strcmp(key,"charge_limit")==0,limit_ready=limit&&charge.charging_known&&power.battery=="present";
             auto *cap=cJSON_AddObjectToObject(caps,key);
-            cJSON_AddStringToObject(cap,"support",usb||soc?"unverified":"unsupported");
-            cJSON_AddStringToObject(cap,"availability",usb||soc_ready?"ready":"unavailable");
-            cJSON_AddStringToObject(cap,"reason_code",usb?"HARDWARE_TEST_PENDING":soc_ready?"PMIC_ESTIMATE_UNVERIFIED":soc?(power.battery=="absent"?"NO_BATTERY":"SENSOR_UNAVAILABLE"):"NOT_VERIFIED_OR_NOT_IMPLEMENTED");
+            cJSON_AddStringToObject(cap,"support",usb||soc||limit?"unverified":"unsupported");
+            cJSON_AddStringToObject(cap,"availability",usb||soc_ready||limit_ready?"ready":"unavailable");
+            cJSON_AddStringToObject(cap,"reason_code",usb?"HARDWARE_TEST_PENDING":soc_ready?"PMIC_ESTIMATE_UNVERIFIED":soc?(power.battery=="absent"?"NO_BATTERY":"SENSOR_UNAVAILABLE"):
+                limit_ready?"EXPERIMENTAL":limit?(power.battery=="absent"?"NO_BATTERY":"SWITCH_UNREADABLE"):"NOT_VERIFIED_OR_NOT_IMPLEMENTED");
         }
         if(op=="status"){cJSON_AddStringToObject(r,"wifi",s.wifi.c_str());cJSON_AddStringToObject(r,"agent",s.agent.c_str());cJSON_AddStringToObject(r,"time_quality",s.time_quality.c_str());cJSON_AddStringToObject(r,"error",s.error.c_str());cJSON_AddNumberToObject(r,"config_revision",dh::config().revision);cJSON_AddNumberToObject(r,"provision_revision",dh::secrets().revision);cJSON_AddBoolToObject(r,"configured",dh::secrets().ready());}
         if(op=="status"){
             cJSON_AddBoolToObject(r,"ui_alive",dh::ui_alive());
             cJSON_AddItemToObject(r,"power",dh::power_report_json(power,dh::monotonic_ms()));
+            auto *chg=cJSON_AddObjectToObject(r,"charge");
+            cJSON_AddBoolToObject(chg,"enabled",charge.enabled);cJSON_AddNumberToObject(chg,"limit",charge.limit);cJSON_AddNumberToObject(chg,"resume",charge.resume);
+            cJSON_AddStringToObject(chg,"state",dh::charge::state_name(charge.state));cJSON_AddStringToObject(chg,"reason",charge.reason);
+            cJSON_AddBoolToObject(chg,"faulted",charge.faulted);cJSON_AddNumberToObject(chg,"stop_failures",charge.stop_failures);
+            cJSON_AddStringToObject(chg,"switch",!charge.charging_known?"unknown":charge.charging?"charging":"stopped");
+            auto *events=cJSON_AddArrayToObject(chg,"events");   // the log of rules K6, newest last
+            for(const auto &e:dh::charge::recent_events()){
+                auto *item=cJSON_CreateObject();cJSON_AddNumberToObject(item,"at_ms",static_cast<double>(e.at_ms));
+                cJSON_AddStringToObject(item,"request",e.charge?"charge":"stop");cJSON_AddStringToObject(item,"result",dh::charge::write_name(e.result));
+                cJSON_AddStringToObject(item,"reason",e.reason);cJSON_AddItemToArray(events,item);
+            }
             const auto configuration=dh::config();
             cJSON_AddStringToObject(r,"theme",configuration.layout.theme.c_str());
             cJSON_AddNumberToObject(r,"rotation",configuration.rotation);
@@ -117,8 +133,9 @@ void usb(void *) {
 void housekeeping(void *) {
     int64_t last_power=0;std::string time_quality;
     for(;;){auto now=dh::monotonic_ms();if(now-last_power>=2000){dh::board_sample_power();last_power=now;}
+        dh::charge::tick();   // charge protection: one step with the newest sample; the only code that writes the charge switch
         auto s=dh::snapshot();if(s.time_valid&&s.time_quality!=time_quality){if(!dh::board_rtc_write(time(nullptr)))dh::mutate([](dh::Snapshot &v,void*){v.error="RTC_WRITE_FAILED：当前系统时间仍有效";});time_quality=s.time_quality;}
-        // Power sampling continues during OTA; no charger configuration is written.
+        // Power sampling continues during OTA. The charge switch is written only by charge protection, and restored first.
         vTaskDelay(pdMS_TO_TICKS(250));
     }
 }
@@ -126,9 +143,9 @@ void housekeeping(void *) {
 extern "C" void app_main() {
     // Never print frames, tokens, SSIDs, Authorization headers, or trust material.
     esp_log_level_set("esp-tls",ESP_LOG_NONE);esp_log_level_set("HTTP_CLIENT",ESP_LOG_NONE);
-    dh::core_init();dh::board_init();
+    dh::core_init();dh::board_init();dh::charge::init();
     usb_serial_jtag_driver_config_t usb_cfg{};usb_cfg.rx_buffer_size=2048;usb_cfg.tx_buffer_size=2048;
     if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
-    dh::network_start();dh::agent_start();dh::management_start();xTaskCreate(housekeeping,"dh_power",4096,nullptr,5,nullptr);
+    dh::network_start();dh::agent_start();dh::management_start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
 }

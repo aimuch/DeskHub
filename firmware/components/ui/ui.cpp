@@ -4,6 +4,7 @@
 #include "ui.hpp"
 #include "agent_client.hpp"
 #include "bsp/esp-bsp.h"
+#include "charge.hpp"
 #include "esp_lv_adapter.h"
 #include "esp_system.h"
 #include "ui_internal.hpp"
@@ -22,7 +23,7 @@ lv_obj_t *screen = nullptr, *body = nullptr, *shield = nullptr, *pairing_view = 
 lv_timer_t *ui_timer = nullptr;
 DisplayPolicy policy;
 int old_brightness = -1, applied_rotation = 0, attempted_rotation = -1;
-std::string rotation_error, last_error, appearance_error, seen_command;
+std::string rotation_error, last_error, appearance_error, charge_error, seen_command;
 int64_t command_changed_ms = 0, config_due = 0;
 DisplayConfig pending_config;
 uint32_t rendered_revision = 0;
@@ -70,6 +71,8 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.s = ordered(s, c);
     f.c = c;
     f.power = board_power();
+    f.charge = charge::status();
+    f.charge_error = charge_error;
     f.now_ms = now;
     f.wall = time(nullptr);
     f.paired = want_paired && secrets().ready();
@@ -257,6 +260,32 @@ void apply_appearance(const Appearance &next) {
     appearance = next;
     look = make_look(next);
     look_dirty = true;
+    request_update();
+}
+// Turning protection on asks first (rules R1: an experiment is off by default and needs a second tap). Turning it off
+// does not ask. Either way the controller decides what the chip does; this only passes the user's choice on.
+void protect_confirm(int limit) {
+    charge::Settings s;
+    s.enabled = true;
+    s.limit = limit;
+    s.resume = limit - charge::kMinGap;
+    charge_error = charge::apply(s) ? std::string() : std::string(tr(look.lang, Str::ProtectNotSaved));
+    request_update();
+}
+void protect_cancel() { request_update(); }
+void request_protect_toggle() {
+    note_activity();
+    const charge::Status now = charge::status();
+    if (!now.enabled) {
+        charge_error.clear();
+        build_protect_dialog(screen, protect_confirm, protect_cancel);
+        return;
+    }
+    charge::Settings off;
+    off.enabled = false;
+    off.limit = now.limit;
+    off.resume = now.resume;
+    charge_error = charge::apply(off) ? std::string() : std::string(tr(look.lang, Str::ProtectOffNotSaved));
     request_update();
 }
 void do_restart() { esp_restart(); }
