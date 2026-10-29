@@ -1,6 +1,6 @@
 {
   "kind": "console-e2e",
-  "finished_at": "2026-10-29T05:37:40.649Z",
+  "finished_at": "2026-10-29T09:11:36.049Z",
   "chrome": "Chrome/156.0.8078.74",
   "node": "v26.13.0",
   "stand_ins": [
@@ -45,7 +45,7 @@
     {
       "name": "设置会话访问其他管理接口：403 PASSWORD_REQUIRED",
       "ok": true,
-      "detail": "{\"status\":403,\"body\":{\"error\":{\"code\":\"PASSWORD_REQUIRED\",\"message\":\"Set the administrator password first\",\"retryable\":false,\"request_id\":\"req-c93bc164c55c4dd993fd970bdf72179c\"}}}"
+      "detail": "{\"status\":403,\"body\":{\"error\":{\"code\":\"PASSWORD_REQUIRED\",\"message\":\"Set the administrator password first\",\"retryable\":false,\"request_id\":\"req-d4429ca000f2450181308e81942afc49\"}}}"
     },
     {
       "name": "设置会话不能上传固件",
@@ -155,7 +155,7 @@
     {
       "name": "命令行执行显示器动作：已确认",
       "ok": true,
-      "detail": "{\n  \"request_id\": \"67d5b323-ac2c-4e0c-8eae-a5864a7ca9be\",\n  \"command_id\": \"cmd-cbdbdae82c93486fb562288a10759c93\",\n  \"sta"
+      "detail": "{\n  \"request_id\": \"0a96171a-7cb0-4d05-bbbd-dce633c34c77\",\n  \"command_id\": \"cmd-0677e840b3ca45c193eb21e838b379c3\",\n  \"sta"
     },
     {
       "name": "命令记录：筛选和细节",
@@ -168,14 +168,14 @@
       "detail": ""
     },
     {
-      "name": "保存后，设备页写“等待设备确认”，不写“已应用”",
+      "name": "保存后，设备页的配置状态是“等待设备确认”（黄色），不是“设备已应用”",
       "ok": true,
-      "detail": ""
+      "detail": "{\"text\":\"等待设备确认\",\"kind\":\"badge warn\"}"
     },
     {
-      "name": "设备上报同一个 revision 和完整配置后，才显示“设备已应用”",
+      "name": "设备上报同一个 revision 和完整配置后，才显示“设备已应用”（绿色）",
       "ok": true,
-      "detail": ""
+      "detail": "{\"text\":\"设备已应用\",\"kind\":\"badge ok\"}"
     },
     {
       "name": "电源：电量、电压、温度",
