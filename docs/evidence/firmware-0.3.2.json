@@ -1,0 +1,55 @@
+{
+  "version": "0.3.2",
+  "built_from": "提交 d928218（升版）；构建时 firmware/ 目录与该提交一致",
+  "build_dir": "firmware/build-0.3.2（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.1": [
+    "充电保护（N1，实验功能，默认关闭）：策略、电源芯片充电开关的读写（只写 0x18 位 1）、保存、界面、USB 状态里的 charge 对象。设计见 docs/charge-protection-design.md",
+    "启动时先读充电开关，发现已关就先恢复正常充电",
+    "常驻任务的栈从 4096 加到 6144"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4351504,
+    "sha256": "88a0310a7796f584de8c83d195af4ee88bcc59aae9590d0bf4aae16b56772468",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 31
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.2-esp32s3.zip",
+      "size_bytes": 2682880,
+      "sha256": "5193b914adff64b8a89ddcb42bbc270abc4c5ebadb533f920fa96c005d67f580",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.2",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "没有生成 .dhfw：只打了 USB 包。需要时用 tools/firmware_package.py sign（它自己读取 .state/signing 的密钥）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.2",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.2，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "包内 README.txt 的充电保护说明已改成现状，并写明刷旧固件前要先关保护",
+    "主机测试 11 组（含 charge_protection_logic）全部通过；界面预览 16 组通过；Agent 339 条、tools 87 条通过；协议检查通过",
+    "变异检查：充电策略 85 处、充电界面 40 处、设备端配对 70 处、Agent 端配对 35 处，全部报红"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到任何设备，也没有连接设备。设备 deskhub-44bd8d60c598 上跑的仍是 0.3.1（不带充电保护）。刷机等用户说“刷”",
+    "没有在真机上停过充电。0x18 位 1 能否真的停充，只在主机的假芯片上测过",
+    "电量计的估算没有对照过这颗电芯（PMIC_ESTIMATE_UNVERIFIED），所以“80%”可能不是真的 80%",
+    "没有测过停充期间断电、重启、刷机。固件启动时会恢复；刷回 0.3.1 或更早的固件不会恢复，要先在界面里关闭保护",
+    "没有生成签名 .dhfw，没有做 OTA 与回滚",
+    "没有人看过新界面的保护页、确认框；预览只是电脑上的模拟"
+  ],
+  "hardware_verified": false
+}
