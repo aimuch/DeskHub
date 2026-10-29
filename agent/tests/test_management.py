@@ -20,6 +20,7 @@ from deskhub_agent.app import create_app
 from deskhub_agent.management_models import DeviceConfiguration, DeviceReport, FirmwarePayload
 from deskhub_agent.models import stamp, utcnow
 from deskhub_agent.storage import Store
+from conftest import PASSWORD
 
 ORIGIN = "http://testserver"
 
@@ -50,7 +51,7 @@ def signed_package(key, *, version="0.2.0-dev", image=None, payload_changes=None
 
 
 @pytest.fixture
-def management(settings, tmp_path):
+def management(settings, tmp_path, cheap_hash):
     key = ec.generate_private_key(ec.SECP256R1())
     public = tmp_path / "public.pem"
     public.write_bytes(key.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))
@@ -60,7 +61,11 @@ def management(settings, tmp_path):
     device_token = store.pair("terminal-one", ["read:status", "control:displays", "device:sync"], ["monitor-desk-01"])
     app = create_app(settings, store=store)
     with TestClient(app) as client:
+        # The way a person starts: the token once, the password at once, then only the password.
         result = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": ORIGIN})
+        assert result.status_code == 200 and result.json()["setup_required"] is True, result.text
+        result = client.put("/api/v1/admin/password", json={"password": PASSWORD},
+                            headers={"Origin": ORIGIN, "X-CSRF-Token": result.json()["csrf_token"]})
         assert result.status_code == 200, result.text
         csrf = result.json()["csrf_token"]
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
@@ -97,20 +102,23 @@ def test_admin_cookie_csrf_origin_revocation_and_identity_separation(management)
     privileged = store.pair("combined-admin", ["admin:config", "device:sync"], ["*"])
     assert sync(client, privileged, report).status_code == 403
     assert client.get("/api/v1/admin/devices/browser-admin").status_code == 404
+    script = TestClient(app)   # a command line: the token, no Origin header
+    assert script.post("/api/v1/admin/session", json={"token": admin_token}).status_code == 200
     store.revoke("browser-admin")
-    assert client.get("/api/v1/admin/session").status_code == 401
+    assert script.get("/api/v1/admin/session").status_code == 401   # a token session ends with its token
+    assert client.get("/api/v1/admin/session").status_code == 200   # the password session belongs to the account, not to the token
 
 
 def test_cookie_flags_session_expiry_and_logout(management):
     client, app, store, key, admin_token, device_token, headers, report = management
     assert client.cookies.get("deskhub_session")
-    result = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": ORIGIN})
+    result = client.post("/api/v1/admin/login", json={"password": PASSWORD}, headers={"Origin": ORIGIN})
     cookie = result.headers["set-cookie"]
     assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Max-Age=1800" in cookie
     newest = result.json()["csrf_token"]
     assert client.delete("/api/v1/admin/session", headers={**headers, "X-CSRF-Token": newest}).status_code == 200
     assert client.get("/api/v1/admin/session").status_code == 401
-    result = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": ORIGIN})
+    result = client.post("/api/v1/admin/login", json={"password": PASSWORD}, headers={"Origin": ORIGIN})
     for value in app.state.management.sessions.values():
         value["deadline"] -= 1801
     assert client.get("/api/v1/admin/session").status_code == 401
@@ -445,14 +453,17 @@ def test_upload_gate_large_stream_and_ordinary_body_budget(management):
     assert response.status_code == 200 and len(response.content) > 16384 and response.content == image
 
 
-def test_rotation_invalidates_session_and_https_cookie_is_secure(management):
+def test_rotation_invalidates_token_session_and_https_cookie_is_secure(management):
     client, app, store, key, admin_token, token, headers, report = management
     import httpx
     client.base_url = httpx.URL("https://testserver")
-    response = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": "https://testserver"})
+    response = client.post("/api/v1/admin/login", json={"password": PASSWORD}, headers={"Origin": "https://testserver"})
     assert response.status_code == 200 and "; Secure" in response.headers["set-cookie"]
+    script = TestClient(app)   # a command line: the token, no Origin header
+    assert script.post("/api/v1/admin/session", json={"token": admin_token}).status_code == 200
     store.pair("browser-admin", ["admin:config"], ["*"], replace=True)
-    assert client.get("/api/v1/admin/session").status_code == 401
+    assert script.get("/api/v1/admin/session").status_code == 401   # a token session ends when its token is replaced
+    assert client.get("/api/v1/admin/session").status_code == 200   # the password session does not depend on the token
 
 
 def test_cli_admin_credential_is_private_separate_and_never_printed(tmp_path, capsys):

@@ -146,6 +146,15 @@ class AdminLogin(StrictModel):
     token: str = Field(min_length=20, max_length=256)
 
 
+class PasswordLogin(StrictModel):
+    password: str = Field(max_length=256)   # no lower bound: a short wrong password gets the same answer as a long one
+
+
+class PasswordWrite(StrictModel):
+    password: str = Field(max_length=256)   # the rules (length, common words) are checked in admin_auth, with a clear answer
+    current_password: str | None = Field(default=None, max_length=256)
+
+
 class FirmwarePayload(StrictModel):
     schema_version: Literal[1] = 1
     board_model: Literal[BOARD_MODEL]

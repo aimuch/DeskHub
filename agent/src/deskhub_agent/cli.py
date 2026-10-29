@@ -102,6 +102,7 @@ def build_parser():
     admin_token.add_argument("--output", type=Path, required=True)
     admin_token.add_argument("--name", default="browser-admin")
     admin_token.add_argument("--replace", action="store_true")
+    sub.add_parser("admin-password-reset", help="forget the web console password; the next sign-in uses the management token again")
     revoke = sub.add_parser("revoke")
     revoke.add_argument("device_id")
     sub.add_parser("devices")
@@ -151,10 +152,16 @@ def main(argv=None) -> int:
             # No reload/multiple workers: one authority owns the SQLite journal.
             uvicorn.run(create_app(settings), host=settings.bind, port=settings.port, ssl_certfile=settings.tls_cert,
                 ssl_keyfile=settings.tls_key, access_log=False, proxy_headers=False, log_level="info")
-        elif args.command in {"pair", "admin-token", "revoke", "devices"}:
+        elif args.command in {"pair", "admin-token", "admin-password-reset", "revoke", "devices"}:
             store = Store(settings.db_path)
             try:
-                if args.command in {"pair", "admin-token"}:
+                if args.command == "admin-password-reset":
+                    # The one way back in. It needs this computer: there is no reset in the web console.
+                    from .admin_auth import AdminAuth
+                    AdminAuth(store).reset()
+                    print(json.dumps({"reset": True}))
+                    print("管理员密码已清除，所有网页登录已失效。请用管理口令登录网页，并马上设置新密码。", file=sys.stderr)
+                elif args.command in {"pair", "admin-token"}:
                     if args.command == "admin-token":
                         args.device_id = args.name
                         args.scope = ["admin:config"]

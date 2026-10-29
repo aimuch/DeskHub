@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from deskhub_agent import admin_auth
 from deskhub_agent.app import create_app
 from deskhub_agent.backend import Backend
 from deskhub_agent.errors import AgentError
@@ -47,6 +48,25 @@ class TestBackend(Backend):
         if self.observed == "exception":
             raise AgentError("TARGET_UNAVAILABLE", "path lost", 503)
         return self.observed
+
+
+PASSWORD = "q7Z!mK2#pL9v"
+
+
+@pytest.fixture
+def cheap_hash(monkeypatch):
+    """The real password hash needs 128 MiB and a fraction of a second. Tests use a small one; the real cost has its own test."""
+    monkeypatch.setattr(admin_auth, "SCRYPT_N", 2 ** 4)
+
+
+def sign_in(client, admin_token, origin="http://testserver"):
+    """Start the way a person starts: the token once, the password at once. Returns the response with the new CSRF token."""
+    first = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": origin})
+    assert first.status_code == 200 and first.json()["setup_required"] is True, first.text
+    done = client.put("/api/v1/admin/password", json={"password": PASSWORD},
+                      headers={"Origin": origin, "X-CSRF-Token": first.json()["csrf_token"]})
+    assert done.status_code == 200, done.text
+    return done
 
 
 @pytest.fixture

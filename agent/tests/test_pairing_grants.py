@@ -47,6 +47,7 @@ from deskhub_agent.errors import AgentError
 from deskhub_agent.management_models import DeviceConfiguration
 from deskhub_agent.models import Settings, stamp
 from deskhub_agent.storage import Store
+from conftest import sign_in
 
 ROOT = Path(__file__).resolve().parents[2]
 CA = ROOT / "tools/tests/fixtures/ca.pem"
@@ -141,7 +142,7 @@ def clock(monkeypatch):
 
 
 @pytest.fixture
-def factory(settings, clock, tmp_path):
+def factory(settings, clock, tmp_path, cheap_hash):
     stores = []
 
     @contextmanager
@@ -155,8 +156,7 @@ def factory(settings, clock, tmp_path):
         admin_token = store.pair("browser-admin", ["admin:config"], ["*"])
         app = create_app(settings, store=store)
         with TestClient(app, base_url=ORIGIN) as client:
-            session = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": ORIGIN})
-            assert session.status_code == 200, session.text
+            session = sign_in(client, admin_token, ORIGIN)
             headers = {"Origin": ORIGIN, "X-CSRF-Token": session.json()["csrf_token"]}
             yield World(client, app, store, settings, clock, headers)
 

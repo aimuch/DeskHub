@@ -30,6 +30,7 @@ from deskhub_agent.app import create_app
 from deskhub_agent.management import Management
 from deskhub_agent.management_models import DeviceConfiguration, DeviceReport
 from deskhub_agent.storage import Store
+from conftest import sign_in
 
 ORIGIN = "http://testserver"
 NUMERIC = ("soc_percent", "battery_mv", "vbus_mv", "chip_temp_c")
@@ -43,15 +44,14 @@ def power(**changes):
 
 
 @pytest.fixture
-def world(settings):
+def world(settings, cheap_hash):
     store = Store(settings.db_path)
     admin_token = store.pair("browser-admin", ["admin:config"], ["*"])
     scopes = ["read:status", "control:displays", "device:sync"]
     tokens = {name: store.pair(name, scopes, ["monitor-desk-01"]) for name in ("terminal-one", "terminal-two")}
     app = create_app(settings, store=store)
     with TestClient(app) as client:
-        session = client.post("/api/v1/admin/session", json={"token": admin_token}, headers={"Origin": ORIGIN})
-        assert session.status_code == 200, session.text
+        sign_in(client, admin_token, ORIGIN)
         report = {"firmware_version": "0.3.0", "board_model": "ESP32-S3-Touch-AMOLED-2.16", "boot_id": "boot-one",
                   "uptime_seconds": 10, "free_heap_bytes": 100000, "applied_revision": 0,
                   "configuration": DeviceConfiguration().model_dump(), "config_error": None,

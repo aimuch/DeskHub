@@ -97,7 +97,7 @@ def exported() -> dict[Path, dict[str, Any]]:
     }
     api["components"]["securitySchemes"]["AdminSession"] = {
         "type": "apiKey", "in": "cookie", "name": "deskhub_session",
-        "description": "HttpOnly SameSite=Strict 30-minute session exchanged from an independent admin:config credential; credential revocation invalidates sessions.",
+        "description": "HttpOnly SameSite=Strict 30-minute session. A browser signs in with the administrator password (POST /api/v1/admin/login); the management token only starts a first-time session that may do nothing but set the password. A script exchanges a management token without an Origin header and keeps full access; revoking or replacing the token ends that session. Setting, changing or resetting the password ends every password session.",
     }
     api["components"]["securitySchemes"]["AdminCSRF"] = {
         "type": "apiKey", "in": "header", "name": "X-CSRF-Token",
@@ -108,7 +108,7 @@ def exported() -> dict[Path, dict[str, Any]]:
             if method not in {"get", "post", "put", "delete", "patch", "options", "head"}:
                 continue
             if path.startswith("/api/v1/admin/"):
-                if path == "/api/v1/admin/session" and method == "post":
+                if (path == "/api/v1/admin/session" and method == "post") or path in {"/api/v1/admin/login", "/api/v1/admin/auth"}:
                     operation["security"] = []
                 else:
                     requirement = {"AdminSession": []}

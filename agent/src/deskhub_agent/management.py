@@ -13,10 +13,12 @@ from uuid import uuid4
 from fastapi import Depends, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
+from .admin_auth import AdminAuth, PolicyError
 from .errors import AgentError
 from .firmware_packages import MAX_PACKAGE_BYTES, key_fingerprint, trusted_key, validate_package, write_image
-from .management_models import AdminLogin, ConfigurationWrite, DeviceConfiguration, DeviceReport, PowerReport, TERMINAL_UPDATE_STATES, UpdateCreate
+from .management_models import AdminLogin, ConfigurationWrite, DeviceConfiguration, DeviceReport, PasswordLogin, PasswordWrite, PowerReport, TERMINAL_UPDATE_STATES, UpdateCreate
 from .models import stamp, utcnow
 
 COOKIE = "deskhub_session"
@@ -38,6 +40,7 @@ def transaction(connection):
 class Management:
     def __init__(self, settings, store):
         self.settings, self.store = settings, store
+        self.auth = AdminAuth(store)
         self.seen: dict[str, float] = {}
         self.sessions: dict[str, dict] = {}
         self.packages_dir = Path(settings.db_path).parent / "firmware"
@@ -79,10 +82,14 @@ class Management:
         now = time.monotonic()
         self.sessions = {key: value for key, value in self.sessions.items() if value["deadline"] > now}
 
-    def login(self, request: Request, token: str):
-        self.origin(request, login=True)
-        value = self.store.authenticate(token)
-        self.store.authorize(value, "admin:config")
+    def token_hashes(self) -> list[str]:
+        """Hashes of every management token, so that none of them can be chosen as the password."""
+        with self.store.lock:
+            rows = self.store.connection.execute("SELECT token_hash, scopes FROM devices").fetchall()
+        return [row["token_hash"] for row in rows if "admin:config" in json.loads(row["scopes"])]
+
+    def open_session(self, kind: str, *, admin_id: str, credential_hash: str | None = None, generation: int | None = None):
+        """kind: "setup" (token, browser, no password yet: may only set the password), "password", or "script" (token, no Origin)."""
         self.prune_sessions()
         if len(self.sessions) >= 32:
             raise AgentError("RATE_LIMITED", "Too many active management sessions", 429, True)
@@ -90,22 +97,49 @@ class Management:
         csrf = secrets.token_urlsafe(32)
         expires = stamp(utcnow() + timedelta(minutes=30))
         self.sessions[hashlib.sha256(secret.encode()).hexdigest()] = {
-            "device_id": value["device_id"], "credential_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "kind": kind, "admin_id": admin_id, "credential_hash": credential_hash, "generation": generation,
             "csrf_token": csrf, "expires_at": expires, "deadline": time.monotonic() + 1800,
         }
-        return secret, {"admin_id": value["device_id"], "csrf_token": csrf, "expires_at": expires}
+        return secret, {"admin_id": admin_id, "csrf_token": csrf, "expires_at": expires, "setup_required": kind == "setup"}
 
-    def session(self, request: Request, *, write=False):
+    def login(self, request: Request, token: str):
+        self.origin(request, login=True)
+        script = request.headers.get("origin") is None   # origin() lets only a loopback command line come without one
+        value = self.store.authenticate(token)
+        self.store.authorize(value, "admin:config")
+        credential = hashlib.sha256(token.encode()).hexdigest()
+        if script:
+            return self.open_session("script", admin_id=value["device_id"], credential_hash=credential)
+        if self.auth.password_set():
+            raise AgentError("TOKEN_LOGIN_DISABLED", "Sign in to the web console with the administrator password", 403)
+        return self.open_session("setup", admin_id=value["device_id"], credential_hash=credential, generation=self.auth.generation())
+
+    def password_session(self, generation: int):
+        return self.open_session("password", admin_id="admin", generation=generation)
+
+    def end_session(self, request: Request) -> None:
+        self.sessions.pop(hashlib.sha256(request.cookies.get(COOKIE, "").encode()).hexdigest(), None)
+
+    def session(self, request: Request, *, write=False, setup_ok=False):
         self.prune_sessions()
         cookie = request.cookies.get(COOKIE, "")
-        session = self.sessions.get(hashlib.sha256(cookie.encode()).hexdigest())
+        key = hashlib.sha256(cookie.encode()).hexdigest()
+        session = self.sessions.get(key)
         if not session:
             raise AgentError("UNAUTHORIZED", "Sign in to manage DeskHub", 401)
-        with self.store.lock:
-            row = self.store.connection.execute("SELECT token_hash FROM devices WHERE device_id=? AND revoked=0", (session["device_id"],)).fetchone()
-        if not row or not hmac.compare_digest(row["token_hash"], session["credential_hash"]):
-            raise AgentError("UNAUTHORIZED", "Management credential was revoked or rotated", 401)
-        self.store.authorize(self.store.identity(session["device_id"]), "admin:config")
+        kind = session["kind"]
+        # A set, change or reset of the password ends every session of an older generation at once.
+        if kind != "script" and session["generation"] != self.auth.generation():
+            self.sessions.pop(key, None)
+            raise AgentError("UNAUTHORIZED", "The administrator password changed; sign in again", 401)
+        if kind != "password":   # a token session lives only as long as its token
+            with self.store.lock:
+                row = self.store.connection.execute("SELECT token_hash FROM devices WHERE device_id=? AND revoked=0", (session["admin_id"],)).fetchone()
+            if not row or not hmac.compare_digest(row["token_hash"], session["credential_hash"]):
+                raise AgentError("UNAUTHORIZED", "Management credential was revoked or rotated", 401)
+            self.store.authorize(self.store.identity(session["admin_id"]), "admin:config")
+        if kind == "setup" and not setup_ok:
+            raise AgentError("PASSWORD_REQUIRED", "Set the administrator password first", 403)
         if write:
             self.origin(request)
             if not hmac.compare_digest(request.headers.get("X-CSRF-Token", ""), session["csrf_token"]):
@@ -339,25 +373,69 @@ def install_management(app, settings, database, identity, rates):
     management = Management(settings, database)
     app.state.management = management
 
-    async def admin(request: Request):
+    def check(request: Request, *, setup_ok: bool):
         rates.check("admin:" + hashlib.sha256(request.cookies.get(COOKIE, "").encode()).hexdigest(), 120)
-        return management.session(request, write=request.method not in {"GET", "HEAD"})
+        return management.session(request, write=request.method not in {"GET", "HEAD"}, setup_ok=setup_ok)
 
-    @app.post("/api/v1/admin/session")
-    async def login(request: Request, value: AdminLogin):
-        rates.check("login:" + (request.client.host if request.client else "unknown"), 10)
-        cookie, result = management.login(request, value.token)
+    async def admin(request: Request):
+        # Every page of the console. A session that still has to set the password does not get in.
+        return check(request, setup_ok=False)
+
+    async def admin_setup(request: Request):
+        # Only the session itself and the password: the three routes that a first-time session may use.
+        return check(request, setup_ok=True)
+
+    def start(request: Request, cookie_and_result):
+        cookie, result = cookie_and_result
         response = JSONResponse(result)
         response.set_cookie(COOKIE, cookie, max_age=1800, httponly=True, secure=request.url.scheme == "https", samesite="strict", path="/api/v1/admin")
         return response
 
+    def caller(request: Request) -> str:
+        return request.client.host if request.client else "unknown"
+
+    @app.get("/api/v1/admin/auth")
+    async def auth_state():
+        return {"password_set": management.auth.password_set()}
+
+    @app.post("/api/v1/admin/session")
+    async def login(request: Request, value: AdminLogin):
+        rates.check("login:" + caller(request), 10)
+        return start(request, management.login(request, value.token))
+
+    @app.post("/api/v1/admin/login")
+    async def password_login(request: Request, value: PasswordLogin):
+        management.origin(request)
+        rates.check("password:" + caller(request), 10)
+        generation = await run_in_threadpool(management.auth.verify, value.password)
+        return start(request, management.password_session(generation))
+
+    @app.put("/api/v1/admin/password")
+    async def set_password(request: Request, value: PasswordWrite, session=Depends(admin_setup)):
+        if session["kind"] == "script":
+            raise AgentError("FORBIDDEN", "Set the password in the web console, not with a credential file", 403)
+        hashes = management.token_hashes()
+        try:
+            if session["kind"] == "setup":
+                generation = await run_in_threadpool(lambda: management.auth.set_password(value.password, token_hashes=hashes, only_if_unset=True))
+            elif value.current_password is None:
+                raise AgentError("CURRENT_PASSWORD_REQUIRED", "Enter the current password to change it", 400)
+            else:
+                generation = await run_in_threadpool(lambda: management.auth.change_password(value.current_password, value.password, token_hashes=hashes))
+        except PolicyError as error:
+            raise AgentError("WEAK_PASSWORD", error.message, 400) from None
+        # New rights get a new cookie and a new CSRF token. The old session ends, and so does every other one.
+        management.end_session(request)
+        return start(request, management.password_session(generation))
+
     @app.get("/api/v1/admin/session")
-    async def session(value=Depends(admin)):
-        return {"admin_id": value["device_id"], "csrf_token": value["csrf_token"], "expires_at": value["expires_at"]}
+    async def session(value=Depends(admin_setup)):
+        return {"admin_id": value["admin_id"], "csrf_token": value["csrf_token"], "expires_at": value["expires_at"],
+                "setup_required": value["kind"] == "setup"}
 
     @app.delete("/api/v1/admin/session")
-    async def logout(request: Request, value=Depends(admin)):
-        management.sessions.pop(hashlib.sha256(request.cookies.get(COOKIE, "").encode()).hexdigest(), None)
+    async def logout(request: Request, value=Depends(admin_setup)):
+        management.end_session(request)
         response = JSONResponse({"logged_out": True})
         response.delete_cookie(COOKIE, path="/api/v1/admin")
         return response
