@@ -84,13 +84,22 @@ bool hex6(const std::string &s) {
     return true;
 }
 }  // namespace
+RingPx ring_px(RingTier t) {
+    switch (t) {
+    case RingTier::Thin: return {12, 7};
+    case RingTier::Thick: return {28, 15};
+    case RingTier::Standard: break;
+    }
+    return {20, 11};
+}
 std::string serialize(const Appearance &a) {
     return std::string(theme_name(a.theme)) + "|" + (a.accent ? fmt("%06x", static_cast<unsigned>(a.accent & 0xffffff)) : std::string("-")) + "|" +
-           lang_name(a.lang) + "|" + size_name(a.size);
+           lang_name(a.lang) + "|" + size_name(a.size) + "|" + (a.show_percent ? "pct" : "nopct") + "|" +
+           (a.ring == RingTier::Thin ? "thin" : a.ring == RingTier::Thick ? "thick" : "standard");
 }
 Appearance parse_appearance(const std::string &text) {
     Appearance out;
-    if (text.empty() || text.size() > 64) return out;
+    if (text.empty() || text.size() > 80) return out;
     std::vector<std::string> field;
     size_t from = 0;
     for (;;) {
@@ -99,7 +108,7 @@ Appearance parse_appearance(const std::string &text) {
         if (bar == std::string::npos) break;
         from = bar + 1;
     }
-    if (field.size() != 4) return Appearance{};
+    if (field.size() != 4 && field.size() != 6) return Appearance{};
     Appearance a;
     if (field[0] == "mint") a.theme = ThemeId::Mint;
     else if (field[0] == "ocean") a.theme = ThemeId::Ocean;
@@ -115,6 +124,15 @@ Appearance parse_appearance(const std::string &text) {
     else if (field[3] == "standard") a.size = SizeTier::Standard;
     else if (field[3] == "large") a.size = SizeTier::Large;
     else return Appearance{};
+    if (field.size() == 6) {
+        if (field[4] == "pct") a.show_percent = true;
+        else if (field[4] == "nopct") a.show_percent = false;
+        else return Appearance{};
+        if (field[5] == "thin") a.ring = RingTier::Thin;
+        else if (field[5] == "standard") a.ring = RingTier::Standard;
+        else if (field[5] == "thick") a.ring = RingTier::Thick;
+        else return Appearance{};
+    }
     return a;
 }
 
@@ -125,39 +143,45 @@ bool power_fresh(const PowerState &p, int64_t now_ms) {
 bool metrics_fresh(const Snapshot &s, int64_t now_ms) { return s.sampled_ms != 0 && now_ms < s.metrics_expires_ms; }
 
 // ---- header and ring ----
-HeaderView make_header(Lang l, const Snapshot &s, const PowerState &p, int64_t now_ms) {
+HeaderView make_header(const Snapshot &s, const PowerState &p, int64_t now_ms, bool show_percent) {
+    using Kind = BatteryView::Kind;
     HeaderView h;
-    h.agent = T(l, s.agent_ready ? Str::AgentOnline : Str::AgentOffline);
+    h.agent = s.agent_ready ? LinkIcon::Ok : LinkIcon::Off;
     h.agent_tone = s.agent_ready ? Tone::Ok : Tone::Off;
     const WifiKind kind = wifi_kind(s);
-    h.wifi = kind == WifiKind::Connected ? T(l, Str::WifiHeader) : wifi_text(l, kind);  // short: the header is narrow
-    if (kind == WifiKind::Connected && rssi_valid(s.rssi)) h.wifi += T(l, Str::Sep) + fmt("%d dBm", s.rssi);
+    h.wifi = kind == WifiKind::Connected ? LinkIcon::Ok : kind == WifiKind::Connecting ? LinkIcon::Busy : LinkIcon::Off;
     h.wifi_tone = wifi_tone(kind);
 
-    const bool fresh = power_fresh(p, now_ms);
+    BatteryView &b = h.battery;
     if (p.fault) {
-        h.battery = T(l, Str::PowerFault);
-        h.battery_tone = Tone::Warn;
-        h.charge = T(l, Str::ChargeFault);
-        h.charge_tone = Tone::Warn;
+        b.kind = Kind::Fault;
+        b.digits = "!";
+        b.tone = Tone::Warn;
         return h;
     }
-    if (!fresh) {
-        h.battery = T(l, Str::BatteryUnknown);
-        h.charge = T(l, Str::PowerPending);
+    if (!power_fresh(p, now_ms)) {  // nothing about an old sample is shown: no USB, no bolt, no level
+        b.kind = Kind::Unknown;
+        b.digits = "?";
         return h;
     }
-    if (p.battery == "absent") h.battery = T(l, Str::BatteryNone);
-    else if (p.battery == "present" && level_valid(p.soc_percent)) {
-        h.battery = fmt(tr(l, Str::BatteryLevel), p.soc_percent);
-        h.battery_fill = p.soc_percent;
-        h.battery_tone = level_tone(p.soc_percent);
-    } else h.battery = T(l, Str::BatteryUnknown);
-    const Str usb = p.vbus == "present" ? Str::UsbPresent : p.vbus == "absent" ? Str::UsbAbsent : Str::Unknown;
-    h.charge = T(l, usb) + T(l, Str::Sep) + charge_text(l, p.charging);
-    h.charge_tone = charge_tone(p.charging);
+    h.usb = p.vbus == "present";
+    if (p.battery == "absent") {
+        b.kind = Kind::None;
+        return h;
+    }
+    if (p.battery == "present" && level_valid(p.soc_percent)) {
+        b.kind = Kind::Level;
+        b.percent = p.soc_percent;
+        b.digits = show_percent ? std::to_string(p.soc_percent) : std::string();
+        b.tone = level_tone(p.soc_percent);
+    } else {
+        b.kind = Kind::Unknown;
+        b.digits = "?";
+    }
+    b.charging = p.battery == "present" && p.charging == "charging";
     return h;
 }
+bool blink_on(int64_t now_ms) { return now_ms < 0 || (now_ms / 500) % 2 == 0; }
 RingView make_ring(const Snapshot &s, const PowerState &p, int64_t now_ms) {
     RingView r;
     r.wifi = s.wifi_ready;

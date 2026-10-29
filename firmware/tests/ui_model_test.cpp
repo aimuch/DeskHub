@@ -244,27 +244,35 @@ static void t5_appearance() {
     for (ThemeId t : kThemes)
         for (uint32_t accent : {0u, kAccentChoices[0], kAccentChoices[5]})
             for (Lang l : {Lang::ZhCN, Lang::EnUS})
-                for (SizeTier z : {SizeTier::Small, SizeTier::Standard, SizeTier::Large}) {
-                    Appearance a;
-                    a.theme = t; a.accent = accent; a.lang = l; a.size = z;
-                    const Appearance b = parse_appearance(serialize(a));
-                    CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z);
-                    ++combos;
-                }
-    CHECK_EQ(combos, 54);
+                for (SizeTier z : {SizeTier::Small, SizeTier::Standard, SizeTier::Large})
+                    for (bool percent : {true, false})
+                        for (RingTier r : {RingTier::Thin, RingTier::Standard, RingTier::Thick}) {
+                            Appearance a;
+                            a.theme = t; a.accent = accent; a.lang = l; a.size = z; a.show_percent = percent; a.ring = r;
+                            const Appearance b = parse_appearance(serialize(a));
+                            CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z && b.show_percent == percent && b.ring == r);
+                            ++combos;
+                        }
+    CHECK_EQ(combos, 54 * 2 * 3);
     Appearance d;
-    CHECK_EQ(serialize(d), std::string("mint|-|zh-CN|standard"));
+    CHECK(d.show_percent && d.ring == RingTier::Standard);   // the battery percent is shown unless you turn it off
+    CHECK_EQ(serialize(d), std::string("mint|-|zh-CN|standard|pct|standard"));
     Appearance a;
-    a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large;
-    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large"));
+    a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large; a.show_percent = false; a.ring = RingTier::Thick;
+    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick"));
+    // What 0.3.x stored has four fields. It is still understood, and the new options are the defaults.
+    const Appearance old = parse_appearance("ocean|5ee6b8|en-US|large");
+    CHECK(old.theme == ThemeId::Ocean && old.accent == 0x5ee6b8u && old.lang == Lang::EnUS && old.size == SizeTier::Large);
+    CHECK(old.show_percent && old.ring == RingTier::Standard);
     const std::vector<std::string> bad = {
-        "", "garbage", "mint|-|zh-CN", "mint|-|zh-CN|standard|extra", "mint|zzzzzz|zh-CN|standard",
-        "mint|5EE6B8|zh-CN|standard", "mint|5ee6b|zh-CN|standard", "mint|5ee6b8f|zh-CN|standard",
-        "pink|-|zh-CN|standard", "mint|-|fr-FR|standard", "mint|-|zh-CN|huge", "||||", "mint|-|zh-CN|standard\n",
-        std::string(500, 'a'), "mint|-|zh-CN|standard|" + std::string(100, 'x')};
+        "", "garbage", "mint|-|zh-CN", "mint|-|zh-CN|standard|pct", "mint|-|zh-CN|standard|pct|standard|extra", "mint|zzzzzz|zh-CN|standard|pct|standard",
+        "mint|5EE6B8|zh-CN|standard|pct|standard", "mint|5ee6b|zh-CN|standard|pct|standard", "mint|5ee6b8f|zh-CN|standard|pct|standard",
+        "pink|-|zh-CN|standard|pct|standard", "mint|-|fr-FR|standard|pct|standard", "mint|-|zh-CN|huge|pct|standard", "||||||", "mint|-|zh-CN|standard|pct|standard\n",
+        "mint|-|zh-CN|standard|PCT|standard", "ocean|-|en-US|large|pct", "ocean|5ee6b8|en-US|large|nopct|thick|", "ocean|-|en-US|large|nopct|", "mint|-|zh-CN|standard|maybe|standard", "mint|-|zh-CN|standard|pct|huge", "mint|-|zh-CN|standard||",
+        "mint|zzzzzz|zh-CN|standard", "mint|-|zh-CN|standard\n", std::string(500, 'a'), "mint|-|zh-CN|standard|pct|" + std::string(100, 'x')};
     for (const auto &s : bad) {
         const Appearance p = parse_appearance(s);
-        CHECK(p.theme == d.theme && p.accent == d.accent && p.lang == d.lang && p.size == d.size);
+        CHECK(p.theme == d.theme && p.accent == d.accent && p.lang == d.lang && p.size == d.size && p.show_percent == d.show_percent && p.ring == d.ring);
     }
     CHECK(theme_from_name("nonsense") == ThemeId::Mint);
     CHECK(lang_from_name("nonsense") == Lang::ZhCN);
@@ -350,99 +358,109 @@ static void t9_freshness() {
     CHECK(!power_fresh(p, NOW));
 }
 static void t10_header() {
+    using Kind = BatteryView::Kind;
     const Snapshot s = online_snapshot();
-    HeaderView h = make_header(Lang::ZhCN, s, fresh_power(), NOW);
-    CHECK_EQ(h.agent, std::string("电脑在线"));
-    CHECK_EQ(h.wifi, std::string("已连接 · -61 dBm"));
-    CHECK_EQ(h.battery, std::string("电量 78%"));
-    CHECK_EQ(h.charge, std::string("USB接入 · 充电中"));
-    CHECK_EQ(h.battery_fill, 78);
-    CHECK(h.battery_tone == Tone::Ok && h.agent_tone == Tone::Ok && h.wifi_tone == Tone::Ok);
-    h = make_header(Lang::EnUS, s, fresh_power(), NOW);
-    CHECK_EQ(h.battery, std::string("Battery 78%"));
-    CHECK(ascii(h.agent) && ascii(h.wifi) && ascii(h.battery) && ascii(h.charge));
+    HeaderView h = make_header(s, fresh_power(), NOW, true);
+    CHECK(h.wifi == LinkIcon::Ok && h.agent == LinkIcon::Ok && h.wifi_tone == Tone::Ok && h.agent_tone == Tone::Ok);
+    CHECK(h.usb);
+    CHECK(h.battery.kind == Kind::Level && h.battery.percent == 78 && h.battery.tone == Tone::Ok && h.battery.charging);
+    CHECK_EQ(h.battery.digits, std::string("78"));            // digits only, no percent sign
+    h = make_header(s, fresh_power(), NOW, false);             // the percent switched off: the fill stays, the digits go
+    CHECK(h.battery.kind == Kind::Level && h.battery.percent == 78 && h.battery.digits.empty());
 
-    // Tones follow the level.
+    // Tones follow the level; the digits are the level.
     for (auto [soc, tone] : {std::pair<int, Tone>{100, Tone::Ok}, {21, Tone::Ok}, {20, Tone::Warn}, {11, Tone::Warn}, {10, Tone::Danger}, {0, Tone::Danger}}) {
         PowerState p = fresh_power();
         p.soc_percent = soc;
-        h = make_header(Lang::ZhCN, s, p, NOW);
-        CHECK(h.battery_tone == tone);
-        CHECK_EQ(h.battery_fill, soc);
+        h = make_header(s, p, NOW, true);
+        CHECK(h.battery.tone == tone);
+        CHECK_EQ(h.battery.percent, soc);
+        CHECK_EQ(h.battery.digits, std::to_string(soc));
     }
-    // Unknown is never 0 %.
+    // Unknown is never 0 %: no fill, and a question mark instead of digits, also when the percent is switched off.
     PowerState p = fresh_power();
     p.soc_percent = -1;
-    h = make_header(Lang::ZhCN, s, p, NOW);
-    CHECK_EQ(h.battery, std::string("电量未知"));
-    CHECK_EQ(h.battery_fill, -1);
-    CHECK(h.battery_tone == Tone::Off);
-    CHECK(h.battery.find("0%") == std::string::npos);
+    for (bool percent : {true, false}) {
+        h = make_header(s, p, NOW, percent);
+        CHECK(h.battery.kind == Kind::Unknown && h.battery.percent == -1 && h.battery.tone == Tone::Off);
+        CHECK_EQ(h.battery.digits, std::string("?"));
+    }
     // A level outside 0..100 is not a level.
     for (int bad : {101, 150, 255, -2, -100}) {
         p = fresh_power();
         p.soc_percent = bad;
-        h = make_header(Lang::ZhCN, s, p, NOW);
-        CHECK_EQ(h.battery, std::string("电量未知"));
-        CHECK_EQ(h.battery_fill, -1);
+        h = make_header(s, p, NOW, true);
+        CHECK(h.battery.kind == Kind::Unknown && h.battery.percent == -1);
+        CHECK_EQ(h.battery.digits, std::string("?"));
     }
-    // No battery: the level in the sample does not count.
+    // No battery: the level in the sample does not count, and nothing charges.
     p = fresh_power();
     p.battery = "absent";
     p.soc_percent = 55;
-    h = make_header(Lang::ZhCN, s, p, NOW);
-    CHECK_EQ(h.battery, std::string("未装电池"));
-    CHECK_EQ(h.battery_fill, -1);
+    h = make_header(s, p, NOW, true);
+    CHECK(h.battery.kind == Kind::None && h.battery.percent == -1 && h.battery.digits.empty() && !h.battery.charging);
+    CHECK(h.usb);                                              // the USB is still there
     // The battery state itself unknown: no level either.
     p = fresh_power();
     p.battery = "unknown";
-    h = make_header(Lang::ZhCN, s, p, NOW);
-    CHECK_EQ(h.battery_fill, -1);
-    CHECK(h.battery.find("78") == std::string::npos);
-    // Stale: nothing about the old sample is shown.
+    h = make_header(s, p, NOW, true);
+    CHECK(h.battery.kind == Kind::Unknown && h.battery.percent == -1 && h.battery.digits != "78" && !h.battery.charging);   // no bolt for a battery not known to be there
+    // Stale: nothing about the old sample is shown, not the USB and not the bolt either.
     p = fresh_power();
     p.observed_ms = NOW - 60000;
-    h = make_header(Lang::ZhCN, s, p, NOW);
-    CHECK_EQ(h.battery, std::string("电量未知"));
-    CHECK_EQ(h.charge, std::string("电源待测"));
-    CHECK_EQ(h.battery_fill, -1);
-    CHECK(h.charge.find("USB") == std::string::npos && h.charge.find("充电中") == std::string::npos);
+    h = make_header(s, p, NOW, true);
+    CHECK(h.battery.kind == Kind::Unknown && h.battery.percent == -1 && !h.usb && !h.battery.charging);
     // Fault.
     p = fresh_power();
     p.fault = true;
-    h = make_header(Lang::ZhCN, s, p, NOW);
-    CHECK_EQ(h.battery, std::string("电源异常"));
-    CHECK_EQ(h.charge, std::string("读取失败"));
-    CHECK_EQ(h.battery_fill, -1);
-    CHECK(h.battery_tone == Tone::Warn && h.charge_tone == Tone::Warn);
-    // Charge line: USB absent, idle, full, unknown.
+    h = make_header(s, p, NOW, true);
+    CHECK(h.battery.kind == Kind::Fault && h.battery.percent == -1 && h.battery.tone == Tone::Warn && !h.usb && !h.battery.charging);
+    CHECK_EQ(h.battery.digits, std::string("!"));
+    // USB and the bolt: the bolt is only for "charging", the USB icon only for a USB that is there.
     p = fresh_power(); p.vbus = "absent"; p.charging = "idle";
-    CHECK_EQ(make_header(Lang::ZhCN, s, p, NOW).charge, std::string("USB未接 · 未充电"));
+    h = make_header(s, p, NOW, true);
+    CHECK(!h.usb && !h.battery.charging);
     p = fresh_power(); p.charging = "full";
-    CHECK_EQ(make_header(Lang::ZhCN, s, p, NOW).charge, std::string("USB接入 · 已充满"));
+    h = make_header(s, p, NOW, true);
+    CHECK(h.usb && !h.battery.charging && h.battery.kind == Kind::Level);
+    p = fresh_power(); p.charging = "idle";
+    CHECK(make_header(s, p, NOW, true).usb && !make_header(s, p, NOW, true).battery.charging);
     p = fresh_power(); p.vbus = "unknown"; p.charging = "unknown";
-    CHECK_EQ(make_header(Lang::ZhCN, s, p, NOW).charge, std::string("未知 · 未知"));
+    h = make_header(s, p, NOW, true);
+    CHECK(!h.usb && !h.battery.charging);
+    p = fresh_power(); p.soc_percent = -1;                     // charging, level unknown: the chip says charging, so the bolt shows
+    h = make_header(s, p, NOW, true);
+    CHECK(h.battery.kind == Kind::Unknown && h.battery.charging);
 
-    // Wi-Fi and Agent.
+    // Wi-Fi and the computer: an icon with a slash (Off) unless it is connected; connecting is its own state (it blinks).
     Snapshot w = s;
-    w.rssi = 0;
-    CHECK_EQ(make_header(Lang::ZhCN, w, fresh_power(), NOW).wifi, std::string("已连接"));
-    for (int bad : {1, 20, -128, -500}) { w.rssi = bad; CHECK_EQ(make_header(Lang::ZhCN, w, fresh_power(), NOW).wifi, std::string("已连接")); }
+    for (int rssi : {0, 1, 20, -128, -500, -61}) {             // the signal strength is not part of the icon
+        w.rssi = rssi;
+        CHECK(make_header(w, fresh_power(), NOW, true).wifi == LinkIcon::Ok);
+    }
     w = s; w.wifi_ready = false; w.wifi = "未配置";
-    h = make_header(Lang::ZhCN, w, fresh_power(), NOW);
-    CHECK_EQ(h.wifi, std::string("未配置网络")); CHECK(h.wifi_tone == Tone::Off);
+    h = make_header(w, fresh_power(), NOW, true);
+    CHECK(h.wifi == LinkIcon::Off && h.wifi_tone == Tone::Off);
     w.wifi = "正在连接Wi-Fi";
-    h = make_header(Lang::ZhCN, w, fresh_power(), NOW);
-    CHECK_EQ(h.wifi, std::string("正在连接")); CHECK(h.wifi_tone == Tone::Info);
+    h = make_header(w, fresh_power(), NOW, true);
+    CHECK(h.wifi == LinkIcon::Busy && h.wifi_tone == Tone::Info);
     w.wifi = "Wi-Fi初始化失败";
-    h = make_header(Lang::ZhCN, w, fresh_power(), NOW);
-    CHECK_EQ(h.wifi, std::string("连接异常")); CHECK(h.wifi_tone == Tone::Warn);
+    h = make_header(w, fresh_power(), NOW, true);
+    CHECK(h.wifi == LinkIcon::Off && h.wifi_tone == Tone::Warn);
     w.wifi = "";
-    h = make_header(Lang::ZhCN, w, fresh_power(), NOW);
-    CHECK_EQ(h.wifi, std::string("未连接")); CHECK(h.wifi_tone == Tone::Off);
+    h = make_header(w, fresh_power(), NOW, true);
+    CHECK(h.wifi == LinkIcon::Off && h.wifi_tone == Tone::Off);
     w = s; w.agent_ready = false;
-    h = make_header(Lang::ZhCN, w, fresh_power(), NOW);
-    CHECK_EQ(h.agent, std::string("电脑离线")); CHECK(h.agent_tone == Tone::Off);
+    h = make_header(w, fresh_power(), NOW, true);
+    CHECK(h.agent == LinkIcon::Off && h.agent_tone == Tone::Off && h.wifi == LinkIcon::Ok);
+}
+// The icons that are connecting blink: on for the first half of each second.
+static void t10b_blink() {
+    CHECK(blink_on(0) && blink_on(1) && blink_on(499));
+    CHECK(!blink_on(500) && !blink_on(999));
+    CHECK(blink_on(1000) && blink_on(1499) && !blink_on(1500));
+    CHECK(blink_on(-1) && blink_on(-500));                      // a clock that runs backwards must not break it
+    for (int64_t t = 0; t < 10000; t += 100) CHECK(blink_on(t) == blink_on(t + 1000));
 }
 static void t11_ring() {
     const Snapshot s = online_snapshot();
@@ -692,6 +710,38 @@ static void t18_notice() {
     CHECK_EQ(notice_text(Lang::ZhCN, "已接收，等待执行", NOW, NOW + 5), std::string(""));  // time must not run backwards
 }
 
+// ---- T20: the digits in the battery icon stay readable; the ring tiers ----
+static void t20_battery_fill_and_rings() {
+    CHECK_EQ(blend(0xffffff, 0x000000, 50), 0x808080u);      // half way, rounded half up
+    CHECK_EQ(blend(0x123456, 0xabcdef, 0), 0xabcdefu);
+    CHECK_EQ(blend(0x123456, 0xabcdef, 100), 0x123456u);
+    CHECK_EQ(blend(0xff0000, 0x000000, 40), 0x660000u);
+    CHECK_EQ(blend(0x00ff00, 0x0000ff, 25), 0x0040bfu);
+    // The digits are drawn in ink over the level colour at kBatteryFillPercent: that must pass the 4.5:1 of rules R9,
+    // on every surface it can sit on, in every theme, for every colour a level can have.
+    for (ThemeId id : kThemes) {
+        const Palette &p = theme_palette(id);
+        for (uint32_t tone : {p.agent, p.power, p.danger})
+            for (uint32_t under : {p.bg, p.bg2, p.card})
+                CHECK(contrast_ratio(p.ink, blend(tone, under, kBatteryFillPercent)) >= 4.5);
+    }
+    // A stronger fill would fail: the number is not chosen to hide the problem.
+    bool some_fail = false;
+    for (ThemeId id : kThemes) {
+        const Palette &p = theme_palette(id);
+        for (uint32_t tone : {p.agent, p.power, p.danger}) some_fail = some_fail || contrast_ratio(p.ink, blend(tone, p.bg, 60)) < 4.5;
+    }
+    CHECK(some_fail);
+
+    const RingPx thin = ring_px(RingTier::Thin), standard = ring_px(RingTier::Standard), thick = ring_px(RingTier::Thick);
+    CHECK(thin.home < standard.home && standard.home < thick.home);
+    CHECK(thin.gauge < standard.gauge && standard.gauge < thick.gauge);
+    CHECK(standard.home == 20 && standard.gauge == 11);        // what the screen had before the tiers
+    CHECK(thin.home == 12 && thin.gauge == 7 && thick.home == 28 && thick.gauge == 15);   // the numbers of docs/design/README.md
+    CHECK(thin.gauge >= 4 && thin.home >= 6);                   // never a hair line
+    CHECK(thick.home <= 30 && thick.gauge <= 16);               // and the clock in the ring still has room: 216 px ring, 176 px text
+}
+
 static charge::Status charge_state(charge::State state, const char *reason = "", int limit = 80, bool switch_known = true) {
     charge::Status s;
     s.state = state;
@@ -807,6 +857,8 @@ int main() {
     t17_actions();
     t18_notice();
     t19_charge_view();
+    t10b_blink();
+    t20_battery_fill_and_rings();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

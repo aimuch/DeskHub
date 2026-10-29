@@ -30,6 +30,16 @@ uint32_t tint(uint32_t card, uint32_t accent) {
 }
 }  // namespace
 
+uint32_t blend(uint32_t top, uint32_t under, int percent) {
+    percent = std::min(100, std::max(0, percent));
+    uint32_t out = 0;
+    for (int shift : {16, 8, 0}) {
+        const uint32_t a = (top >> shift) & 0xff, b = (under >> shift) & 0xff;
+        out |= ((a * static_cast<uint32_t>(percent) + b * static_cast<uint32_t>(100 - percent) + 50) / 100) << shift;
+    }
+    return out;
+}
+
 const Palette &theme_palette(ThemeId id) {
     switch (id) {
     case ThemeId::Ocean: return kOcean;

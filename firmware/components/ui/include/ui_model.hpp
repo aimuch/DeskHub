@@ -17,14 +17,22 @@ namespace dh::ui {
 enum class SizeTier { Small, Standard, Large };
 struct FontPx { int title, body, caption; };  // each one of the compiled-in 16, 20, 28 px fonts
 FontPx font_px(SizeTier);
+// How thick the rings are: the status ring on the Home page and the gauge on the power page.
+enum class RingTier { Thin, Standard, Thick };
+struct RingPx { int home, gauge; };
+RingPx ring_px(RingTier);  // Thin 12/7, Standard 20/11 (what it was before the tiers), Thick 28/15
 struct Appearance {
     ThemeId theme = ThemeId::Mint;
     uint32_t accent = 0;  // 0 = the theme's own
     Lang lang = Lang::ZhCN;
     SizeTier size = SizeTier::Standard;
+    bool show_percent = true;  // the digits inside the battery icon of the header
+    RingTier ring = RingTier::Standard;
 };
-std::string serialize(const Appearance &);            // "mint|5ee6b8|zh-CN|standard"
-Appearance parse_appearance(const std::string &);     // anything malformed is the default appearance
+std::string serialize(const Appearance &);            // "mint|5ee6b8|zh-CN|standard|pct|standard"
+// The four fields that 0.3.x stored are still understood (the two new options are the defaults). Anything else that is
+// malformed is the default appearance.
+Appearance parse_appearance(const std::string &);
 
 // ---- shared ----
 enum class Tone { Ok, Info, Warn, Danger, Off };
@@ -32,13 +40,25 @@ constexpr int64_t kPowerStaleMs = 6000;
 bool power_fresh(const PowerState &, int64_t now_ms);  // a sample older than 6 s, from the future, or never taken is stale
 bool metrics_fresh(const Snapshot &, int64_t now_ms);
 
-// ---- header: two lines on each side, on every page ----
-struct HeaderView {
-    std::string agent, wifi, battery, charge;
-    Tone agent_tone = Tone::Off, wifi_tone = Tone::Off, battery_tone = Tone::Off, charge_tone = Tone::Off;
-    int battery_fill = -1;  // 0..100 only for a fresh, present battery with a valid level; -1 draws nothing
+// ---- header: icons only (the words are on the Connect and Power pages) ----
+enum class LinkIcon { Ok, Busy, Off };  // Off is drawn with a slash; Busy blinks
+struct BatteryView {
+    enum class Kind { Level, Unknown, None, Fault };
+    Kind kind = Kind::Unknown;
+    int percent = -1;      // 0..100 only for Level; the icon is filled to this. -1 draws no fill
+    std::string digits;    // inside the icon: the level without a percent sign, "?" when unknown, "!" on a fault, "" otherwise
+    Tone tone = Tone::Off;
+    bool charging = false; // the bolt: only while the chip says "charging" and the sample can be trusted
 };
-HeaderView make_header(Lang, const Snapshot &, const PowerState &, int64_t now_ms);
+struct HeaderView {
+    LinkIcon wifi = LinkIcon::Off, agent = LinkIcon::Off;
+    Tone wifi_tone = Tone::Off, agent_tone = Tone::Off;
+    bool usb = false;      // USB power is there, in a fresh sample without a fault
+    BatteryView battery;
+};
+HeaderView make_header(const Snapshot &, const PowerState &, int64_t now_ms, bool show_percent);
+// The icons that are connecting blink: on for the first half of each second.
+bool blink_on(int64_t now_ms);
 // The four ring segments: a lit segment means that channel is healthy.
 struct RingView { bool wifi = false, agent = false, power = false, time = false; };
 RingView make_ring(const Snapshot &, const PowerState &, int64_t now_ms);

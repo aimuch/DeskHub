@@ -21,10 +21,11 @@ lv_obj_t *g_body = nullptr;
 int g_scroll = 0;
 
 struct Shell {
-    lv_obj_t *left{}, *right{}, *agent_dot{}, *agent{}, *wifi_icon{}, *wifi{}, *battery{}, *charge{}, *outline{}, *terminal{}, *fill{}, *nav{}, *hint{};
+    lv_obj_t *left{}, *right{}, *wifi{}, *pc{}, *pc_screen{}, *pc_neck{}, *pc_base{}, *usb{}, *bolt{}, *box{}, *body{}, *tip{}, *fill{}, *digits{}, *nav{}, *hint{};
+    std::array<lv_obj_t *, 2> wifi_cut{}, pc_cut{}, bat_cut{};  // the slash: a line in the colour of the background under a thin one
     std::array<lv_obj_t *, 4> nav_btn{}, nav_label{};
 } sh;
-struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; } ring;
+struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring;
 struct Widgets {
     lv_obj_t *clock{}, *date{}, *notice{}, *meta{};
     lv_obj_t *cpu_gauge{}, *mem_gauge{}, *cpu_value{}, *mem_value{}, *rx{}, *tx{}, *footer{}, *error{};
@@ -53,6 +54,8 @@ void on_accent(lv_event_t *e) { Appearance a = current_appearance(); a.accent = 
 void on_lang(lv_event_t *e) { Appearance a = current_appearance(); a.lang = static_cast<Lang>(data_of(e)); apply_appearance(a); }
 void on_size(lv_event_t *e) { Appearance a = current_appearance(); a.size = static_cast<SizeTier>(data_of(e)); apply_appearance(a); }
 void on_protect(lv_event_t *) { request_protect_toggle(); }
+void on_percent(lv_event_t *e) { Appearance a = current_appearance(); a.show_percent = data_of(e) == 0; apply_appearance(a); }
+void on_ring(lv_event_t *e) { Appearance a = current_appearance(); a.ring = static_cast<RingTier>(data_of(e)); apply_appearance(a); }
 
 // ---- small building blocks ----
 lv_obj_t *heading(lv_obj_t *parent, const std::string &text, uint32_t rgb) {
@@ -149,8 +152,9 @@ lv_obj_t *action_card(lv_obj_t *parent, size_t index, int width, int height, con
 
 // ---- Home ----
 void build_home(lv_obj_t *body, const Frame &f) {
-    const int d = 216, x = (kContentW - d) / 2, g = 4, width = 20;
+    const int d = 216, x = (kContentW - d) / 2, g = 4, width = ring_px(look.appearance.ring).home;
     auto *track = arc_segment(body, d, 0, 360, P().track, width, LV_OPA_COVER);
+    ring.track = track;
     lv_obj_set_pos(track, x, 0);
     static constexpr int kStart[4] = {278, 8, 98, 188}, kSweep = 74;
     const int trim = static_cast<int>(1.5f * g / (d / 2.0f) * 57.3f + 0.5f);
@@ -348,7 +352,7 @@ void build_power(lv_obj_t *body, PowerTab tab, const Frame &f) {
     if (tab == PowerTab::Level) {
         const int h = 150;  // the design's 186 px would push the protection strip under the tabs
         auto *c = card(body, h);
-        w.soc_gauge = gauge(c, 112, 11, P().power);
+        w.soc_gauge = gauge(c, 112, ring_px(look.appearance.ring).gauge, P().power);
         lv_obj_set_pos(w.soc_gauge, 20, 18);
         w.soc_value = label_at(c, "--", 20, 18 + 56 - lh(look.title) / 2, 112, look.title, P().ink);
         centered(w.soc_value);
@@ -358,10 +362,8 @@ void build_power(lv_obj_t *body, PowerTab tab, const Frame &f) {
         lv_obj_set_pos(w.soc_charge, 150, 14 + lh(look.title) + 6);
         w.soc_note = label_at(c, "", 150, 14 + lh(look.title) + 6 + lh(look.caption) + 14, 264, look.caption, P().muted);
         auto *b = button(body, on_tab, data(static_cast<int>(PowerTab::Protect)), kContentW, 56);
-        w.strip = label_at(b, T(Str::ProtectionOff), 18, (56 - lh(look.caption)) / 2, 250, look.caption, P().ink);
+        w.strip = label_at(b, T(Str::ProtectionOff), 18, (56 - lh(look.caption)) / 2, kContentW - 36, look.caption, P().ink);
         single_line(w.strip, lh(look.caption));
-        auto *tag = pill(b, T(Str::Experimental), P().power, P().card, P().power, look.caption);
-        lv_obj_align(tag, LV_ALIGN_RIGHT_MID, -14, 0);
         (void)f;
     } else if (tab == PowerTab::Readings) {
         struct Reading { Str name; lv_obj_t **value; lv_obj_t **note; };
@@ -386,7 +388,6 @@ void build_power(lv_obj_t *body, PowerTab tab, const Frame &f) {
         lv_obj_set_style_pad_column(title_row, 12, 0);
         auto *protect_name = label(title_row, T(Str::ProtectTitle), kContentW, look.body, P().ink);
         lv_obj_set_width(protect_name, LV_SIZE_CONTENT);
-        pill(title_row, T(Str::Experimental), P().power, P().card, P().power, look.caption);
         w.protect_head = label(c, "", kContentW - 38, look.caption, P().ink);
         w.protect_note = label(c, "", kContentW - 38, look.caption, P().muted);
         label(c, T(Str::ProtectionRule1), kContentW - 38, look.caption, P().muted);
@@ -407,8 +408,9 @@ void refresh_power(PowerTab tab, const Frame &f) {
     if (tab == PowerTab::Level) {
         gauge_set(w.soc_gauge, v.level.valid, v.level.percent, P().power);
         set_text(w.soc_value, v.level.text);
-        const HeaderView h = make_header(look.lang, f.s, f.power, f.now_ms);
-        set_text(w.soc_title, v.level.valid ? h.battery : v.level_note);
+        char title[48];
+        snprintf(title, sizeof(title), tr(look.lang, Str::BatteryLevel), static_cast<int>(v.level.percent + 0.5f));
+        set_text(w.soc_title, v.level.valid ? std::string(title) : v.level_note);
         set_text(w.soc_charge, v.charge);
         set_ink(w.soc_charge, tone_color(v.charge_tone));
         set_border(w.soc_charge, v.charge_tone == Tone::Off ? P().edge : tone_color(v.charge_tone));
@@ -501,6 +503,11 @@ void build_appearance(lv_obj_t *body, const Frame &f) {
     segmented(body, {T(Str::SizeSmall), T(Str::SizeStandard), T(Str::SizeLarge)}, static_cast<int>(a.size), on_size,
               {static_cast<int>(SizeTier::Small), static_cast<int>(SizeTier::Standard), static_cast<int>(SizeTier::Large)},
               {font_for(font_px(SizeTier::Small).body), font_for(font_px(SizeTier::Standard).body), font_for(font_px(SizeTier::Large).body)});
+    section(body, T(Str::KeyBatteryPercent));
+    segmented(body, {T(Str::PercentShow), T(Str::PercentHide)}, a.show_percent ? 0 : 1, on_percent, {0, 1}, {look.body, look.body});
+    section(body, T(Str::KeyRingThickness));
+    segmented(body, {T(Str::RingThin), T(Str::SizeStandard), T(Str::RingThick)}, static_cast<int>(a.ring), on_ring,
+              {static_cast<int>(RingTier::Thin), static_cast<int>(RingTier::Standard), static_cast<int>(RingTier::Thick)}, {look.body, look.body, look.body});
     w.error = caption(body, "", P().power);
     set_optional_text(w.error, f.last_error);
 }
@@ -596,47 +603,68 @@ void build_shell(lv_obj_t *screen) {
     lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(screen, hex(p.ink), 0);
-    // The corners of the panel are rounded (kCornerR): the first line of the header starts a little lower, and a mark that
-    // still reaches into a corner moves in by just what the curve needs.
-    const int top = 10, hh = 62, line2 = top + lh(look.caption) + 2;
-    const int dot_y = top + (lh(look.caption) - 10) / 2, outline_y = top + (lh(look.caption) - 17) / 2, terminal_y = top + (lh(look.caption) - 8) / 2;
-    const int dot_x = std::max(2, corner_inset(dot_y) - kMargin);
-    const int agent_x = std::max(dot_x + 18, corner_inset(top) - kMargin);       // the status text
-    const int wifi_x = std::max(0, corner_inset(line2) - kMargin);               // the second line, normally clear of the curve
-    const int shift_right = std::max({0, corner_inset(outline_y) - 30, corner_inset(terminal_y) - 26});
-    const int charge_in = std::max(0, corner_inset(line2) - kMargin);
-    sh.left = button(screen, on_page, data(static_cast<int>(Page::Connect)), 212, hh);
+    // The header is icons only (docs/design: Dev-Header). The corners of the panel are rounded (kCornerR): the icons sit
+    // 14 px from the top, and where the curve still reaches them they move in by what it needs.
+    constexpr int kIconTop = 14, kHeaderH = 62;
+    static const lv_point_precise_t kSlashIcon[2] = {{3, 3}, {23, 21}}, kSlashBattery[2] = {{6, 21}, {44, 3}};
+    auto slash = [&](lv_obj_t *parent, int x, int y, const lv_point_precise_t *points, std::array<lv_obj_t *, 2> &out) {
+        for (int i = 0; i < 2; ++i) {
+            auto *line = lv_line_create(parent);
+            lv_line_set_points(line, points, 2);
+            lv_obj_set_pos(line, x, y);
+            lv_obj_set_style_line_width(line, i == 0 ? 6 : 2, 0);
+            lv_obj_set_style_line_color(line, hex(i == 0 ? p.bg : p.muted), 0);
+            lv_obj_set_style_line_rounded(line, true, 0);
+            lv_obj_add_flag(line, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(line, LV_OBJ_FLAG_CLICKABLE);
+            out[static_cast<size_t>(i)] = line;
+        }
+    };
+    const int left_abs = std::max(kMargin, corner_inset(kIconTop) + 3);               // the first icon
+    const int right_abs = kScreen - std::max(kMargin, corner_inset(kIconTop) + 1);    // the tip of the battery
+    sh.left = button(screen, on_page, data(static_cast<int>(Page::Connect)), 212, kHeaderH);
     lv_obj_set_pos(sh.left, kMargin, 0);
     flat(sh.left);
-    sh.agent_dot = dot(sh.left, 10, p.edge, false);
-    lv_obj_set_pos(sh.agent_dot, dot_x, dot_y);
-    sh.agent = label_at(sh.left, "", agent_x, top, 210 - agent_x, look.caption, p.muted);
-    single_line(sh.agent, lh(look.caption));
-    sh.wifi_icon = label_at(sh.left, LV_SYMBOL_WIFI, wifi_x, line2 + (lh(look.caption) - 14) / 2, 22, &lv_font_montserrat_14, p.muted);
-    sh.wifi = label_at(sh.left, "", wifi_x + 26, line2, 212 - 26 - wifi_x, look.caption, p.muted);
-    single_line(sh.wifi, lh(look.caption));
-    sh.right = button(screen, on_page, data(static_cast<int>(Page::Power)), 212, hh);
+    const int lx = left_abs - kMargin;
+    sh.wifi = label_at(sh.left, LV_SYMBOL_WIFI, lx, kIconTop - 2, 30, &lv_font_montserrat_24, p.muted);
+    slash(sh.left, lx, kIconTop, kSlashIcon, sh.wifi_cut);
+    const int px = lx + 40;                                                           // the computer
+    sh.pc = holder(sh.left, 26, 24);
+    lv_obj_set_pos(sh.pc, px, kIconTop);
+    sh.pc_screen = panel(sh.pc, 22, 15, p.bg, p.muted, 4);
+    lv_obj_set_pos(sh.pc_screen, 2, 1);
+    lv_obj_set_style_bg_opa(sh.pc_screen, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sh.pc_screen, 2, 0);
+    sh.pc_neck = panel(sh.pc, 2, 4, p.muted, p.muted, 0);
+    lv_obj_set_pos(sh.pc_neck, 12, 16);
+    sh.pc_base = panel(sh.pc, 11, 2, p.muted, p.muted, 1);
+    lv_obj_set_pos(sh.pc_base, 7, 20);
+    slash(sh.pc, 0, 0, kSlashIcon, sh.pc_cut);
+
+    sh.right = button(screen, on_page, data(static_cast<int>(Page::Power)), 212, kHeaderH);
     lv_obj_set_pos(sh.right, 244, 0);
     flat(sh.right);
-    sh.battery = label_at(sh.right, "", 0, top, 168 - shift_right, look.caption, p.muted);
-    lv_obj_set_style_text_align(sh.battery, LV_TEXT_ALIGN_RIGHT, 0);
-    single_line(sh.battery, lh(look.caption));
-    sh.outline = panel(sh.right, 32, 17, p.bg, p.muted, 4);
-    lv_obj_set_pos(sh.outline, 174 - shift_right, outline_y);
-    lv_obj_set_style_bg_opa(sh.outline, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(sh.outline, 2, 0);
-    sh.terminal = panel(sh.right, 3, 8, p.muted, p.muted, 1);
-    lv_obj_set_style_border_width(sh.terminal, 0, 0);
-    lv_obj_set_pos(sh.terminal, 207 - shift_right, terminal_y);
-    sh.fill = holder(sh.outline, 4, 9);
-    lv_obj_set_pos(sh.fill, 1, 2);
-    lv_obj_set_style_radius(sh.fill, 2, 0);
+    const int bx = right_abs - 51 - 244;                                              // the battery box, 51 x 24
+    sh.usb = label_at(sh.right, LV_SYMBOL_USB, bx - 8 - 14 - 8 - 22, kIconTop - 2, 28, &lv_font_montserrat_24, p.ink);
+    sh.bolt = label_at(sh.right, LV_SYMBOL_CHARGE, bx - 8 - 14, kIconTop - 2, 20, &lv_font_montserrat_24, p.agent);
+    sh.box = holder(sh.right, 51, 24);
+    lv_obj_set_pos(sh.box, bx, kIconTop);
+    sh.body = panel(sh.box, 46, 22, p.bg, p.muted, 7);
+    lv_obj_set_pos(sh.body, 0, 1);
+    lv_obj_set_style_bg_opa(sh.body, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sh.body, 2, 0);
+    sh.fill = holder(sh.box, 40, 16);                                                 // the level, in the colour of its tone at 40 %
+    lv_obj_set_pos(sh.fill, 3, 4);
+    lv_obj_set_style_radius(sh.fill, 4, 0);
     lv_obj_set_style_bg_color(sh.fill, hex(p.agent), 0);
-    lv_obj_set_style_bg_opa(sh.fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(sh.fill, static_cast<lv_opa_t>(kBatteryFillPercent * 255 / 100), 0);
     lv_obj_add_flag(sh.fill, LV_OBJ_FLAG_HIDDEN);
-    sh.charge = label_at(sh.right, "", 0, line2, 212 - charge_in, look.caption, p.muted);
-    lv_obj_set_style_text_align(sh.charge, LV_TEXT_ALIGN_RIGHT, 0);
-    single_line(sh.charge, lh(look.caption));
+    sh.tip = panel(sh.box, 3, 9, p.muted, p.muted, 1);
+    lv_obj_set_pos(sh.tip, 47, 7);
+    sh.digits = label_at(sh.box, "", 2, 1 + (22 - lh(&btr_ui_16)) / 2, 42, &btr_ui_16, p.ink);   // the digits are drawn over the fill
+    lv_obj_set_style_text_align(sh.digits, LV_TEXT_ALIGN_CENTER, 0);
+    single_line(sh.digits, lh(&btr_ui_16));
+    slash(sh.box, 0, 0, kSlashBattery, sh.bat_cut);
 
     sh.nav = panel(screen, kContentW, 64, p.card, p.edge, 32);
     lv_obj_set_pos(sh.nav, kMargin, kNavTop);
@@ -658,33 +686,30 @@ void build_shell(lv_obj_t *screen) {
 }
 void refresh_shell(const Frame &f, Page page, bool pairing_active) {
     const Palette &p = P();
-    const HeaderView h = make_header(look.lang, f.s, f.power, f.now_ms);
-    set_text(sh.agent, h.agent);
-    set_ink(sh.agent, tone_color(h.agent_tone));
-    set_bg(sh.agent_dot, h.agent_tone == Tone::Ok ? p.agent : p.edge);
-    const lv_opa_t glow = h.agent_tone == Tone::Ok ? LV_OPA_50 : LV_OPA_TRANSP;
-    if (lv_obj_get_style_shadow_opa(sh.agent_dot, LV_PART_MAIN) != glow) {
-        lv_obj_set_style_shadow_width(sh.agent_dot, 14, 0);
-        lv_obj_set_style_shadow_color(sh.agent_dot, hex(p.agent), 0);
-        lv_obj_set_style_shadow_opa(sh.agent_dot, glow, 0);
-    }
-    set_text(sh.wifi, h.wifi);
-    set_ink(sh.wifi_icon, h.wifi_tone == Tone::Off ? p.muted : tone_color(h.wifi_tone == Tone::Ok ? Tone::Info : h.wifi_tone));
-    set_ink(sh.wifi, p.muted);
-    set_text(sh.battery, h.battery);
-    const uint32_t bc = tone_color(h.battery_tone);
-    set_ink(sh.battery, h.battery_tone == Tone::Off ? p.muted : bc);
-    set_border(sh.outline, bc);
-    set_bg(sh.terminal, bc);
-    set_border(sh.terminal, bc);
+    const HeaderView h = make_header(f.s, f.power, f.now_ms, look.appearance.show_percent);
+    const auto cut_shown = [](const std::array<lv_obj_t *, 2> &lines, bool on) { for (auto *l : lines) set_hidden(l, !on); };
+    const auto set_text_opa = [](lv_obj_t *o, lv_opa_t opa) { if (o && lv_obj_get_style_text_opa(o, LV_PART_MAIN) != opa) lv_obj_set_style_text_opa(o, opa, 0); };
+    set_ink(sh.wifi, h.wifi == LinkIcon::Off ? p.muted : p.wifi);
+    set_text_opa(sh.wifi, h.wifi == LinkIcon::Busy && !blink_on(f.now_ms) ? LV_OPA_20 : LV_OPA_COVER);   // connecting blinks, connected is steady
+    cut_shown(sh.wifi_cut, h.wifi == LinkIcon::Off);
+    const uint32_t ac = h.agent == LinkIcon::Ok ? p.agent : p.muted;
+    set_border(sh.pc_screen, ac);
+    set_bg(sh.pc_neck, ac); set_border(sh.pc_neck, ac);
+    set_bg(sh.pc_base, ac); set_border(sh.pc_base, ac);
+    cut_shown(sh.pc_cut, h.agent != LinkIcon::Ok);
+    set_hidden(sh.usb, !h.usb);
+    set_hidden(sh.bolt, !h.battery.charging);
+    const uint32_t bc = tone_color(h.battery.tone);
+    set_border(sh.body, bc);
+    set_bg(sh.tip, bc); set_border(sh.tip, bc);
     set_bg(sh.fill, bc);
-    if (h.battery_fill >= 0) {
-        const int width = std::max(2, 26 * h.battery_fill / 100);
+    if (h.battery.percent >= 0) {
+        const int width = std::max(2, 40 * h.battery.percent / 100);
         if (lv_obj_get_width(sh.fill) != width) lv_obj_set_width(sh.fill, width);
         set_hidden(sh.fill, false);
     } else set_hidden(sh.fill, true);
-    set_text(sh.charge, h.charge);
-    set_ink(sh.charge, h.charge_tone == Tone::Warn ? p.power : p.muted);
+    set_optional_text(sh.digits, h.battery.digits);
+    cut_shown(sh.bat_cut, h.battery.kind == BatteryView::Kind::None);
     const int active = page == Page::Home || page == Page::Clock ? 0 : page == Page::Actions ? 1 : page == Page::Computer ? 2 : 3;
     for (int i = 0; i < 4; ++i) {
         const bool on = i == active;
@@ -853,7 +878,6 @@ lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int), void (*
     lv_obj_set_style_pad_all(box, 22, 0);
     lv_obj_set_style_pad_row(box, 10, 0);
     label(box, T(Str::ProtectDialogTitle), 360, look.body, p.ink);
-    pill(box, T(Str::Experimental), p.power, p.card, p.power, look.caption);
     label(box, T(Str::ProtectDialogBody), 360, look.caption, p.muted);
     label(box, T(Str::Limit), 360, look.caption, p.muted);
     auto *row = holder(box, 360, 56);
@@ -892,6 +916,14 @@ lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int), void (*
 
 // ---------------------------------------------------------------- test hooks
 int header_fill_width() { return sh.fill && !lv_obj_has_flag(sh.fill, LV_OBJ_FLAG_HIDDEN) ? lv_obj_get_width(sh.fill) : 0; }
+static bool visible(lv_obj_t *o) { return o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN); }
+std::string header_battery_text() { return visible(sh.digits) ? lv_label_get_text(sh.digits) : ""; }
+bool header_bolt_shown() { return visible(sh.bolt); }
+bool header_usb_shown() { return visible(sh.usb); }
+bool header_slashed(int which) { return visible(which == 0 ? sh.wifi_cut[1] : which == 1 ? sh.pc_cut[1] : which == 2 ? sh.bat_cut[1] : nullptr); }
+int header_icon_opa(int which) { return which == 0 && sh.wifi ? lv_obj_get_style_text_opa(sh.wifi, LV_PART_MAIN) : 255; }
+int home_ring_width() { return ring.track ? lv_obj_get_style_arc_width(ring.track, LV_PART_INDICATOR) : 0; }
+int power_gauge_width() { return w.soc_gauge ? lv_obj_get_style_arc_width(w.soc_gauge, LV_PART_MAIN) : 0; }
 bool ring_lit(int index) {
     if (index < 0 || index > 3 || !ring.seg[static_cast<size_t>(index)]) return false;
     return lv_obj_get_style_arc_opa(ring.seg[static_cast<size_t>(index)], LV_PART_INDICATOR) != LV_OPA_TRANSP;

@@ -121,6 +121,13 @@ PowerTab current_power_tab();
 const Appearance &current_appearance();
 int live_object_count();
 int header_fill_width();            // px width of the battery fill in the header, 0 when nothing is drawn
+std::string header_battery_text();  // the digits inside the battery icon of the header ("" when none)
+bool header_bolt_shown();
+bool header_usb_shown();
+bool header_slashed(int which);     // 0 Wi-Fi, 1 computer, 2 battery: the slash is drawn
+int header_icon_opa(int which);     // 0 Wi-Fi: how strong the icon is drawn now, 255 steady, low in the dim half of a blink
+int home_ring_width();              // px thickness of the status ring on the Home page, 0 without one
+int power_gauge_width();            // px thickness of the gauge on the Level tab, 0 without one
 bool ring_lit(int index);           // 0 wifi, 1 agent, 2 power, 3 time; false when the page has no ring
 std::string home_first_action_label();
 lv_obj_t *accent_swatch(int index); // Appearance page only, otherwise nullptr

@@ -27,6 +27,10 @@
 //  A15 Power page: a control that would do nothing is disabled and explained, never silently inert.
 //  A17 Rounded corners: every text and small mark that sits in one of the four corners of the screen is inside the visible
 //      quarter circle (detail::kCornerR), on every page, theme, language and text size.
+//  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
+//      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
+//  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
+//  A20 No "experimental" word anywhere on the power pages and in the confirm dialog.
 //  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
@@ -541,29 +545,60 @@ static void case_matrix() {
     EXPECT(views == 3 * 2 * 3 * 12);
 }
 static void case_state_fidelity() {
+    using detail::header_battery_text;
+    using detail::header_bolt_shown;
+    using detail::header_slashed;
+    using detail::header_usb_shown;
     fresh();
-    EXPECT(has("电量 67%") && has("电脑在线") && has("已连接 · -61 dBm") && has("USB接入 · 充电中"));
-    EXPECT(detail::header_fill_width() > 0);
+    // The header is icons: none of the old words is on the screen.
+    EXPECT(!contains("电脑在线") && !contains("已连接 ·") && !contains("USB接入") && !contains("电量 ") && !contains("dBm"));
+    EXPECT(header_battery_text() == "67" && detail::header_fill_width() > 0 && header_bolt_shown() && header_usb_shown());
+    EXPECT(!header_slashed(0) && !header_slashed(1) && !header_slashed(2));
     for (int i = 0; i < 4; ++i) EXPECT(detail::ring_lit(i));
-    // unknown level
+    // charged, and idle: the USB stays, the bolt goes
+    mock_power.charging = "full"; step();
+    EXPECT(header_usb_shown() && !header_bolt_shown() && header_battery_text() == "67");
+    mock_power.charging = "idle"; step();
+    EXPECT(header_usb_shown() && !header_bolt_shown());
+    mock_power.charging = "charging"; mock_power.vbus = "absent"; step();
+    EXPECT(!header_usb_shown());
+    // unknown level: a question mark, no fill, never 0
+    fresh();
     mock_power.soc_percent = -1; step();
-    EXPECT(has("电量未知") && detail::header_fill_width() == 0 && !has("0%") && !contains("电量 0"));
-    // absent battery
+    EXPECT(header_battery_text() == "?" && detail::header_fill_width() == 0 && !has("0%") && !contains("电量 0"));
+    // absent battery: slash on the battery, the USB is still there
     mock_power.soc_percent = 55; mock_power.battery = "absent"; step();
-    EXPECT(has("未装电池") && detail::header_fill_width() == 0);
-    // stale power
+    EXPECT(header_battery_text().empty() && detail::header_fill_width() == 0 && header_slashed(2) && !header_bolt_shown() && header_usb_shown());
+    // stale power: nothing from the old sample, no USB, no bolt
     fresh();
     power_auto = false; mock_power.observed_ms = mock_ms - 100; step(7000);
-    EXPECT(has("电源待测") && has("电量未知") && detail::header_fill_width() == 0 && !detail::ring_lit(2));
+    EXPECT(header_battery_text() == "?" && detail::header_fill_width() == 0 && !header_usb_shown() && !header_bolt_shown() && !detail::ring_lit(2));
     // fault
     fresh();
     mock_power.fault = true; step();
-    EXPECT(has("电源异常") && has("读取失败") && !detail::ring_lit(2));
-    // channels
+    EXPECT(header_battery_text() == "!" && !header_usb_shown() && !header_bolt_shown() && !detail::ring_lit(2));
+    // channels: not configured and offline are slashed
     fresh();
     mock_snapshot.wifi_ready = false; mock_snapshot.wifi = "未配置"; mock_snapshot.agent_ready = false; mock_snapshot.time_valid = false; step();
     EXPECT(!detail::ring_lit(0) && !detail::ring_lit(1) && detail::ring_lit(2) && !detail::ring_lit(3));
-    EXPECT(has("电脑离线") && has("未配置网络") && has("--:--") && has("时间未同步"));
+    EXPECT(header_slashed(0) && header_slashed(1) && has("--:--") && has("时间未同步"));
+    // connecting: no slash, and the icon blinks; connected: steady
+    fresh();
+    mock_snapshot.wifi_ready = false; mock_snapshot.wifi = "正在连接Wi-Fi"; step();
+    EXPECT(!header_slashed(0));
+    bool bright = false, dim = false;
+    for (int i = 0; i < 40; ++i) {
+        step(100);
+        const int opa = detail::header_icon_opa(0);
+        bright = bright || opa >= 250;
+        dim = dim || opa <= 80;
+    }
+    EXPECT(bright && dim);
+    mock_snapshot.wifi_ready = true; mock_snapshot.wifi = "已连接"; step();
+    for (int i = 0; i < 40; ++i) { step(100); EXPECT(detail::header_icon_opa(0) >= 250); }
+    // the percent switched off: the fill stays, the digits go
+    fresh("mint|-|zh-CN|standard|nopct|standard");
+    EXPECT(header_battery_text().empty() && detail::header_fill_width() > 0);
     // expired metrics on the Computer page
     fresh();
     goto_view(Page::Computer);
@@ -671,14 +706,14 @@ static void case_appearance() {
     fresh();
     goto_view(Page::Appearance);
     EXPECT(click_text("深海蓝"));
-    EXPECT(stored_text == "ocean|-|zh-CN|standard");
+    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard");
     EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Ocean);
     EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03131c)));
     EXPECT(click_text("English"));
-    EXPECT(stored_text == "ocean|-|en-US|standard");
+    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard");
     EXPECT(has("Appearance") && has("Home") && has("Settings") && !contains("外观"));
     EXPECT(click_text("Large"));
-    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large");
+    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard");
     EXPECT(detail::current_page() == Page::Appearance);  // the page stays
     // a restart restores it
     const std::string saved = stored_text;
@@ -711,7 +746,7 @@ static void case_appearance() {
         EXPECT(swatch != nullptr);
         if (swatch) { lv_obj_scroll_to_view_recursive(swatch, LV_ANIM_OFF); lv_obj_update_layout(detail::screen_object()); lv_area_t a; lv_obj_get_coords(swatch, &a); tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2); }
     }
-    EXPECT(stored_text == "mint|4fc3f7|zh-CN|standard" && detail::look.palette.accent == 0x4fc3f7);
+    EXPECT(stored_text == "mint|4fc3f7|zh-CN|standard|pct|standard" && detail::look.palette.accent == 0x4fc3f7);
     // the page of every tier still draws its own choices selected
     fresh("amber|-|zh-CN|small");
     goto_view(Page::Appearance);
@@ -741,7 +776,7 @@ static void case_idle_and_leaks() {
     for (int i = 0; i < 30; ++i) { step(); lv_refr_now(display); }
     EXPECT(flush_calls == before);
     // data changes do redraw
-    mock_snapshot.rssi = -80; step(); lv_refr_now(display);
+    mock_power.soc_percent = 40; step(); lv_refr_now(display);   // the digits in the battery icon of the header
     EXPECT(flush_calls > before);
     // page switches do not leak
     fresh();
@@ -861,7 +896,7 @@ static void case_protect_dialog() {
     auto *dialog = detail::build_protect_dialog(lv_layer_top(), [](int limit) { confirmed = limit; }, [] { ++cancelled; });
     step();
     EXPECT(dialog != nullptr);
-    EXPECT(has("开启充电保护？") && has("实验功能") && has("80%") && has("90%") && has("取消") && has("开启"));
+    EXPECT(has("开启充电保护？") && !contains("实验") && has("80%") && has("90%") && has("取消") && has("开启"));
     lv_area_t a;
     lv_obj_get_coords(dialog, &a);
     EXPECT(a.x1 == 0 && a.y1 == 0 && a.x2 == 479 && a.y2 == 479);   // the dimmer covers the whole screen
@@ -883,7 +918,7 @@ static void case_protect_dialog() {
 static void case_protect_tab() {
     fresh();
     goto_view(Page::Power, PowerTab::Protect);
-    EXPECT(has("充电保护") && has("实验功能") && has("充电保护：未开启"));
+    EXPECT(has("充电保护") && !contains("实验") && has("充电保护：未开启"));
     // It works now: the button is enabled and opens the dialog. When it could not work it is disabled and says why.
     auto *button = clickable_ancestor(find("开启…"));
     EXPECT(button && !lv_obj_has_state(button, LV_STATE_DISABLED));
@@ -896,7 +931,7 @@ static void case_protect_tab() {
     button = clickable_ancestor(find("开启…"));
     EXPECT(button && !lv_obj_has_state(button, LV_STATE_DISABLED));
     goto_view(Page::Power, PowerTab::Level);
-    EXPECT(has("充电保护：未开启") && has("实验功能"));
+    EXPECT(has("充电保护：未开启") && !contains("实验"));
 }
 static void case_protect_flow() {
     fresh();
@@ -940,6 +975,62 @@ static void case_protect_flow() {
     EXPECT(click_text("关闭"));
     step(); step();
     EXPECT(charge_applies == 1 && !charge_last.enabled && !mock_charge.enabled && has("已关闭，但没有保存这个设置。") && has("充电保护：未开启"));
+}
+static bool chosen(const std::string &label) {   // a segmented choice that is selected has a 2 px border in the accent colour
+    auto *b = clickable_ancestor(find(label));
+    return b && lv_obj_get_style_border_width(b, LV_PART_MAIN) == 2;
+}
+static void case_appearance_options() {   // A19
+    fresh();
+    goto_view(Page::Appearance);
+    EXPECT(has("电池百分比") && has("圆环粗细") && has("显示") && has("隐藏") && has("细") && has("粗"));
+    EXPECT(chosen("显示") && !chosen("隐藏") && !chosen("细") && !chosen("粗"));   // the defaults: percent shown, ring standard
+    EXPECT(click_text("隐藏"));
+    step(); step();
+    EXPECT(chosen("隐藏") && !chosen("显示"));
+    EXPECT(stored_text == "mint|-|zh-CN|standard|nopct|standard" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
+    EXPECT(click_text("显示"));
+    step(); step();
+    EXPECT(stored_text == "mint|-|zh-CN|standard|pct|standard" && detail::header_battery_text() == "67");
+    EXPECT(click_text("粗"));
+    step(); step();
+    EXPECT(stored_text == "mint|-|zh-CN|standard|pct|thick" && chosen("粗") && !chosen("细"));
+    fresh("mint|-|zh-CN|standard|nopct|thin");      // what is stored is what the page shows as chosen
+    goto_view(Page::Appearance);
+    EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
+    // the rings follow the tier, on the Home page and on the power page; a restart reads the stored tier back
+    struct Tier { const char *name; int home, gauge; };
+    for (const Tier &t : {Tier{"thin", 12, 7}, Tier{"standard", 20, 11}, Tier{"thick", 28, 15}}) {
+        fresh(std::string("mint|-|zh-CN|standard|pct|") + t.name);
+        goto_view(Page::Home);
+        EXPECT(detail::home_ring_width() == t.home);
+        goto_view(Page::Power, PowerTab::Level);
+        EXPECT(detail::power_gauge_width() == t.gauge);
+    }
+    fresh("mint|-|zh-CN|standard");                 // what 0.3.x stored
+    goto_view(Page::Home);
+    EXPECT(detail::home_ring_width() == 20 && detail::header_battery_text() == "67");
+    fresh();                                        // saving fails: the old look stays and the page says so
+    store_ok = false;
+    goto_view(Page::Appearance);
+    EXPECT(click_text("隐藏"));
+    step(); step();
+    EXPECT(detail::header_battery_text() == "67" && has("保存失败"));
+    // both new sections fit every theme, language and size (the layout matrix visits this page)
+}
+static void case_no_experimental_word() {   // A20
+    fresh();
+    for (auto [page, tab] : {std::pair<Page, PowerTab>{Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Protect}, {Page::Power, PowerTab::Readings}, {Page::Settings, PowerTab::Level}}) {
+        goto_view(page, tab);
+        EXPECT(!contains("实验") && !contains("xperimental"));
+    }
+    goto_view(Page::Power, PowerTab::Protect);
+    EXPECT(click_text("开启…"));
+    step();
+    EXPECT(has("开启充电保护？") && !contains("实验") && !contains("xperimental"));
+    fresh("mint|-|en-US|standard");
+    goto_view(Page::Power, PowerTab::Protect);
+    EXPECT(!contains("xperimental") && !contains("实验"));
 }
 static void case_screenshots() {
     if (out_dir.empty()) return;
@@ -987,7 +1078,8 @@ int main(int argc, char **argv) {
         {"state_fidelity", case_state_fidelity}, {"navigation", case_navigation}, {"wake_on_touch", case_wake},
         {"actions", case_actions}, {"appearance", case_appearance}, {"reset_restart", case_reset_restart},
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
-        {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow}, {"screenshots", case_screenshots}};
+        {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
+        {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";
