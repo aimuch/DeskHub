@@ -1,0 +1,63 @@
+{
+  "version": "0.3.7",
+  "built_from": "提交 6c287be（升版）；构建时 firmware/ 目录与该提交一致（之后的提交只改文档）",
+  "build_dir": "firmware/build-0.3.7（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.6": [
+    "声音（N2）：设置里多一行“声音”，提示音开关默认关、试听、没有扬声器时变暗并写明原因（设计稿 Dev-Sound）；规则在 audio_policy（主机测试 audio_test S1 到 S4）",
+    "提示音：动作有结果时响（“已切换（已确认）”响确认音，七种没成功或不确定的文字响失败音），热点配对完成响确认音；夜间限亮时段（时间未知也算）不响；两次至少隔 600 毫秒；试听不管开关和夜间，300 毫秒一次（测试 T22 和界面预览的声音组）",
+    "扬声器：一个任务独占声音芯片，别的任务只放进队列、从不等待；芯片在这个任务里创建，没有扬声器不拖慢开机；开关存在 NVS",
+    "USB：新命令 sound_test（只回 available、played、enabled），tools/provision.py --sound-test；能力 audio 按芯片是否应答报 ready 或 unavailable",
+    "顶栏：闪电画在电池里、数字前面，两者一起居中；USB 紧挨电池（Dev-Header）",
+    "首页没有动作时：圆环从 216 放大到 252，环和下面那一行上下居中（Dev-HomeEmpty）"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4479056,
+    "sha256": "60795d27d4b3a6ee8cab5f9e50a43616cd27a4d68c58cee0fc4c05a12846b599",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 29
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.7-esp32s3.zip",
+      "size_bytes": 2763453,
+      "sha256": "a392a5b23bb6240846fba8d1f5440d6e124cfc85cb158371389da9d9f19b07df",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.7",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要（签名只用于无线更新 OTA；USB 刷机不需要，OTA 也没有真机验证）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.7",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.7，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "包内 README.txt 有“声音”一行，不再写“音频尚未实现”",
+    "主机测试 13 组、Agent 384 条、tools 113 条、协议检查全部通过；界面预览 25 组通过（含声音页、闪电在电池里、没有动作的首页）",
+    "安全基线文件与归档逐字节相同的检查（docs/development.md 里的命令，这次补齐了早已按 K7 提交的排除项）输出为空",
+    "变异检查：声音规则 33 处、声音页和触发 22 处（夜间 4 处、界面 18 处）、闪电和首页 20 处，全部报红。声音页原来有 4 处改坏后编译不过（INVALID），已改写",
+    "网页管理台：真实的 Agent 进程加真实的 Chrome，63 项检查通过（docs/evidence/console-e2e/，这次重跑）"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到任何设备，也没有连接设备。刷机等用户说“刷”，或用户自己刷。设备上现在是 0.3.6",
+    "没有人听过扬声器：芯片应答只说明芯片在，不说明喇叭接好、响了、响度合适。刷完以后要人在设备旁试听一次（设置 → 声音 → 试听，或 tools/provision.py --sound-test）",
+    "声音芯片和放大器的引脚用的是 Waveshare 板级包（bsp_audio_codec_speaker_init），没有核对原理图",
+    "新的顶栏闪电、没有动作时的首页、声音页没有在真机屏幕上看过",
+    "设备端热点配对没有在真机上验证任何一步（同 0.3.6）",
+    "充电保护：0.3.6 上读到过一次到上限停充；降到回充线以下再恢复充电没有验证",
+    "网页上不能开关充电保护：设备上报里没有这一项",
+    "没有生成签名 .dhfw，没有做 OTA 与回滚",
+    "设计画布（claude.ai 上的 Design 制品）这次打不开（这个账号看不到它），所以只核对了仓库里的 docs/design，没有核对画布上的版本"
+  ],
+  "hardware_verified": false
+}
