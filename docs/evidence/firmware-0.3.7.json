@@ -47,10 +47,27 @@
     "变异检查：声音规则 33 处、声音页和触发 22 处（夜间 4 处、界面 18 处）、闪电和首页 20 处，全部报红。声音页原来有 4 处改坏后编译不过（INVALID），已改写",
     "网页管理台：真实的 Agent 进程加真实的 Chrome，63 项检查通过（docs/evidence/console-e2e/，这次重跑）"
   ],
-  "flashed": false,
+  "flashed": true,
+  "flash_record": {
+    "when": "2026-10-30，用户说“刷”之后",
+    "device": "deskhub-44bd8d60c598（刷之前用 provision.py --identify 核对过，固件 0.3.6）",
+    "how": "解压后的 USB 包，包内 flash.py --port /dev/cu.usbmodem21101（ESP-IDF 的 esptool）",
+    "result": "写入 4 个镜像，esptool 校验数据哈希通过；没有擦除配置（主题 ocean、旋转 180、充电保护设置都还在）"
+  },
+  "observed_on_device": {
+    "note": "刷机约 20 秒后第一次读 USB 状态超时（打开串口让芯片复位，设备还没准备好回答）；再过约 15 秒第二次读到。这是设备自己报告的数值，没有用别的仪表对照；没有人看屏幕，没有人听。",
+    "firmware_version": "0.3.7",
+    "ui_alive": true,
+    "time_quality": "rtc",
+    "wifi_and_agent": "未配置、未配对",
+    "audio": "能力 audio：support unverified，availability ready，也就是启动时声音芯片应答了（0.3.6 报的是 unsupported）。没有调用试听，没有人听",
+    "pairing": "phase open，open true，why none：未配对的设备开机后自动开了热点",
+    "power": "电量 96%，电池 4105 mV，USB 5155 mV，芯片 41.1 °C，measurement ok，无故障，充电状态 idle",
+    "charge_protection": "已开启（上限 90%，回充 85%），状态 holding，开关 stopped，原因 LEVEL_AT_LIMIT；事件：开机发现开关停着（BOOT_FOUND_STOPPED），随后因电量到上限请求停充，写入与读回都是 ok"
+  },
+  "hardware_verified": "部分：只有上面 observed_on_device 里的几项是在真机上读到的；其余见 not_done",
   "not_done": [
-    "没有刷到任何设备，也没有连接设备。刷机等用户说“刷”，或用户自己刷。设备上现在是 0.3.6",
-    "没有人听过扬声器：芯片应答只说明芯片在，不说明喇叭接好、响了、响度合适。刷完以后要人在设备旁试听一次（设置 → 声音 → 试听，或 tools/provision.py --sound-test）",
+    "没有人听过扬声器：芯片应答只说明芯片在，不说明喇叭接好、响了、响度合适。要人在设备旁试听一次（设置 → 声音 → 试听，或 tools/provision.py --sound-test）",
     "声音芯片和放大器的引脚用的是 Waveshare 板级包（bsp_audio_codec_speaker_init），没有核对原理图",
     "新的顶栏闪电、没有动作时的首页、声音页没有在真机屏幕上看过",
     "设备端热点配对没有在真机上验证任何一步（同 0.3.6）",
@@ -58,6 +75,5 @@
     "网页上不能开关充电保护：设备上报里没有这一项",
     "没有生成签名 .dhfw，没有做 OTA 与回滚",
     "设计画布（claude.ai 上的 Design 制品）这次打不开（这个账号看不到它），所以只核对了仓库里的 docs/design，没有核对画布上的版本"
-  ],
-  "hardware_verified": false
+  ]
 }
