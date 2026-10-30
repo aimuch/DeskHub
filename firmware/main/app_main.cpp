@@ -2,6 +2,7 @@
 #include "board.hpp"
 #include "ui.hpp"
 #include "power_wire.hpp"
+#include "audio.hpp"
 #include "charge.hpp"
 #include "agent_client.hpp"
 #include "management.hpp"
@@ -47,11 +48,13 @@ cJSON *handle(cJSON *request) {
         for(auto key:{"usb_provisioning","charge_limit","battery_soc","audio"}){
             const bool usb=strcmp(key,"usb_provisioning")==0,soc=strcmp(key,"battery_soc")==0,soc_ready=soc&&power.soc_percent>=0;
             const bool limit=strcmp(key,"charge_limit")==0,limit_ready=limit&&charge.charging_known&&power.battery=="present";
+            // The speaker (docs/design Dev-Sound): implemented, the codec answers, but nobody has heard it yet, so it stays unverified.
+            const bool sound=strcmp(key,"audio")==0,sound_ready=sound&&dh::audio::available();
             auto *cap=cJSON_AddObjectToObject(caps,key);
-            cJSON_AddStringToObject(cap,"support",usb||soc||limit?"unverified":"unsupported");
-            cJSON_AddStringToObject(cap,"availability",usb||soc_ready||limit_ready?"ready":"unavailable");
+            cJSON_AddStringToObject(cap,"support",usb||soc||limit||sound?"unverified":"unsupported");
+            cJSON_AddStringToObject(cap,"availability",usb||soc_ready||limit_ready||sound_ready?"ready":"unavailable");
             cJSON_AddStringToObject(cap,"reason_code",usb?"HARDWARE_TEST_PENDING":soc_ready?"PMIC_ESTIMATE_UNVERIFIED":soc?(power.battery=="absent"?"NO_BATTERY":"SENSOR_UNAVAILABLE"):
-                limit_ready?"EXPERIMENTAL":limit?(power.battery=="absent"?"NO_BATTERY":"SWITCH_UNREADABLE"):"NOT_VERIFIED_OR_NOT_IMPLEMENTED");
+                limit_ready?"EXPERIMENTAL":limit?(power.battery=="absent"?"NO_BATTERY":"SWITCH_UNREADABLE"):sound_ready?"HARDWARE_TEST_PENDING":sound?"SPEAKER_UNAVAILABLE":"NOT_VERIFIED_OR_NOT_IMPLEMENTED");
         }
         if(op=="status"){cJSON_AddStringToObject(r,"wifi",s.wifi.c_str());cJSON_AddStringToObject(r,"agent",s.agent.c_str());cJSON_AddStringToObject(r,"time_quality",s.time_quality.c_str());cJSON_AddStringToObject(r,"error",s.error.c_str());cJSON_AddNumberToObject(r,"config_revision",dh::config().revision);cJSON_AddNumberToObject(r,"provision_revision",dh::secrets().revision);cJSON_AddBoolToObject(r,"configured",dh::secrets().ready());}
         if(op=="status"){
@@ -116,6 +119,13 @@ cJSON *handle(cJSON *request) {
         bool rtc=dh::board_rtc_write(parsed);dh::network_reconfigure();
         auto *o=result(true),*r=cJSON_AddObjectToObject(o,"result");cJSON_AddBoolToObject(r,"saved",true);cJSON_AddNumberToObject(r,"config_revision",dh::secrets().revision);cJSON_AddBoolToObject(r,"rtc_written",rtc);auto fingerprint=dh::update_key_fingerprint(dh::secrets().update_public_key_pem);if(fingerprint.empty())cJSON_AddNullToObject(r,"update_key_fingerprint");else cJSON_AddStringToObject(r,"update_key_fingerprint",fingerprint.c_str());return o;
     }
+    if(op=="sound_test") {
+        // Plays the test tone once and says what the call did. A program cannot hear it: the person listens.
+        const bool available=dh::audio::available(),played=dh::audio::test();
+        auto *o=result(true),*r=cJSON_AddObjectToObject(o,"result");
+        cJSON_AddBoolToObject(r,"available",available);cJSON_AddBoolToObject(r,"played",played);cJSON_AddBoolToObject(r,"enabled",dh::audio::enabled());
+        return o;
+    }
     if(op=="set_time") {
         auto utc=field(cJSON_GetObjectItemCaseSensitive(request,"time"),"utc");time_t t;
         if(!dh::parse_utc(utc.c_str(),t)||!dh::set_time_utc(utc.c_str(),"manual"))return result(false,"INVALID_ARGUMENT","UTC时间无效");
@@ -152,5 +162,6 @@ extern "C" void app_main() {
     usb_serial_jtag_driver_config_t usb_cfg{};usb_cfg.rx_buffer_size=2048;usb_cfg.tx_buffer_size=2048;
     if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
+    dh::audio::init();   // a task of its own: the codec is created there, so a missing speaker never delays the start
     dh::network_start();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
 }

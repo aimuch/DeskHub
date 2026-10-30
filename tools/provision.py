@@ -325,6 +325,7 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--identify", action="store_true", help="仅读取 USB 设备身份")
     cli.add_argument("--status", action="store_true", help="仅读取并输出脱敏状态")
     cli.add_argument("--set-time", action="store_true", help="只通过 USB 将设备设为当前电脑 UTC 时间")
+    cli.add_argument("--sound-test", action="store_true", help="只通过 USB 让设备播放一次试听音；程序听不到，响没响要靠人听")
     cli.add_argument("--theme", choices=("mint", "ocean", "amber"), help="只通过 USB 保存屏幕主题；可与 --rotation 同用，未配对也可用")
     cli.add_argument("--rotation", type=int, choices=(0, 90, 180, 270), help="只通过 USB 保存顺时针屏幕旋转角度；可与 --theme 同用，未配对也可用")
     cli.add_argument("--dry-run", action="store_true", help="仅校验 --input，明确仿真；不连接USB、不配对、不写入")
@@ -458,6 +459,18 @@ def safe_pairing(value: Any) -> dict[str, Any] | None:
     return cleaned or None
 
 
+def safe_sound(value: Any) -> dict[str, Any] | None:
+    """The answer of the device to the test tone (docs/design Dev-Sound): three booleans, nothing else.
+
+    A text or any other key is not echoed. The answer says whether the speaker answered, whether the call played a tone,
+    and whether the alert sound is switched on; it does not say that anyone heard it.
+    """
+    if not isinstance(value, dict):
+        return None
+    cleaned = {key: value[key] for key in ("available", "played", "enabled") if isinstance(value.get(key), bool)}
+    return cleaned or None
+
+
 def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     # Allowlist scalar diagnostics; no arbitrary echoed remote fields are printed.
     keys = {"device_id", "firmware_version", "protocol_version", "board_model", "configured", "wifi", "agent", "wifi_state", "agent_state", "time_quality", "config_revision", "provision_revision", "update_key_fingerprint", "applied_revision", "ui_alive", "theme", "rotation"}
@@ -496,10 +509,14 @@ def main(argv: list[str] | None = None) -> int:
     completed = False
     try:
         preferences = args.theme is not None or args.rotation is not None
-        if preferences and any((args.identify, args.status, args.set_time, args.dry_run,
+        if preferences and any((args.identify, args.status, args.set_time, args.sound_test, args.dry_run,
                                 args.input, args.agent_config, args.ca, args.url, args.ntp_server,
                                 args.update_public_key, args.scope, args.target, args.replace)):
             raise ProvisionError("--theme、--rotation 仅可与 --port、--baudrate、--device-id 同用；不能与读取、设时或配对参数混用。")
+        if args.sound_test and any((preferences, args.identify, args.status, args.set_time, args.dry_run,
+                                    args.input, args.agent_config, args.ca, args.url, args.ntp_server,
+                                    args.update_public_key, args.scope, args.target, args.replace)):
+            raise ProvisionError("--sound-test 仅可与 --port、--baudrate、--device-id 同用；不能与读取、设时、偏好或配对参数混用。")
         if args.dry_run:
             if not args.input:
                 raise ProvisionError("--dry-run 需要 --input 私有配置文件。")
@@ -512,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ProvisionError("--identify、--status、--set-time 只能选择一个。")
         config = validate_config(private_json(args.input)) if args.input else None
         settings = None
-        if not (args.identify or args.status or args.set_time or preferences) and config is None:
+        if not (args.identify or args.status or args.set_time or args.sound_test or preferences) and config is None:
             if not args.agent_config or not args.ca:
                 raise ProvisionError("交互配置需要 --agent-config 和 --ca。")
             settings, store = load_local_agent(args.agent_config)
@@ -543,6 +560,17 @@ def main(argv: list[str] | None = None) -> int:
             if saved.get("saved") is not True:
                 raise ProvisionError("设备未明确确认偏好已保存；请重新连接并读取 --status。")
             print("偏好已保存，屏幕应用请确认。")
+            return 0
+        if args.sound_test:
+            answer = safe_sound(transport.request({"op": "sound_test"}))
+            if answer is None:
+                raise ProvisionError("设备的回答里没有可用内容；请读取 --status 后再试。")
+            print(json.dumps({"sound_test": answer}, ensure_ascii=False, indent=2))
+            if answer.get("available") is not True:
+                raise ProvisionError("设备没有检测到扬声器，没有播放试听音。")
+            if answer.get("played") is not True:
+                raise ProvisionError("设备没有播放试听音（可能离上一次太近）；稍等几秒再试。")
+            print("设备确认已调用试听音。程序听不到：请听设备的扬声器；这条调用只说明命令成功，声音本身仍是未验证。")
             return 0
         if args.identify:
             print(json.dumps(safe_status(info), ensure_ascii=False, indent=2))
