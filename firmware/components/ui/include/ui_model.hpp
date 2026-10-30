@@ -69,6 +69,8 @@ struct RingInfoView { std::array<RingRow, 4> row; int first_problem = -1; bool p
 RingInfoView make_ring_info(Lang, const Snapshot &, const PowerState &, int64_t now_ms);
 // The line under the ring: the first dark segment by name, else where to tap.
 std::string ring_note(Lang, const RingInfoView &);
+// The quiet hours of the sound: the night limit is on, and the time is inside the window of the night or not known (as for the display).
+bool quiet_hours(const DisplayConfig &, bool time_valid, uint16_t minute_of_day);
 
 // ---- clock ----
 struct ClockView { bool valid = false; std::string hhmm = "--:--", seconds, date; };

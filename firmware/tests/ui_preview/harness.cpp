@@ -30,6 +30,14 @@
 //  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
 //      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
 //  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
+//  A27 The home page without actions (docs/design Dev-HomeEmpty): the ring is larger and the ring with its line under it sits
+//      in the middle of the body, so that no blank band is left under it; with actions nothing moves; the taps still work.
+//  A26 The bolt is inside the battery (docs/design Dev-Header): bolt and digits are one group in the middle of the battery,
+//      the bolt in front of the digits with a gap; no bolt slot is left outside the battery, so the USB icon is next to it.
+//  A25 The sound page (docs/design Dev-Sound): a row in Settings; the alert sound is off until it is turned on, and turning it
+//      on or off is stored (a failure to store leaves the choice as it was and says so); "listen" asks the speaker whatever the
+//      choice; with no speaker nothing can be turned on or listened to, and the page says why; a command text that calls for a
+//      sound reaches the speaker once per change of the text, with the night flag.
 //  A24 The ring is explained (docs/design Dev-RingInfo): the line under it says "tap the ring" or names the first dark segment;
 //      a tap on the ring opens a sheet with one row per segment; "close", or a tap outside the sheet, closes it; the clock in
 //      the middle still opens the clock page; another note under the ring (a command, an error) has priority over the line.
@@ -44,6 +52,7 @@
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
 #include "board.hpp"
+#include "audio.hpp"
 #include "charge.hpp"
 #include "core.hpp"
 #include "esp_lv_adapter.h"
@@ -81,6 +90,10 @@ static dh::Snapshot mock_snapshot;
 static dh::DisplayConfig mock_config;
 static dh::PowerState mock_power;
 static dh::charge::Status mock_charge;
+// The speaker, simulated: what the page asks of it is recorded.
+static bool audio_available = true, audio_enabled = false, audio_store_ok = true;
+static int audio_tests = 0, audio_paired = 0;
+static std::vector<std::string> audio_commands;
 static dh::charge::Settings charge_last;
 static bool charge_apply_ok = true;
 static unsigned charge_applies = 0;
@@ -141,6 +154,25 @@ bool apply(const Settings &s) {
     return charge_apply_ok || s.enabled;
 }
 }  // namespace charge
+namespace audio {   // the speaker, simulated
+bool available() { return audio_available; }
+bool enabled() { return audio_enabled; }
+bool set_enabled(bool on) {
+    if (!audio_store_ok) return false;
+    audio_enabled = on;
+    return true;
+}
+bool test() {
+    if (!audio_available) return false;
+    ++audio_tests;
+    return true;
+}
+// Like the real one: a text without a tone ("尚无操作", "已接收，等待执行") is not a result and makes no sound.
+void on_command(const std::string &text, bool quiet_hours, int64_t) {
+    if (tone_for_command(text)) audio_commands.push_back(text + (quiet_hours ? "|quiet" : ""));
+}
+void on_pairing_done(int64_t) { ++audio_paired; }
+}  // namespace audio
 esp_err_t board_brightness(int percent) { ++brightness_calls; if (mock_brightness_result == ESP_OK) mock_brightness = percent; return mock_brightness_result; }
 esp_err_t board_rotation(int degrees) { ++rotation_calls; if (mock_rotation_result == ESP_OK) mock_rotation = degrees; return mock_rotation_result; }
 bool agent_submit(const Action &) {
@@ -316,6 +348,7 @@ static void reset_world() {
     mock_brightness_result = mock_rotation_result = mock_save_result = mock_lock_result = ESP_OK;
     rotation_calls = brightness_calls = save_calls = reset_calls = submit_calls = lock_calls = unlock_calls = restart_calls = 0;
     submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0;
+    audio_available = true; audio_enabled = false; audio_store_ok = true; audio_tests = audio_paired = 0; audio_commands.clear();
 }
 static void start_ui() {
     detail::reset_for_test();
@@ -482,12 +515,12 @@ static void save_png_source(const std::string &name) {
 
 using detail::Page;
 using detail::PowerTab;
-static const std::array<std::pair<Page, PowerTab>, 12> kViews = {{
+static const std::array<std::pair<Page, PowerTab>, 13> kViews = {{
     {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Computer, PowerTab::Level}, {Page::Settings, PowerTab::Level},
     {Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Readings}, {Page::Power, PowerTab::Protect}, {Page::Connect, PowerTab::Level},
-    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}}};
+    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}}};
 static const char *view_name(size_t i) {
-    static const char *n[] = {"home", "actions", "computer", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device"};
+    static const char *n[] = {"home", "actions", "computer", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound"};
     return n[i];
 }
 
@@ -551,7 +584,7 @@ static void case_matrix() {
                     dh::ui_pairing_hide(); step();
                 }
             }
-    EXPECT(views == 3 * 2 * 3 * 12);
+    EXPECT(views == 3 * 2 * 3 * 13);
 }
 static void case_state_fidelity() {
     using detail::header_battery_text;
@@ -653,7 +686,7 @@ static void case_navigation() {
     tap(380, 30); EXPECT(detail::current_page() == Page::Power);         // header right
     click_nav(3);
     struct Row { const char *label; Page page; };
-    for (Row r : {Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
+    for (Row r : {Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"声音", Page::Sound}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
         click_nav(3);
         EXPECT(detail::current_page() == Page::Settings);
         EXPECT(click_text(r.label));
@@ -1066,6 +1099,97 @@ static void case_battery_digits() {   // A21
              "battery digits for level " << c.soc << " are off centre: ink [" << min_x << "," << min_y << "," << max_x << "," << max_y << "] in body [" << x1 << "," << y1 << "," << x2 << "," << y2 << "] dx " << dx << " dy " << dy);
     }
 }
+static void case_bolt_in_battery() {   // A26
+    struct Case { int soc; bool percent; };
+    const Case cases[] = {{5, true}, {67, true}, {100, true}, {67, false}};   // 1 digit, 2, 3, and no digits at all
+    for (const Case &c : cases) {
+        fresh(c.percent ? "mint|-|zh-CN|standard|pct|standard" : "mint|-|zh-CN|standard|nopct|standard");
+        mock_power.soc_percent = c.soc; mock_power.charging = "charging";
+        step(); step();
+        for (int i = 0; i < 3; ++i) { lv_obj_invalidate(lv_screen_active()); lv_refr_now(display); }
+        int x1 = 0, y1 = 0, x2 = 0, y2 = 0, bx1 = 0, by1 = 0, bx2 = 0, by2 = 0, ux1 = 0, uy1 = 0, ux2 = 0, uy2 = 0;
+        EXPECT(detail::header_battery_body(&x1, &y1, &x2, &y2));
+        EXPECT(detail::header_bolt_shown() && detail::header_bolt_area(&bx1, &by1, &bx2, &by2));
+        NOTE(bx1 >= x1 && bx2 <= x2 && by1 >= y1 && by2 <= y2,
+             "the bolt is not inside the battery for level " << c.soc << ": bolt [" << bx1 << "," << by1 << "," << bx2 << "," << by2 << "] body [" << x1 << "," << y1 << "," << x2 << "," << y2 << "]");
+        // The USB icon is next to the battery: no empty slot of the old bolt is left between them.
+        EXPECT(detail::header_usb_area(&ux1, &uy1, &ux2, &uy2));
+        NOTE(ux2 < x1 && x1 - ux2 <= 20, "the USB icon is not next to the battery for level " << c.soc << ": usb ends at " << ux2 << ", battery starts at " << x1);
+        std::vector<std::pair<int, int>> runs;   // the columns that have ink, as runs
+        int min_x = 9999, max_x = -1, min_y = 9999, max_y = -1;
+        bool in_run = false;
+        for (int x = x1 + 3; x <= x2 - 3; ++x) {
+            bool ink = false;
+            for (int y = y1 + 3; y <= y2 - 3; ++y) {
+                const size_t at = (static_cast<size_t>(y) * 480 + static_cast<size_t>(x)) * 3;
+                if ((framebuffer[at] + framebuffer[at + 1] + framebuffer[at + 2]) / 3 > 150) {
+                    ink = true;
+                    min_x = std::min(min_x, x); max_x = std::max(max_x, x);
+                    min_y = std::min(min_y, y); max_y = std::max(max_y, y);
+                }
+            }
+            if (ink && !in_run) runs.push_back({x, x});
+            if (ink) runs.back().second = x;
+            in_run = ink;
+        }
+        EXPECT(max_y >= 0 && !runs.empty());
+        if (runs.empty()) continue;   // nothing drawn: the check above has said so
+        const double dy = (min_y + max_y) / 2.0 - (y1 + y2) / 2.0, dx = (min_x + max_x) / 2.0 - (x1 + x2) / 2.0;
+        NOTE(std::fabs(dy) <= 1.0 && std::fabs(dx) <= 1.5,
+             "bolt and digits are off centre for level " << c.soc << ": ink [" << min_x << "," << min_y << "," << max_x << "," << max_y << "] in body [" << x1 << "," << y1 << "," << x2 << "," << y2 << "] dx " << dx << " dy " << dy);
+        const int bolt_w = runs.front().second - runs.front().first + 1;
+        NOTE(bolt_w >= 5 && bolt_w <= 12, "the bolt is " << bolt_w << " px wide for level " << c.soc);
+        if (c.percent) NOTE(runs.size() >= 2 && runs[1].first >= runs[0].second + 2, "bolt and digits touch for level " << c.soc);
+        else NOTE(runs.size() == 1, "something besides the bolt is drawn with the percent off, " << runs.size() << " runs");
+    }
+    fresh();
+    mock_power.charging = "idle"; step();
+    EXPECT(!detail::header_bolt_shown() && detail::header_usb_shown());
+    mock_power.charging = "charging"; step();
+    EXPECT(detail::header_bolt_shown());
+    mock_power.vbus = "absent"; mock_power.charging = "idle"; step();
+    EXPECT(!detail::header_bolt_shown());
+}
+static void case_home_without_actions() {   // A27
+    fresh(); step(); step();
+    int rx1 = 0, ry1 = 0, rx2 = 0, ry2 = 0, nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
+    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2));
+    EXPECT(rx2 - rx1 + 1 == 216 && ry1 == detail::kBodyTop);                      // with actions: as it was
+    EXPECT(!detail::home_first_action_label().empty());
+    mock_snapshot.action_count = 0; step(); step();
+    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && detail::home_notice_area(&nx1, &ny1, &nx2, &ny2));
+    const int d = rx2 - rx1 + 1, body_end = detail::kBodyTop + detail::kBodyH;
+    NOTE(d >= 240 && d <= 264, "the ring is " << d << " px wide, not 240 to 264");
+    EXPECT(std::abs((rx1 + rx2) / 2 - 240) <= 1);
+    const int top = ry1 - detail::kBodyTop, bottom = body_end - ny2;
+    NOTE(ny1 >= ry2 + 4 && ny2 <= body_end, "the line is not under the ring and inside the body: ring ends " << ry2 << ", line [" << ny1 << "," << ny2 << "]");
+    NOTE(top >= 8 && bottom >= 8 && std::abs(top - bottom) <= 6, "a blank band is left: " << top << " px over the ring and " << bottom << " px under the line");
+    EXPECT(detail::home_first_action_label().empty());
+    EXPECT(detail::home_ring_width() == 23);                                      // the thickness grows with the ring: 20 of 216 is 23 of 252
+    check_layout("home-no-actions"); save_png_source("state-home-no-actions");
+    const int cy = (ry1 + ry2) / 2;
+    tap(240, cy - 10); step();                                                    // the clock in the middle
+    EXPECT(detail::current_page() == Page::Clock);
+    fresh(); mock_snapshot.action_count = 0; step(); step();
+    tap(240, cy + 50); step();                                                    // the lower end of the place of the date: the clock moved with the ring
+    EXPECT(detail::current_page() == Page::Clock);
+    // The dot before the line is on the line.
+    fresh(); mock_snapshot.action_count = 0; mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; step(); step();
+    int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+    EXPECT(detail::home_notice_area(&nx1, &ny1, &nx2, &ny2) && detail::home_notice_dot_area(&dx1, &dy1, &dx2, &dy2));
+    NOTE(dy1 >= ny1 && dy2 <= ny2 + 1, "the dot [" << dy1 << "," << dy2 << "] is not on the line [" << ny1 << "," << ny2 << "]");
+    fresh(); mock_snapshot.action_count = 0; step(); step();
+    tap(rx1 + 10, cy); step();                                                    // on the ring itself
+    EXPECT(detail::ring_info_open());
+    EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
+    tap(rx2 - 8, cy); step();                                                     // the far rim of the larger ring is part of the touch area
+    EXPECT(detail::ring_info_open());
+    EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
+    // the actions come back: the ring is small again, at the top, with the cards under it
+    fresh(); mock_snapshot.action_count = 0; step(); step();
+    fresh(); step(); step();
+    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && rx2 - rx1 + 1 == 216 && ry1 == detail::kBodyTop && !detail::home_first_action_label().empty());
+}
 static void case_pairing_keeps_awake() {   // A22
     fresh();
     dh::PairingInfo info;
@@ -1145,6 +1269,67 @@ static void case_ring_info() {   // A24
     EXPECT(click_text("Close")); step();
     EXPECT(!detail::ring_info_open());
 }
+static void case_sound() {   // A25
+    fresh(); step(); step();
+    click_nav(3); EXPECT(detail::current_page() == Page::Settings);
+    EXPECT(has("声音") && has("提示音、试听"));
+    EXPECT(click_text("声音")); step();
+    EXPECT(detail::current_page() == Page::Sound);
+    EXPECT(has("声音") && has("提示音") && has("关") && has("开") && has("试听") && has("音量固定在较低的一档。"));
+    EXPECT(has("动作有结果、配对完成时响一声。夜间限亮的时间里不响。") && !has("没有检测到扬声器，试听不可用。") && !detail::sound_controls_dimmed());
+    EXPECT(!audio_enabled && detail::sound_selected() == 0);                      // off until the person turns it on
+    check_layout("sound");
+    EXPECT(click_text("开")); step();
+    EXPECT(audio_enabled && detail::sound_selected() == 1);
+    EXPECT(click_text("关")); step();
+    EXPECT(!audio_enabled && detail::sound_selected() == 0);
+    EXPECT(click_text("试听")); EXPECT(audio_tests == 1);                        // listen works with the sound off
+    EXPECT(click_text("开")); step(); EXPECT(click_text("试听")); EXPECT(audio_tests == 2 && audio_enabled);
+    // A choice that cannot be stored stays as it was, and the page says so.
+    EXPECT(click_text("关")); step(); EXPECT(!audio_enabled);
+    audio_store_ok = false;
+    EXPECT(click_text("开")); step();
+    EXPECT(!audio_enabled && has("没有保存，请再试一次") && detail::sound_selected() == 0);   // the page still shows what is true
+    audio_store_ok = true;
+    EXPECT(click_text("开")); step();
+    EXPECT(audio_enabled && !has("没有保存，请再试一次") && detail::sound_selected() == 1);
+    // A setting that was stored before is what the page shows when it is opened.
+    fresh(); audio_enabled = true; goto_view(Page::Sound);
+    EXPECT(detail::sound_selected() == 1);
+    fresh(); goto_view(Page::Settings); EXPECT(detail::sound_selected() == -1);
+    // No speaker: nothing to turn on, nothing to listen to, and the reason on the page.
+    fresh(); audio_available = false; goto_view(Page::Sound);
+    EXPECT(has("没有检测到扬声器，试听不可用。") && !has("动作有结果、配对完成时响一声。夜间限亮的时间里不响。") && detail::sound_controls_dimmed());
+    EXPECT(click_text("开")); step(); EXPECT(!audio_enabled);
+    EXPECT(click_text("试听")); EXPECT(audio_tests == 0);
+    check_layout("sound-no-speaker");
+    // Commands: the text goes to the speaker once per change.
+    fresh(); step(); step();
+    EXPECT(audio_commands.empty());
+    mock_snapshot.command = "已切换（已确认）"; step(); step();
+    EXPECT(audio_commands.size() == 1 && audio_commands[0] == "已切换（已确认）");
+    step(); step(); EXPECT(audio_commands.size() == 1);                          // the same text again is not a new result
+    mock_snapshot.command = "切换失败，请查看原因"; step();
+    EXPECT(audio_commands.size() == 2 && audio_commands[1] == "切换失败，请查看原因");
+    // The night flag follows the limit of the night. The harness clock is 03:00 UTC: "XXX3:30" makes it 23:30 local time, inside the
+    // default window 22:00 to 07:00; "CST-8" makes it 11:00.
+    fresh(); setenv("TZ", "XXX3:30", 1); tzset();
+    mock_snapshot.command = "已切换（已确认）"; step(); step();
+    EXPECT(audio_commands.size() == 1 && audio_commands[0] == "已切换（已确认）|quiet");
+    fresh(); setenv("TZ", "CST-8", 1); tzset();
+    mock_snapshot.command = "已切换（已确认）"; step(); step();
+    EXPECT(audio_commands.size() == 1 && audio_commands[0] == "已切换（已确认）");
+    mock_config.night_enabled = false; mock_config.revision++; setenv("TZ", "XXX3:30", 1); tzset();
+    mock_snapshot.command = "切换失败，请查看原因"; step(); step();
+    EXPECT(audio_commands.size() == 2 && audio_commands[1] == "切换失败，请查看原因");      // the night limit is off: no quiet hours
+    // An unknown time counts as night while the limit is on, as it does for the display.
+    fresh(); setenv("TZ", "CST-8", 1); tzset(); mock_snapshot.time_valid = false;
+    mock_snapshot.command = "已切换（已确认）"; step(); step();
+    EXPECT(audio_commands.size() == 1 && audio_commands[0] == "已切换（已确认）|quiet");
+    // English.
+    fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Sound);
+    EXPECT(has("Sound") && has("Alert sound") && has("Off") && has("On") && has("Listen"));
+}
 static void case_screenshots() {
     if (out_dir.empty()) return;
     for (const char *theme : {"mint", "ocean", "amber"}) {
@@ -1193,7 +1378,7 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

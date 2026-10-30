@@ -215,6 +215,13 @@
       "w": 2040,
       "h": 560,
       "title": "设备 · 声音（设置里多一行、关、开、没有扬声器）"
+    },
+    "Dev-HomeEmpty.dc.html": {
+      "x": 5040,
+      "y": 1200,
+      "w": 480,
+      "h": 480,
+      "title": "设备 · 总览（没有动作：环放大并居中）"
     }
   },
   "createdOnFiles": {
@@ -278,6 +285,7 @@
     "Main.dc.html",
     "Arch-Modules.dc.html",
     "Dev-Home.dc.html",
+    "Dev-HomeEmpty.dc.html",
     "Dev-Actions.dc.html",
     "Dev-Computer.dc.html",
     "Dev-Settings.dc.html",

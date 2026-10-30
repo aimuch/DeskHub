@@ -710,6 +710,23 @@ static void t18_notice() {
     CHECK_EQ(notice_text(Lang::ZhCN, "已接收，等待执行", NOW, NOW + 5), std::string(""));  // time must not run backwards
 }
 
+// ---- T22: the quiet hours of the sound (docs/design Dev-Sound) ----
+// Failure modes: a sound at night because the clock is not known; a night limit that is off still silencing the device;
+// the window across midnight read as one that does not. The display treats an unknown time as night while the limit is on
+// (policy.cpp), and the sound follows it.
+static void t22_quiet_hours() {
+    DisplayConfig c;
+    for (uint16_t minute = 0; minute < 1440; ++minute) {
+        CHECK_EQ(quiet_hours(c, true, minute), dh::in_night(minute, c.night_start, c.night_end));
+        CHECK(quiet_hours(c, false, minute));                        // no valid time: the night is not known, so the device stays quiet
+    }
+    CHECK(quiet_hours(c, true, 23 * 60 + 30) && quiet_hours(c, true, 3 * 60) && quiet_hours(c, true, 22 * 60) && !quiet_hours(c, true, 12 * 60));
+    c.night_enabled = false;
+    for (uint16_t minute = 0; minute < 1440; ++minute) CHECK(!quiet_hours(c, true, minute) && !quiet_hours(c, false, minute));   // the limit is off: no quiet hours
+    c.night_enabled = true; c.night_start = 60; c.night_end = 300;   // a window inside one day
+    CHECK(quiet_hours(c, true, 120) && !quiet_hours(c, true, 23 * 60) && !quiet_hours(c, true, 400));
+}
+
 // ---- T21: the ring, explained (docs/design Dev-RingInfo) ----
 // Failure modes: a row that says "fine" for a segment that is dark; a reason that is made up (the Wi-Fi and pairing words come
 // from what the device knows, the power words from the sample); a power fault read as "no reading"; the order of the rows
@@ -939,6 +956,7 @@ int main() {
     t10b_blink();
     t20_battery_fill_and_rings();
     t21_ring_info();
+    t22_quiet_hours();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

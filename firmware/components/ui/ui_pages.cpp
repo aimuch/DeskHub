@@ -1,5 +1,6 @@
 // The pages of the device UI (docs/design Dev-*). Each page has a builder, which makes the objects once, and a
 // refresher, which only sets text and colours that the view models in ui_model.cpp say. A refresher never builds.
+#include "audio.hpp"
 #include "ui_internal.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -22,10 +23,12 @@ int g_scroll = 0;
 
 struct Shell {
     lv_obj_t *left{}, *right{}, *wifi{}, *pc{}, *pc_screen{}, *pc_neck{}, *pc_base{}, *usb{}, *bolt{}, *box{}, *body{}, *tip{}, *fill{}, *digits{}, *nav{}, *hint{};
+    int bolt_ink_w = 0, bolt_ofs_x = 0;   // the bolt glyph: width of its ink and where the ink starts in its box
     std::array<lv_obj_t *, 2> wifi_cut{}, pc_cut{}, bat_cut{};  // the slash: a line in the colour of the background under a thin one
     std::array<lv_obj_t *, 4> nav_btn{}, nav_label{};
 } sh;
 struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring;
+int notice_y = 226;   // where the line under the ring of the home page is in the body
 struct Widgets {
     lv_obj_t *clock{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{};
     lv_obj_t *cpu_gauge{}, *mem_gauge{}, *cpu_value{}, *mem_value{}, *rx{}, *tx{}, *footer{}, *error{};
@@ -152,18 +155,23 @@ lv_obj_t *action_card(lv_obj_t *parent, size_t index, int width, int height, con
 
 // ---- Home ----
 void build_home(lv_obj_t *body, const Frame &f) {
-    const int d = 216, x = (kContentW - d) / 2, g = 4, width = ring_px(look.appearance.ring).home;
+    // With no actions nothing is drawn under the ring (docs/design Dev-HomeEmpty): the ring is larger, and the ring with the line
+    // under it sits in the middle of the body, so that no blank band is left.
+    const auto actions = make_actions(look.lang, f.s);
+    const bool none = actions.empty();
+    const int d = none ? 252 : 216, x = (kContentW - d) / 2, g = 4, width = (ring_px(look.appearance.ring).home * d + 108) / 216;
+    const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 2 : 0;   // top of the ring in the body; 10: the gap to the line
     auto *track = arc_segment(body, d, 0, 360, P().track, width, LV_OPA_COVER);
     ring.track = track;
-    lv_obj_set_pos(track, x, 0);
+    lv_obj_set_pos(track, x, y);
     static constexpr int kStart[4] = {278, 8, 98, 188}, kSweep = 74;
     const int trim = static_cast<int>(1.5f * g / (d / 2.0f) * 57.3f + 0.5f);
     const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
     for (size_t i = 0; i < 4; ++i) {
         ring.glow[i] = arc_segment(body, d + 2 * g, kStart[i] + trim, kStart[i] + kSweep - trim, colors[i], width + 3 * g, LV_OPA_TRANSP);
-        lv_obj_set_pos(ring.glow[i], x - g, -g);
+        lv_obj_set_pos(ring.glow[i], x - g, y - g);
         ring.seg[i] = arc_segment(body, d, kStart[i], kStart[i] + kSweep, colors[i], width, LV_OPA_TRANSP);
-        lv_obj_set_pos(ring.seg[i], x, 0);
+        lv_obj_set_pos(ring.seg[i], x, y);
     }
     // One button for the ring and the clock in it, so that no two touch areas overlap: a tap on the clock opens the clock page,
     // a tap anywhere else on the ring explains the ring. The area is a circle, not its square.
@@ -175,26 +183,26 @@ void build_home(lv_obj_t *body, const Frame &f) {
         if (at.x >= clock.x1 && at.x <= clock.x2 && at.y >= clock.y1 && at.y <= clock.y2) request_page(Page::Clock);
         else request_ring_info();
     }, data(0), d, d);
-    lv_obj_set_pos(ring_hit, x, 0);
+    lv_obj_set_pos(ring_hit, x, y);
     flat(ring_hit);
     lv_obj_set_style_radius(ring_hit, LV_RADIUS_CIRCLE, 0);
     lv_obj_add_flag(ring_hit, LV_OBJ_FLAG_ADV_HITTEST);
     auto *hit = holder(body, 176, 124);   // the place of the clock and the date; it takes no touch of its own
     w.clock_hit = hit;
-    lv_obj_set_pos(hit, (kContentW - 176) / 2, 40);
+    lv_obj_set_pos(hit, (kContentW - 176) / 2, y + d / 2 - 68);   // 68: the clock and the date are centred in the ring
     w.clock = label_at(hit, "--:--", 0, 22, 176, &lv_font_montserrat_48, P().ink);
     centered(w.clock);
     w.date = label_at(hit, "", 0, 22 + 54 + 6, 176, look.caption, P().muted);
     centered(w.date);
     single_line(w.date, lh(look.caption));
-    w.notice = label_at(body, "", 0, 226, kContentW, look.caption, P().muted);
+    notice_y = y + d + 10;
+    w.notice = label_at(body, "", 0, notice_y, kContentW, look.caption, P().muted);
     centered(w.notice);
     single_line(w.notice, lh(look.caption));
     w.notice_dot = holder(body, 10, 10);   // in the colour of the dark segment that the line names
     lv_obj_set_style_radius(w.notice_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(w.notice_dot, LV_OPA_COVER, 0);
     lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN);
-    const auto actions = make_actions(look.lang, f.s);
     const int top = 256, h = 80;
     // With no actions the home page draws nothing in their place: the ring and the header icons already say what is missing.
     for (size_t i = 0; i < std::min<size_t>(2, actions.size()); ++i) {
@@ -236,7 +244,7 @@ void refresh_home(const Frame &f) {
             const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
             lv_point_t size{};
             lv_text_get_size(&size, n.c_str(), look.caption, 0, 0, kContentW, LV_TEXT_FLAG_NONE);
-            lv_obj_set_pos(w.notice_dot, std::max<int>(0, static_cast<int>((kContentW - size.x) / 2 - 18)), 226 + (lh(look.caption) - 10) / 2);
+            lv_obj_set_pos(w.notice_dot, std::max<int>(0, static_cast<int>((kContentW - size.x) / 2 - 18)), notice_y + (lh(look.caption) - 10) / 2);
             lv_obj_set_style_bg_color(w.notice_dot, hex(colors[info.first_problem]), 0);
         }
         if (lv_obj_has_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN) == dot) { if (dot) lv_obj_remove_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); }
@@ -347,6 +355,7 @@ void build_settings(lv_obj_t *body) {
                         {Str::SettingAppearance, Str::SettingAppearanceSub, Page::Appearance, P().clock},
                         {Str::SettingConnection, Str::SettingConnectionSub, Page::Connect, P().wifi},
                         {Str::SettingPower, Str::SettingPowerSub, Page::Power, P().power},
+                        {Str::SettingSound, Str::SettingSoundSub, Page::Sound, P().agent},
                         {Str::SettingClock, Str::SettingClockSub, Page::Clock, P().agent},
                         {Str::SettingDevice, Str::SettingDeviceSub, Page::Device, P().muted}};
     const int h = std::max(72, lh(look.body) + lh(look.caption) + 16);
@@ -536,6 +545,33 @@ void build_appearance(lv_obj_t *body, const Frame &f) {
 }
 void refresh_appearance(const Frame &f) { set_optional_text(w.error, f.last_error); }
 
+// ---- Sound (docs/design Dev-Sound) ----
+std::vector<lv_obj_t *> g_sound_switch;   // the two halves of the switch, for the tests
+void build_sound(lv_obj_t *body, const Frame &) {
+    const bool speaker = audio::available(), on = audio::enabled();
+    heading(body, T(Str::SoundTitle), P().accent);
+    section(body, T(Str::SoundLabel));
+    g_sound_switch.clear();
+    auto *track = segmented(body, {T(Str::SoundOff), T(Str::SoundOn)}, on ? 1 : 0,
+                            [](lv_event_t *e) { request_sound_set(data_of(e) == 1); }, {0, 1}, {look.body, look.body}, &g_sound_switch);
+    auto *note = caption(body, T(speaker ? Str::SoundNote : Str::SoundNoSpeaker), speaker ? P().muted : P().power);
+    (void)note;
+    auto *listen = button(body, [](lv_event_t *) { request_sound_test(); }, data(0), kContentW, 56);
+    lv_obj_set_style_radius(listen, 28, 0);
+    select(listen, true, false);
+    auto *l = label(listen, T(Str::SoundListen), kContentW - 8, look.body, P().accent);
+    centered(l);
+    lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    caption(body, T(Str::SoundVolume), P().muted);
+    if (!speaker) {   // nothing to turn on and nothing to hear: the controls stay, dimmed
+        lv_obj_set_style_opa(track, LV_OPA_40, 0);
+        lv_obj_set_style_opa(listen, LV_OPA_40, 0);
+    }
+    w.error = caption(body, "", P().power);
+    set_optional_text(w.error, "");
+}
+void refresh_sound(const Frame &f) { set_optional_text(w.error, f.last_error); }
+
 // ---- Display ----
 void build_display(lv_obj_t *body, const Frame &f) {
     const DisplayConfig &c = f.c;
@@ -668,8 +704,7 @@ void build_shell(lv_obj_t *screen) {
     lv_obj_set_pos(sh.right, 244, 0);
     flat(sh.right);
     const int bx = right_abs - 51 - 244;                                              // the battery box, 51 x 24
-    sh.usb = label_at(sh.right, LV_SYMBOL_USB, bx - 8 - 14 - 8 - 22, kIconTop - 2, 28, &lv_font_montserrat_24, p.ink);
-    sh.bolt = label_at(sh.right, LV_SYMBOL_CHARGE, bx - 8 - 14, kIconTop - 2, 20, &lv_font_montserrat_24, p.agent);
+    sh.usb = label_at(sh.right, LV_SYMBOL_USB, bx - 8 - 22, kIconTop - 2, 28, &lv_font_montserrat_24, p.ink);   // next to the battery: the bolt is inside it
     sh.box = holder(sh.right, 51, 24);
     lv_obj_set_pos(sh.box, bx, kIconTop);
     sh.body = panel(sh.box, 46, 22, p.bg, p.muted, 7);
@@ -692,6 +727,19 @@ void build_shell(lv_obj_t *screen) {
     sh.digits = label_at(sh.box, "", 2, digits_y, 42, &btr_ui_16, p.ink);   // the digits are drawn over the fill
     lv_obj_set_style_text_align(sh.digits, LV_TEXT_ALIGN_CENTER, 0);
     single_line(sh.digits, lh(&btr_ui_16));
+    {   // The bolt is in front of the digits, in their ink; the two are one group in the middle of the body (refresh_shell).
+        const lv_font_t *bolt_font = &lv_font_montserrat_14;
+        int bolt_y = 1 + (22 - lh(bolt_font)) / 2, bolt_adv = 10;
+        lv_font_glyph_dsc_t g;
+        sh.bolt_ink_w = 9; sh.bolt_ofs_x = 0;
+        if (lv_font_get_glyph_dsc(bolt_font, &g, 0xF0E7, 0)) {   // LV_SYMBOL_CHARGE
+            sh.bolt_ink_w = g.box_w; sh.bolt_ofs_x = g.ofs_x; bolt_adv = g.adv_w;
+            bolt_y = 12 - (bolt_font->line_height - bolt_font->base_line - g.box_h - g.ofs_y) - (g.box_h + 1) / 2;
+        }
+        sh.bolt = label_at(sh.box, LV_SYMBOL_CHARGE, 0, bolt_y, bolt_adv + 2, bolt_font, p.ink);
+        single_line(sh.bolt, lh(bolt_font));
+        lv_obj_add_flag(sh.bolt, LV_OBJ_FLAG_HIDDEN);
+    }
     slash(sh.box, 0, 0, kSlashBattery, sh.bat_cut);
 
     sh.nav = panel(screen, kContentW, 64, p.card, p.edge, 32);
@@ -737,6 +785,23 @@ void refresh_shell(const Frame &f, Page page, bool pairing_active) {
         set_hidden(sh.fill, false);
     } else set_hidden(sh.fill, true);
     set_optional_text(sh.digits, h.battery.digits);
+    {   // Bolt and digits are one group, centred in the body (46 wide: the middle is 23): the bolt first, a gap, the digits.
+        int digits_w = 0;
+        if (!h.battery.digits.empty()) {
+            lv_point_t size{};
+            lv_text_get_size(&size, h.battery.digits.c_str(), &btr_ui_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            digits_w = size.x;
+        }
+        const bool bolt = h.battery.charging;
+        const int gap = bolt && digits_w ? 2 : 0, total = (bolt ? sh.bolt_ink_w : 0) + gap + digits_w, start = 23 - total / 2;
+        int centre = 23;   // the middle of the digits
+        if (bolt) {
+            const int bx = start - sh.bolt_ofs_x;
+            if (lv_obj_get_x(sh.bolt) != bx) lv_obj_set_x(sh.bolt, bx);
+            centre = start + sh.bolt_ink_w + gap + digits_w / 2;
+        }
+        if (lv_obj_get_x(sh.digits) != centre - 21) lv_obj_set_x(sh.digits, centre - 21);
+    }
     cut_shown(sh.bat_cut, h.battery.kind == BatteryView::Kind::None);
     const int active = page == Page::Home || page == Page::Clock ? 0 : page == Page::Actions ? 1 : page == Page::Computer ? 2 : 3;
     for (int i = 0; i < 4; ++i) {
@@ -781,6 +846,7 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     case Page::Power: build_power(body, tab, f); break;
     case Page::Connect: build_connect(body, f); break;
     case Page::Appearance: build_appearance(body, f); break;
+    case Page::Sound: build_sound(body, f); break;
     case Page::Display: build_display(body, f); break;
     case Page::Clock: build_clock(body); break;
     case Page::Device: build_device(body, f); break;
@@ -798,6 +864,7 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     case Page::Power: refresh_power(tab, f); break;
     case Page::Connect: refresh_connect(f); break;
     case Page::Appearance: refresh_appearance(f); break;
+    case Page::Sound: refresh_sound(f); break;
     case Page::Display: refresh_display(f); break;
     case Page::Clock: refresh_clock(f); break;
     case Page::Device: refresh_device(f); break;
@@ -1028,6 +1095,27 @@ bool header_battery_body(int *x1, int *y1, int *x2, int *y2) {
 }
 std::string header_battery_text() { return visible(sh.digits) ? lv_label_get_text(sh.digits) : ""; }
 bool header_bolt_shown() { return visible(sh.bolt); }
+static bool area_of(lv_obj_t *o, int *x1, int *y1, int *x2, int *y2) {
+    if (!visible(o)) return false;
+    lv_area_t a;
+    lv_obj_get_coords(o, &a);
+    *x1 = a.x1; *y1 = a.y1; *x2 = a.x2; *y2 = a.y2;
+    return true;
+}
+bool header_bolt_area(int *x1, int *y1, int *x2, int *y2) { return area_of(sh.bolt, x1, y1, x2, y2); }
+bool header_usb_area(int *x1, int *y1, int *x2, int *y2) { return area_of(sh.usb, x1, y1, x2, y2); }
+bool home_ring_area(int *x1, int *y1, int *x2, int *y2) { return area_of(ring.track, x1, y1, x2, y2); }
+bool home_notice_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice, x1, y1, x2, y2); }
+bool sound_controls_dimmed() {
+    return current_page() == Page::Sound && !g_sound_switch.empty() && lv_obj_get_style_opa(lv_obj_get_parent(g_sound_switch[0]), LV_PART_MAIN) < LV_OPA_COVER;
+}
+int sound_selected() {
+    if (current_page() != Page::Sound) return -1;
+    for (size_t i = 0; i < g_sound_switch.size(); ++i)
+        if (lv_obj_get_style_border_width(g_sound_switch[i], LV_PART_MAIN) == 2) return static_cast<int>(i);   // the selected half has the border
+    return -1;
+}
+bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice_dot, x1, y1, x2, y2); }
 bool ring_info_dot_filled(int i) { return ring_info_open() && i >= 0 && i < 4 && g_ring_dots[i] && lv_obj_get_style_bg_opa(g_ring_dots[i], LV_PART_MAIN) == LV_OPA_COVER; }
 bool notice_dot_shown() { return visible(w.notice_dot); }
 bool header_usb_shown() { return visible(sh.usb); }

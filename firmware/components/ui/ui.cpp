@@ -3,6 +3,7 @@
 // What is drawn comes from ui_model.cpp (rules) and ui_pages.cpp (widgets).
 #include "ui.hpp"
 #include "agent_client.hpp"
+#include "audio.hpp"
 #include "bsp/esp-bsp.h"
 #include "charge.hpp"
 #include "esp_lv_adapter.h"
@@ -176,7 +177,11 @@ void update() {
     if (pairing_now && !pairing_view) pairing_view = build_pairing(screen, info, deadline, cancel);
     set_hidden(body, pairing_now);
 
-    if (s.command != seen_command) { seen_command = s.command; command_changed_ms = now; }
+    if (s.command != seen_command) {
+        seen_command = s.command; command_changed_ms = now;
+        // A new result of a command is the one thing that makes the speaker sound here. Quiet hours are the night limit.
+        audio::on_command(s.command, quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)), static_cast<int64_t>(now));
+    }
     bool actions_changed = observed_count != s.action_count;
     for (size_t i = 0; !actions_changed && i < s.action_count && i < 12; ++i) {
         const auto &a = observed_actions[i], &b = s.actions[i];
@@ -278,6 +283,18 @@ void protect_confirm(int limit) {
     request_update();
 }
 void protect_cancel() { request_update(); }
+// The sound page. A switch that cannot be stored stays as it was and says so; with no speaker nothing is asked of it.
+void request_sound_set(bool on) {
+    note_activity();
+    if (!audio::available()) return;
+    last_error = audio::set_enabled(on) ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));
+    rebuilding = true;
+    request_update();
+}
+void request_sound_test() {
+    note_activity();
+    if (audio::available()) audio::test();
+}
 // A tap on the ring: the sheet that says what each of the four segments means and why one is dark (docs/design Dev-RingInfo).
 void request_ring_info() {
     note_activity();

@@ -2,6 +2,7 @@
 // down when it ends. Every decision is the pure Session's (components/pairing); this file only reports what happened and
 // switches hardware on and off. No secret is logged: nothing in this component logs at all.
 #include "pairing_device.hpp"
+#include "audio.hpp"
 #include "internal.hpp"
 #include "board.hpp"
 #include "core.hpp"
@@ -76,7 +77,10 @@ void teardown(bool paired_now) {
     pending = false;
     active = false;
     save_retries = 0;
-    if (paired_now) dh::board_rtc_write(time(nullptr));  // the phone's clock was set at the start; keep it across a reset
+    if (paired_now) {
+        dh::board_rtc_write(time(nullptr));  // the phone's clock was set at the start; keep it across a reset
+        dh::audio::on_pairing_done(dh::monotonic_ms());
+    }
     note(Why::None);
 }
 

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 总览（没有动作时）</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2)); color: var(--ink); font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;">
+
+  <div style="position: absolute; left: 38px; top: 14px; display: flex; align-items: center; gap: 14px"><svg width="26" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" role="img" aria-label="Wi-Fi 已连接" style="flex: none; stroke: var(--wifi);"><path d="M2 9a15 15 0 0 1 20 0"></path><path d="M5.5 12.5a10 10 0 0 1 13 0"></path><path d="M9 16a5 5 0 0 1 6 0"></path><path d="M12 19.5h.01"></path></svg><svg width="26" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="电脑在线" style="flex: none; stroke: var(--agent)"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"></rect><path d="M8.5 20.5h7M12 16v4.5"></path></svg></div>
+  <div style="position: absolute; right: 36px; top: 14px; display: flex; align-items: center; gap: 8px"><span style="width: 22px; height: 24px; display: flex"><svg width="22" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="USB 供电" style="flex: none; stroke: var(--ink)"><path d="M12 18V4"></path><path d="M9.5 6.5 12 3.5l2.5 3"></path><path d="M12 14.5 7 12v-2.5"></path><circle cx="7" cy="8.2" r="1.3"></circle><path d="M12 12l5-2.5V8"></path><rect x="15.8" y="5.4" width="2.4" height="2.4" rx=".4"></rect><circle cx="12" cy="19.6" r="2"></circle></svg></span><div role="img" aria-label="电量 67%" style="position: relative; width: 51px; height: 24px; flex: none"><div style="position: absolute; left: 0; top: 1px; width: 46px; height: 22px; box-sizing: border-box; border: 2px solid var(--agent); border-radius: 7px"></div><div style="position: absolute; left: 3px; top: 4px; width: 27px; height: 16px; border-radius: 4px; background: color-mix(in srgb, var(--agent) 40%, transparent)"></div><div style="position: absolute; left: 2px; top: 1px; width: 42px; height: 22px; display: flex; align-items: center; justify-content: center; gap: 2px; font-size: 15px; font-weight: 500; line-height: 1; color: var(--ink)"><svg width="9" height="14" viewBox="0 0 14 22" role="img" aria-label="正在充电" style="flex: none"><path d="M8.6 1 1.4 12.6h5.2L5.6 21 12.6 9.2H7.4z" style="fill: var(--ink)"></path></svg>67</div><div style="position: absolute; left: 47px; top: 7.5px; width: 3px; height: 9px; border-radius: 1.5px; background: var(--agent)"></div></div></div>
+
+  <svg width="252" height="252" viewBox="0 0 216 216" style="position: absolute; left: 114px; top: 89px" role="img" aria-label="状态环：网络、电脑、电源、时间都正常">
+    <defs><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"></feGaussianBlur></filter></defs>
+    <circle cx="108" cy="108" r="98" fill="none" stroke-width="20" style="stroke: var(--track)"></circle>
+    <g fill="none" stroke-linecap="round" stroke-width="26" opacity="0.35" filter="url(#glow)">
+      <path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path>
+      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent); opacity: {{agentOp}}"></path>
+      <path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path>
+      <path d="M11.0 94.4 A98 98 0 0 1 94.4 11.0" style="stroke: var(--time)"></path>
+    </g>
+    <g fill="none" stroke-linecap="round" stroke-width="20">
+      <path d="M121.6 11.0 A98 98 0 0 1 205.0 94.4" style="stroke: var(--wifi)"></path>
+      <path d="M205.0 121.6 A98 98 0 0 1 121.6 205.0" style="stroke: var(--agent); opacity: {{agentOp}}"></path>
+      <path d="M94.4 205.0 A98 98 0 0 1 11.0 121.6" style="stroke: var(--power)"></path>
+      <path d="M11.0 94.4 A98 98 0 0 1 94.4 11.0" style="stroke: var(--time)"></path>
+    </g>
+  </svg>
+  <div style="position: absolute; left: 152px; top: 163px; width: 176px; text-align: center">
+    <div style="font-size: 54px; font-weight: 500; line-height: 1; letter-spacing: 1px">11:00</div>
+    <div style="margin-top: 14px; font-size: 17px; color: var(--muted)">10月28日 星期三</div>
+  </div>
+
+  <div style="position: absolute; left: 24px; top: 351px; width: 432px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; color: var(--muted)"><span style="{{noteDot}}"></span><span>{{noteText}}</span></div>
+
+  <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+      <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"note":{"editor":"enum","default":"problem","options":["command","hint","problem"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    const names = ['总览', '动作', '电脑', '设置'];
+    const active = 0;
+    const note = this.props.note || 'problem';
+    // No actions (the computer is not paired, or none is set): the ring is 252 wide and the ring with its line sits in the middle of the body, so no blank band is left under it.
+    // The line under the ring: a note about the last command; else, when nothing else is said, where to tap; else the first dim segment, named.
+    const texts = { command: '命令已发送，状态未确认', hint: '点圆环看说明', problem: '电脑没连上' };
+    return {
+      vars: T[this.props.theme] || T.mint,
+      noteText: texts[note] || texts.command,
+      noteDot: note === 'problem' ? 'width: 10px; height: 10px; border-radius: 50%; background: var(--agent); box-shadow: 0 0 10px var(--agent)' : 'display: none',
+      agentOp: note === 'problem' ? '0.22' : '1',
+      tabs: names.map((label, i) => ({
+        label,
+        bg: i === active ? 'var(--sel)' : 'transparent',
+        ink: i === active ? 'var(--accent)' : 'var(--muted)'
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

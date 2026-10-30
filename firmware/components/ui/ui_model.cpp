@@ -209,6 +209,9 @@ RingInfoView make_ring_info(Lang l, const Snapshot &s, const PowerState &p, int6
     }
     return v;
 }
+bool quiet_hours(const DisplayConfig &c, bool time_valid, uint16_t minute_of_day) {
+    return c.night_enabled && (!time_valid || in_night(minute_of_day, c.night_start, c.night_end));
+}
 std::string ring_note(Lang l, const RingInfoView &v) {
     switch (v.first_problem) {
     case 0: return T(l, Str::RingProblemWifi);

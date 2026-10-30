@@ -16,7 +16,7 @@ LV_FONT_DECLARE(btr_ui_28);
 LV_FONT_DECLARE(font_clock_72);
 
 namespace dh::ui::detail {
-enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device };
+enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound };
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
 // The panel has rounded corners (Waveshare does not publish the radius). Text and marks in the four corners must stay
@@ -109,6 +109,8 @@ void request_power_tab(PowerTab);
 void request_update();
 void request_protect_toggle();       // the button of the Protect tab: off opens the dialog, on turns it off
 void request_ring_info();            // a tap on the ring of the home page
+void request_sound_set(bool on);     // the switch of the sound page
+void request_sound_test();           // "listen"
 void note_activity();
 void user_screen_off();
 void schedule_brightness(int percent);
@@ -130,6 +132,13 @@ int header_fill_width();            // px width of the battery fill in the heade
 std::string header_battery_text();  // the digits inside the battery icon of the header ("" when none)
 bool header_bolt_shown();
 bool header_usb_shown();
+bool header_bolt_area(int *x1, int *y1, int *x2, int *y2);   // where the bolt is on the screen (false when it is not shown)
+bool header_usb_area(int *x1, int *y1, int *x2, int *y2);
+bool home_ring_area(int *x1, int *y1, int *x2, int *y2);     // the ring of the home page, and the line under it
+bool home_notice_area(int *x1, int *y1, int *x2, int *y2);
+bool sound_controls_dimmed();        // the switch of the sound page is drawn dimmed (no speaker)
+int sound_selected();                // 0 off, 1 on: which half of the switch of the sound page is selected; -1 when that page is not shown
+bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2);   // the dot before the line (false when it is not shown)
 bool header_slashed(int which);     // 0 Wi-Fi, 1 computer, 2 battery: the slash is drawn
 bool header_battery_body(int *x1, int *y1, int *x2, int *y2);   // where the battery outline is on the screen
 int header_icon_opa(int which);     // 0 Wi-Fi: how strong the icon is drawn now, 255 steady, low in the dim half of a blink
