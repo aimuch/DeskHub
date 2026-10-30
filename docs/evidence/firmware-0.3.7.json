@@ -60,14 +60,16 @@
     "ui_alive": true,
     "time_quality": "rtc",
     "wifi_and_agent": "未配置、未配对",
-    "audio": "能力 audio：support unverified，availability ready，也就是启动时声音芯片应答了（0.3.6 报的是 unsupported）。没有调用试听，没有人听",
+    "audio": "能力 audio：support unverified，availability ready，也就是启动时声音芯片应答了（0.3.6 报的是 unsupported）。读状态时没有调用试听",
+    "heard_by_user": "2026-10-31 用户说“有声音”：试听音在设备上响了。用户没有说用的是设备上的“试听”还是 --sound-test，也没有说响度",
     "pairing": "phase open，open true，why none：未配对的设备开机后自动开了热点",
     "power": "电量 96%，电池 4105 mV，USB 5155 mV，芯片 41.1 °C，measurement ok，无故障，充电状态 idle",
     "charge_protection": "已开启（上限 90%，回充 85%），状态 holding，开关 stopped，原因 LEVEL_AT_LIMIT；事件：开机发现开关停着（BOOT_FOUND_STOPPED），随后因电量到上限请求停充，写入与读回都是 ok"
   },
   "hardware_verified": "部分：只有上面 observed_on_device 里的几项是在真机上读到的；其余见 not_done",
   "not_done": [
-    "没有人听过扬声器：芯片应答只说明芯片在，不说明喇叭接好、响了、响度合适。要人在设备旁试听一次（设置 → 声音 → 试听，或 tools/provision.py --sound-test）",
+    "响度合不合适，用户还没有说",
+    "提示音的触发（动作有结果、热点配对完成）和夜间不响没有在真机上试：设备没有配对，没有动作",
     "声音芯片和放大器的引脚用的是 Waveshare 板级包（bsp_audio_codec_speaker_init），没有核对原理图",
     "新的顶栏闪电、没有动作时的首页、声音页没有在真机屏幕上看过",
     "设备端热点配对没有在真机上验证任何一步（同 0.3.6）",
