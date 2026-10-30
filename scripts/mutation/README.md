@@ -14,6 +14,9 @@ scripts/mutation/header_ui.py           # 图标顶栏、电池百分比和圆�
 scripts/mutation/corners_ui.py          # 屏幕圆角：改 ui_pages.cpp 里避开圆角的位置，跑界面预览里的圆角几何测试
 scripts/mutation/pairing_glue.py        # 设备端配对接线里能在主机上测的部分：改 pairing_glue.cpp，跑 pairing_glue_test
 scripts/mutation/ring_ui.py            # 圆环说明：改 ui_model.cpp、ui_pages.cpp、ui.cpp，跑 ui_model_test 和界面预览
+scripts/mutation/audio_policy.py        # 声音的规则：改 firmware/components/audio/audio_policy.cpp，跑主机上的 audio_test
+scripts/mutation/sound_ui.py            # 声音页和触发：改 ui_model.cpp、ui_pages.cpp、ui.cpp，跑 ui_model_test 和界面预览
+scripts/mutation/header_home_ui.py      # 电池里的闪电、没有动作时的首页：改 ui_pages.cpp，跑界面预览
 scripts/mutation/create_tls_reuse.py    # 证书续期：改 tools/create_tls.py 的 --ca-dir，跑 test_create_tls_reuse.py
 scripts/mutation/admin_password.py      # 管理员密码：改 admin_auth.py、management.py、cli.py，跑 test_admin_password.py
 scripts/mutation/console_ui.py          # 网页管理台：改前端脚本，跑 scripts/e2e/console.e2e.mjs（真实的 Agent 加 Chrome，每处约 2 分钟）
