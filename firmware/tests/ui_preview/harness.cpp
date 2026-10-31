@@ -38,6 +38,9 @@
 //      on or off is stored (a failure to store leaves the choice as it was and says so); "listen" asks the speaker whatever the
 //      choice; with no speaker nothing can be turned on or listened to, and the page says why; a command text that calls for a
 //      sound reaches the speaker once per change of the text, with the night flag.
+//      The volume: three levels, low until one is chosen; a tap stores the level and plays one test tone at that level, with the
+//      alert sound off too; a level that cannot be stored stays as it was, says so and plays nothing; with no speaker it is
+//      dimmed and a tap does nothing; the page shows the stored level when it is opened. The old "fixed volume" line is gone.
 //  A24 The ring is explained (docs/design Dev-RingInfo): the line under it says "tap the ring" or names the first dark segment;
 //      a tap on the ring opens a sheet with one row per segment; "close", or a tap outside the sheet, closes it; the clock in
 //      the middle still opens the clock page; another note under the ring (a command, an error) has priority over the line.
@@ -92,8 +95,9 @@ static dh::PowerState mock_power;
 static dh::charge::Status mock_charge;
 // The speaker, simulated: what the page asks of it is recorded.
 static bool audio_available = true, audio_enabled = false, audio_store_ok = true;
-static int audio_tests = 0, audio_paired = 0;
+static int audio_tests = 0, audio_paired = 0, audio_volume = 0;
 static std::vector<std::string> audio_commands;
+static std::vector<int> audio_test_levels;   // the volume each test tone was played at
 static dh::charge::Settings charge_last;
 static bool charge_apply_ok = true;
 static unsigned charge_applies = 0;
@@ -162,9 +166,16 @@ bool set_enabled(bool on) {
     audio_enabled = on;
     return true;
 }
+int volume() { return audio_volume; }
+bool set_volume(int level) {
+    if (!audio_store_ok || level < 0 || level >= kVolumeLevels) return false;
+    audio_volume = level;
+    return true;
+}
 bool test() {
     if (!audio_available) return false;
     ++audio_tests;
+    audio_test_levels.push_back(audio_volume);
     return true;
 }
 // Like the real one: a text without a tone ("尚无操作", "已接收，等待执行") is not a result and makes no sound.
@@ -348,7 +359,7 @@ static void reset_world() {
     mock_brightness_result = mock_rotation_result = mock_save_result = mock_lock_result = ESP_OK;
     rotation_calls = brightness_calls = save_calls = reset_calls = submit_calls = lock_calls = unlock_calls = restart_calls = 0;
     submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0;
-    audio_available = true; audio_enabled = false; audio_store_ok = true; audio_tests = audio_paired = 0; audio_commands.clear();
+    audio_available = true; audio_enabled = false; audio_store_ok = true; audio_tests = audio_paired = audio_volume = 0; audio_commands.clear(); audio_test_levels.clear();
 }
 static void start_ui() {
     detail::reset_for_test();
@@ -1272,10 +1283,11 @@ static void case_ring_info() {   // A24
 static void case_sound() {   // A25
     fresh(); step(); step();
     click_nav(3); EXPECT(detail::current_page() == Page::Settings);
-    EXPECT(has("声音") && has("提示音、试听"));
+    EXPECT(has("声音") && has("提示音、音量、试听"));
     EXPECT(click_text("声音")); step();
     EXPECT(detail::current_page() == Page::Sound);
-    EXPECT(has("声音") && has("提示音") && has("关") && has("开") && has("试听") && has("音量固定在较低的一档。"));
+    EXPECT(has("声音") && has("提示音") && has("关") && has("开") && has("试听") && has("音量") && has("低") && has("中") && has("高"));
+    EXPECT(!has("音量固定在较低的一档。"));
     EXPECT(has("动作有结果、配对完成时响一声。夜间限亮的时间里不响。") && !has("没有检测到扬声器，试听不可用。") && !detail::sound_controls_dimmed());
     EXPECT(!audio_enabled && detail::sound_selected() == 0);                      // off until the person turns it on
     check_layout("sound");
@@ -1285,6 +1297,24 @@ static void case_sound() {   // A25
     EXPECT(!audio_enabled && detail::sound_selected() == 0);
     EXPECT(click_text("试听")); EXPECT(audio_tests == 1);                        // listen works with the sound off
     EXPECT(click_text("开")); step(); EXPECT(click_text("试听")); EXPECT(audio_tests == 2 && audio_enabled);
+    // The volume: low until chosen; a tap stores it and plays one tone at the new level, whatever the alert switch says.
+    fresh(); goto_view(Page::Sound);
+    EXPECT(audio_volume == 0 && detail::sound_volume_selected() == 0);
+    EXPECT(click_text("中")); step();
+    EXPECT(audio_volume == 1 && detail::sound_volume_selected() == 1 && audio_tests == 1 && audio_test_levels.back() == 1 && !audio_enabled);
+    EXPECT(click_text("高")); step();
+    EXPECT(audio_volume == 2 && detail::sound_volume_selected() == 2 && audio_tests == 2 && audio_test_levels.back() == 2);
+    check_layout("sound-volume");
+    audio_store_ok = false;
+    EXPECT(click_text("低")); step();
+    EXPECT(audio_volume == 2 && detail::sound_volume_selected() == 2 && has("没有保存，请再试一次") && audio_tests == 2);   // nothing stored, nothing played
+    audio_store_ok = true;
+    EXPECT(click_text("低")); step();
+    EXPECT(audio_volume == 0 && detail::sound_volume_selected() == 0 && !has("没有保存，请再试一次") && audio_tests == 3 && audio_test_levels.back() == 0);
+    fresh(); audio_volume = 2; goto_view(Page::Sound);
+    EXPECT(detail::sound_volume_selected() == 2);
+    fresh(); goto_view(Page::Settings); EXPECT(detail::sound_volume_selected() == -1);
+    fresh(); goto_view(Page::Sound);
     // A choice that cannot be stored stays as it was, and the page says so.
     EXPECT(click_text("关")); step(); EXPECT(!audio_enabled);
     audio_store_ok = false;
@@ -1302,6 +1332,7 @@ static void case_sound() {   // A25
     EXPECT(has("没有检测到扬声器，试听不可用。") && !has("动作有结果、配对完成时响一声。夜间限亮的时间里不响。") && detail::sound_controls_dimmed());
     EXPECT(click_text("开")); step(); EXPECT(!audio_enabled);
     EXPECT(click_text("试听")); EXPECT(audio_tests == 0);
+    EXPECT(click_text("中")); step(); EXPECT(audio_volume == 0 && audio_tests == 0 && detail::sound_volume_selected() == 0);
     check_layout("sound-no-speaker");
     // Commands: the text goes to the speaker once per change.
     fresh(); step(); step();
@@ -1328,7 +1359,7 @@ static void case_sound() {   // A25
     EXPECT(audio_commands.size() == 1 && audio_commands[0] == "已切换（已确认）|quiet");
     // English.
     fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Sound);
-    EXPECT(has("Sound") && has("Alert sound") && has("Off") && has("On") && has("Listen"));
+    EXPECT(has("Sound") && has("Alert sound") && has("Off") && has("On") && has("Listen") && has("Volume") && has("Low") && has("Medium") && has("High"));
 }
 static void case_screenshots() {
     if (out_dir.empty()) return;

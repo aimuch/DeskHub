@@ -10,6 +10,10 @@
 //     apart; a clock that runs backwards cannot silence it for good; a test tone ignores the setting and the night but
 //     not a flood of presses.
 // S4  The stored setting: only "1" is on. Anything else, a missing entry included, is off: the default is silence.
+// S5  The volume (three levels, low by default): a stored level other than exactly "0", "1" or "2" (missing, empty, padded,
+//     "3", "-1", "01") is low, so a broken entry never makes the device louder; low is the volume of 0.3.7, so an update
+//     changes nothing until a level is chosen; each level is clearly louder than the one below (at least 6 dB, the codec
+//     curve is 0.5 dB a step) and the highest leaves headroom under the codec's 0 dB; a level out of range plays at low.
 #include "audio_policy.hpp"
 #include <algorithm>
 #include <cmath>
@@ -142,11 +146,25 @@ static void s4_setting() {
     CHECK(parse_enabled(serialize_enabled(true)) && !parse_enabled(serialize_enabled(false)));
 }
 
+static void s5_volume() {
+    CHECK(kVolumeLevels == 3);
+    CHECK(codec_volume(0) == 50);                                         // low is the fixed volume of 0.3.7
+    for (int level = 1; level < kVolumeLevels; ++level) CHECK(codec_volume(level) - codec_volume(level - 1) >= 12);   // 6 dB or more
+    CHECK(codec_volume(kVolumeLevels - 1) <= 90 && codec_volume(kVolumeLevels - 1) >= 80);
+    for (int bad : {-1, 3, 100, -100}) CHECK(codec_volume(bad) == codec_volume(0));
+    CHECK(parse_volume("0") == 0 && parse_volume("1") == 1 && parse_volume("2") == 2);
+    for (const char *text : {"", "3", "-1", "01", " 1", "1 ", "2\n", "high", "10", "9"}) CHECK(parse_volume(text) == 0);
+    for (int level = 0; level < kVolumeLevels; ++level) CHECK(parse_volume(serialize_volume(level)) == level);
+    CHECK(serialize_volume(0) == "0" && serialize_volume(1) == "1" && serialize_volume(2) == "2");
+    for (int bad : {-1, 3, 7}) CHECK(serialize_volume(bad) == "0");      // never store a level that does not exist
+}
+
 int main() {
     s1_render();
     s2_commands();
     s3_gate();
     s4_setting();
+    s5_volume();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

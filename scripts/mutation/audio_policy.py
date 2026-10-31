@@ -43,6 +43,16 @@ M = [
     ("a clock that went back silences the device", A, "if (!any_ || now_ms < last_ms_ || now_ms - last_ms_ >= gap_ms) {", "if (!any_ || now_ms - last_ms_ >= gap_ms) {"),
     ("a refused sound pushes the next one away", A, "        return true;\n    }\n    return false;\n}\nbool Gate::allow", "        return true;\n    }\n    last_ms_ = now_ms;\n    return false;\n}\nbool Gate::allow"),
     ("the first sound waits", A, "if (!any_ || now_ms < last_ms_", "if (now_ms < last_ms_"),
+    # the volume
+    ("low is louder than in 0.3.7", A, "kCodec[kVolumeLevels] = {50, 70, 90};", "kCodec[kVolumeLevels] = {60, 70, 90};"),
+    ("two levels sound the same", A, "kCodec[kVolumeLevels] = {50, 70, 90};", "kCodec[kVolumeLevels] = {50, 50, 90};"),
+    ("high is the codec's full volume", A, "kCodec[kVolumeLevels] = {50, 70, 90};", "kCodec[kVolumeLevels] = {50, 70, 100};"),
+    ("a level out of range plays loud", A, "level < kVolumeLevels ? kCodec[level] : kCodec[0];", "level < kVolumeLevels ? kCodec[level] : kCodec[kVolumeLevels - 1];"),
+    ("a negative level reads outside the table", A, "return level >= 0 && level < kVolumeLevels ? kCodec[level]", "return level < kVolumeLevels ? kCodec[level]"),
+    ("a padded stored level is read", A, "return text.size() == 1 && text[0] >= '0'", "return !text.empty() && text[0] >= '0'"),
+    ("a stored level that does not exist is read", A, "text[0] < '0' + kVolumeLevels ? text[0] - '0' : 0;", "text[0] <= '9' ? text[0] - '0' : 0;"),
+    ("a broken stored level is high", A, "text[0] < '0' + kVolumeLevels ? text[0] - '0' : 0;", "text[0] < '0' + kVolumeLevels ? text[0] - '0' : 2;"),
+    ("a level out of range is stored", A, "(level >= 0 && level < kVolumeLevels ? level : 0)", "level"),
 ]
 
 if __name__ == "__main__":

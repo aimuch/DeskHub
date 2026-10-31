@@ -13,24 +13,33 @@
 namespace dh::audio {
 namespace {
 constexpr int kRate = 16000;      // the codec is run at this rate for every tone
-constexpr int kVolume = 50;       // the codec's own volume (0 to 100): a middle setting; the tone itself is capped at 30 % of full scale
 constexpr int kTailMs = 80;       // silence after the tone, so the last samples leave the DMA before the codec is closed
 constexpr const char *kNamespace = "dh_snd";
-constexpr const char *kKey = "on";
+constexpr const char *kKey = "on", *kVolumeKey = "vol";
 
 std::atomic<bool> g_available{false}, g_enabled{false}, g_started{false};
+std::atomic<int> g_volume{0};     // the level (audio_policy); the codec's volume for it is read when a tone is played
 QueueHandle_t g_queue = nullptr;
 std::mutex g_gate_mutex;
 Gate g_gate;
 
-bool load_enabled() {
+// The stored text of a key; "" when there is none. The parsers turn "" into the default (off, low).
+std::string load(const char *key) {
     nvs_handle_t h;
-    if (nvs_open(kNamespace, NVS_READONLY, &h) != ESP_OK) return false;
+    if (nvs_open(kNamespace, NVS_READONLY, &h) != ESP_OK) return "";
     char text[8];
     size_t length = sizeof(text);
-    const bool ok = nvs_get_str(h, kKey, text, &length) == ESP_OK;
+    const bool ok = nvs_get_str(h, key, text, &length) == ESP_OK;
     nvs_close(h);
-    return ok && parse_enabled(text);
+    return ok ? std::string(text) : std::string();
+}
+
+bool store(const char *key, const std::string &text) {
+    nvs_handle_t h;
+    if (nvs_open(kNamespace, NVS_READWRITE, &h) != ESP_OK) return false;
+    const bool ok = nvs_set_str(h, key, text.c_str()) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    return ok;
 }
 
 void play(esp_codec_dev_handle_t dev, Tone tone) {
@@ -41,7 +50,7 @@ void play(esp_codec_dev_handle_t dev, Tone tone) {
     format.bits_per_sample = 16;
     format.channel = 1;
     format.sample_rate = kRate;
-    esp_codec_dev_set_out_vol(dev, kVolume);
+    esp_codec_dev_set_out_vol(dev, codec_volume(g_volume.load()));   // the tone itself is capped at 30 % of full scale
     if (esp_codec_dev_open(dev, &format) != ESP_CODEC_DEV_OK) return;
     esp_codec_dev_write(dev, samples.data(), static_cast<int>(samples.size() * sizeof(int16_t)));
     esp_codec_dev_close(dev);
@@ -65,7 +74,8 @@ bool ask(Tone tone) {
 
 void init() {
     if (g_started.exchange(true)) return;
-    g_enabled.store(load_enabled());
+    g_enabled.store(parse_enabled(load(kKey)));
+    g_volume.store(parse_volume(load(kVolumeKey)));
     g_queue = xQueueCreate(2, sizeof(Tone));
     if (g_queue) xTaskCreate(task, "dh_audio", 6144, nullptr, 3, nullptr);
 }
@@ -74,11 +84,17 @@ bool available() { return g_available.load(); }
 bool enabled() { return g_enabled.load(); }
 
 bool set_enabled(bool on) {
-    nvs_handle_t h;
-    if (nvs_open(kNamespace, NVS_READWRITE, &h) != ESP_OK) return false;
-    const bool ok = nvs_set_str(h, kKey, serialize_enabled(on).c_str()) == ESP_OK && nvs_commit(h) == ESP_OK;
-    nvs_close(h);
+    const bool ok = store(kKey, serialize_enabled(on));
     if (ok) g_enabled.store(on);
+    return ok;
+}
+
+int volume() { return g_volume.load(); }
+
+bool set_volume(int level) {
+    if (level < 0 || level >= kVolumeLevels) return false;
+    const bool ok = store(kVolumeKey, serialize_volume(level));
+    if (ok) g_volume.store(level);
     return ok;
 }
 

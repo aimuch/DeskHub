@@ -295,6 +295,16 @@ void request_sound_test() {
     note_activity();
     if (audio::available()) audio::test();
 }
+// A level of the volume: stored, then heard at once. One that cannot be stored stays as it was, says so and plays nothing.
+void request_sound_volume(int level) {
+    note_activity();
+    if (!audio::available()) return;
+    const bool ok = audio::set_volume(level);
+    last_error = ok ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));
+    if (ok) audio::test();
+    rebuilding = true;
+    request_update();
+}
 // A tap on the ring: the sheet that says what each of the four segments means and why one is dark (docs/design Dev-RingInfo).
 void request_ring_info() {
     note_activity();

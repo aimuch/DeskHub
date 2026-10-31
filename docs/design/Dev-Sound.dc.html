@@ -31,17 +31,24 @@ body{margin:0}
             <span style="width: 96px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{off.onBg}}; color: {{off.onInk}}">开</span>
           </div>
         </div>
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <span style="font-size: 20px; font-weight: 500">音量</span>
+          <div style="display: flex; gap: 3px; padding: 3px; border-radius: 28px; border: 1px solid var(--edge); background: var(--track); opacity: {{off.dim}}">
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{off.lowBg}}; color: {{off.lowInk}}">低</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{off.midBg}}; color: {{off.midInk}}">中</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{off.highBg}}; color: {{off.highInk}}">高</span>
+          </div>
+        </div>
         <div style="margin-top: 14px; font-size: 15px; line-height: 1.6; color: {{off.noteInk}}">{{off.note}}</div>
       </div>
-      <div style="position: absolute; left: 24px; top: 262px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{off.dim}}">试听</div>
-      <div style="position: absolute; left: 24px; top: 332px; width: 432px; font-size: 14px; color: var(--muted)">音量固定在较低的一档。</div>
+      <div style="position: absolute; left: 24px; top: 342px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{off.dim}}">试听</div>
       <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
         <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
           <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
         </sc-for>
       </div>
     </div>
-    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">② 提示音关（默认）。“试听”照样能点：关着提示音，是不让设备自己出声，不是不让你试。</div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">② 提示音关（默认），音量“低”（默认，和 0.3.7 的固定音量一样）。“试听”照样能点：关着提示音，是不让设备自己出声，不是不让你试。点一档音量，马上存下，并用这一档响一声试听音；存不下就不变，并写“没有保存，请再试一次”。</div>
   </div>
 
   <div style="width: 480px; flex: none">
@@ -55,17 +62,24 @@ body{margin:0}
             <span style="width: 96px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{on.onBg}}; color: {{on.onInk}}">开</span>
           </div>
         </div>
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <span style="font-size: 20px; font-weight: 500">音量</span>
+          <div style="display: flex; gap: 3px; padding: 3px; border-radius: 28px; border: 1px solid var(--edge); background: var(--track); opacity: {{on.dim}}">
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{on.lowBg}}; color: {{on.lowInk}}">低</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{on.midBg}}; color: {{on.midInk}}">中</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{on.highBg}}; color: {{on.highInk}}">高</span>
+          </div>
+        </div>
         <div style="margin-top: 14px; font-size: 15px; line-height: 1.6; color: {{on.noteInk}}">{{on.note}}</div>
       </div>
-      <div style="position: absolute; left: 24px; top: 262px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{on.dim}}">试听</div>
-      <div style="position: absolute; left: 24px; top: 332px; width: 432px; font-size: 14px; color: var(--muted)">音量固定在较低的一档。</div>
+      <div style="position: absolute; left: 24px; top: 342px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{on.dim}}">试听</div>
       <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
         <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
           <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
         </sc-for>
       </div>
     </div>
-    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">③ 提示音开。动作有结果响一声：确认了是一高一低的短音，没确认或失败是两声往下的短音；配对完成响确认音。夜间限亮的时间里不响。</div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">③ 提示音开，音量选了“中”。三档每档差 10 dB（声音芯片的音量 50、70、90）。动作有结果响一声：确认了是一高一低的短音，没确认或失败是两声往下的短音；配对完成响确认音。夜间限亮的时间里不响。</div>
   </div>
 
   <div style="width: 480px; flex: none">
@@ -79,17 +93,24 @@ body{margin:0}
             <span style="width: 96px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{none.onBg}}; color: {{none.onInk}}">开</span>
           </div>
         </div>
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <span style="font-size: 20px; font-weight: 500">音量</span>
+          <div style="display: flex; gap: 3px; padding: 3px; border-radius: 28px; border: 1px solid var(--edge); background: var(--track); opacity: {{none.dim}}">
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{none.lowBg}}; color: {{none.lowInk}}">低</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{none.midBg}}; color: {{none.midInk}}">中</span>
+            <span style="width: 80px; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{none.highBg}}; color: {{none.highInk}}">高</span>
+          </div>
+        </div>
         <div style="margin-top: 14px; font-size: 15px; line-height: 1.6; color: {{none.noteInk}}">{{none.note}}</div>
       </div>
-      <div style="position: absolute; left: 24px; top: 262px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{none.dim}}">试听</div>
-      <div style="position: absolute; left: 24px; top: 332px; width: 432px; font-size: 14px; color: var(--muted)">音量固定在较低的一档。</div>
+      <div style="position: absolute; left: 24px; top: 342px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent); opacity: {{none.dim}}">试听</div>
       <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
         <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
           <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
         </sc-for>
       </div>
     </div>
-    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">④ 没有检测到扬声器（启动时声音芯片没有应答）：开关和试听变暗，页面上写明原因，不会假装响过。</div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">④ 没有检测到扬声器（启动时声音芯片没有应答）：开关、音量和试听变暗，点了也不存，页面上写明原因，不会假装响过。</div>
   </div>
 
 </div>
@@ -104,8 +125,13 @@ class Component extends DCLogic {
     };
     const theme = this.props.theme || 'mint';
     const names = ['总览', '动作', '电脑', '设置'];
-    const state = (on, available) => ({
+    const pick = (sel) => (yes) => yes ? sel : 'transparent';
+    const ink = (yes) => yes ? 'var(--accent)' : 'var(--muted)';
+    const state = (on, available, level) => ({
       dim: available ? '1' : '0.4',
+      lowBg: pick('var(--sel)')(level === 0), lowInk: ink(level === 0),
+      midBg: pick('var(--sel)')(level === 1), midInk: ink(level === 1),
+      highBg: pick('var(--sel)')(level === 2), highInk: ink(level === 2),
       offBg: !on ? 'var(--sel)' : 'transparent', offInk: !on ? 'var(--accent)' : 'var(--muted)',
       onBg: on ? 'var(--sel)' : 'transparent', onInk: on ? 'var(--accent)' : 'var(--muted)',
       note: available ? '动作有结果、配对完成时响一声。夜间限亮的时间里不响。' : '没有检测到扬声器，试听不可用。',
@@ -115,9 +141,9 @@ class Component extends DCLogic {
       vars: T[theme] || T.mint,
       theme,
       tabs: names.map((label, i) => ({ label, bg: i === 3 ? 'var(--sel)' : 'transparent', ink: i === 3 ? 'var(--accent)' : 'var(--muted)' })),
-      off: state(false, true),
-      on: state(true, true),
-      none: state(false, false)
+      off: state(false, true, 0),
+      on: state(true, true, 1),
+      none: state(false, false, 0)
     };
   }
 }

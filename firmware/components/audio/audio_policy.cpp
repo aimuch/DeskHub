@@ -44,6 +44,15 @@ std::optional<Tone> tone_for_command(const std::string &text) {
 bool parse_enabled(const std::string &text) { return text == "1"; }
 std::string serialize_enabled(bool on) { return on ? "1" : "0"; }
 
+int codec_volume(int level) {
+    static constexpr int kCodec[kVolumeLevels] = {50, 70, 90};
+    return level >= 0 && level < kVolumeLevels ? kCodec[level] : kCodec[0];
+}
+int parse_volume(const std::string &text) {
+    return text.size() == 1 && text[0] >= '0' && text[0] < '0' + kVolumeLevels ? text[0] - '0' : 0;
+}
+std::string serialize_volume(int level) { return std::string(1, static_cast<char>('0' + (level >= 0 && level < kVolumeLevels ? level : 0))); }
+
 bool Gate::take(int64_t now_ms, int64_t gap_ms) {
     if (!any_ || now_ms < last_ms_ || now_ms - last_ms_ >= gap_ms) {   // a clock that went back does not silence the device for good
         any_ = true;

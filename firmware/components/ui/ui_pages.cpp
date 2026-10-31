@@ -546,7 +546,7 @@ void build_appearance(lv_obj_t *body, const Frame &f) {
 void refresh_appearance(const Frame &f) { set_optional_text(w.error, f.last_error); }
 
 // ---- Sound (docs/design Dev-Sound) ----
-std::vector<lv_obj_t *> g_sound_switch;   // the two halves of the switch, for the tests
+std::vector<lv_obj_t *> g_sound_switch, g_sound_volume;   // the two halves of the switch and the three levels, for the tests
 void build_sound(lv_obj_t *body, const Frame &) {
     const bool speaker = audio::available(), on = audio::enabled();
     heading(body, T(Str::SoundTitle), P().accent);
@@ -554,21 +554,24 @@ void build_sound(lv_obj_t *body, const Frame &) {
     g_sound_switch.clear();
     auto *track = segmented(body, {T(Str::SoundOff), T(Str::SoundOn)}, on ? 1 : 0,
                             [](lv_event_t *e) { request_sound_set(data_of(e) == 1); }, {0, 1}, {look.body, look.body}, &g_sound_switch);
-    auto *note = caption(body, T(speaker ? Str::SoundNote : Str::SoundNoSpeaker), speaker ? P().muted : P().power);
-    (void)note;
+    section(body, T(Str::SoundVolume));
+    g_sound_volume.clear();
+    auto *levels = segmented(body, {T(Str::SoundLow), T(Str::SoundMid), T(Str::SoundHigh)}, audio::volume(),
+                             [](lv_event_t *e) { request_sound_volume(data_of(e)); }, {0, 1, 2}, {look.body, look.body, look.body}, &g_sound_volume);
+    w.error = caption(body, "", P().power);   // under the two choices it is about, so a failed save is seen without scrolling
+    set_optional_text(w.error, "");
+    caption(body, T(speaker ? Str::SoundNote : Str::SoundNoSpeaker), speaker ? P().muted : P().power);
     auto *listen = button(body, [](lv_event_t *) { request_sound_test(); }, data(0), kContentW, 56);
     lv_obj_set_style_radius(listen, 28, 0);
     select(listen, true, false);
     auto *l = label(listen, T(Str::SoundListen), kContentW - 8, look.body, P().accent);
     centered(l);
     lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
-    caption(body, T(Str::SoundVolume), P().muted);
     if (!speaker) {   // nothing to turn on and nothing to hear: the controls stay, dimmed
         lv_obj_set_style_opa(track, LV_OPA_40, 0);
+        lv_obj_set_style_opa(levels, LV_OPA_40, 0);
         lv_obj_set_style_opa(listen, LV_OPA_40, 0);
     }
-    w.error = caption(body, "", P().power);
-    set_optional_text(w.error, "");
 }
 void refresh_sound(const Frame &f) { set_optional_text(w.error, f.last_error); }
 
@@ -1106,15 +1109,18 @@ bool header_bolt_area(int *x1, int *y1, int *x2, int *y2) { return area_of(sh.bo
 bool header_usb_area(int *x1, int *y1, int *x2, int *y2) { return area_of(sh.usb, x1, y1, x2, y2); }
 bool home_ring_area(int *x1, int *y1, int *x2, int *y2) { return area_of(ring.track, x1, y1, x2, y2); }
 bool home_notice_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice, x1, y1, x2, y2); }
-bool sound_controls_dimmed() {
-    return current_page() == Page::Sound && !g_sound_switch.empty() && lv_obj_get_style_opa(lv_obj_get_parent(g_sound_switch[0]), LV_PART_MAIN) < LV_OPA_COVER;
+static bool dimmed(const std::vector<lv_obj_t *> &parts) {
+    return !parts.empty() && lv_obj_get_style_opa(lv_obj_get_parent(parts[0]), LV_PART_MAIN) < LV_OPA_COVER;
 }
-int sound_selected() {
+bool sound_controls_dimmed() { return current_page() == Page::Sound && dimmed(g_sound_switch) && dimmed(g_sound_volume); }
+static int selected_of(const std::vector<lv_obj_t *> &parts) {
     if (current_page() != Page::Sound) return -1;
-    for (size_t i = 0; i < g_sound_switch.size(); ++i)
-        if (lv_obj_get_style_border_width(g_sound_switch[i], LV_PART_MAIN) == 2) return static_cast<int>(i);   // the selected half has the border
+    for (size_t i = 0; i < parts.size(); ++i)
+        if (lv_obj_get_style_border_width(parts[i], LV_PART_MAIN) == 2) return static_cast<int>(i);   // the selected part has the border
     return -1;
 }
+int sound_selected() { return selected_of(g_sound_switch); }
+int sound_volume_selected() { return selected_of(g_sound_volume); }
 bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice_dot, x1, y1, x2, y2); }
 bool ring_info_dot_filled(int i) { return ring_info_open() && i >= 0 && i < 4 && g_ring_dots[i] && lv_obj_get_style_bg_opa(g_ring_dots[i], LV_PART_MAIN) == LV_OPA_COVER; }
 bool notice_dot_shown() { return visible(w.notice_dot); }

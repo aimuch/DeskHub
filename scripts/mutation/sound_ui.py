@@ -39,6 +39,17 @@ PAGES = [
     ("the night is never said to the speaker", UI, "audio::on_command(s.command, quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)),", "audio::on_command(s.command, false,"),
     ("the night is always said to the speaker", UI, "audio::on_command(s.command, quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)),", "audio::on_command(s.command, true,"),
     ("the same text sounds on every tick", UI, "        seen_command = s.command; command_changed_ms = now;\n        // A new result", "        command_changed_ms = now;\n        // A new result"),
+    # the volume
+    ("a level is not stored", UI, "const bool ok = audio::set_volume(level);", "const bool ok = true; (void)level;"),
+    ("a level is stored one too high", UI, "const bool ok = audio::set_volume(level);", "const bool ok = audio::set_volume(level + 1);"),
+    ("a new level is not heard", UI, "    if (ok) audio::test();\n    rebuilding = true;", "    rebuilding = true;"),
+    ("a failed level is heard", UI, "    if (ok) audio::test();\n    rebuilding = true;", "    audio::test();\n    rebuilding = true;"),
+    ("a failed level is not said", UI, "    last_error = ok ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));\n    if (ok) audio::test();", "    last_error = std::string();\n    if (ok) audio::test();"),
+    ("the volume works with no speaker", UI, "    note_activity();\n    if (!audio::available()) return;\n    const bool ok", "    note_activity();\n    const bool ok"),
+    ("the page always shows low", PG, "{T(Str::SoundLow), T(Str::SoundMid), T(Str::SoundHigh)}, audio::volume(),", "{T(Str::SoundLow), T(Str::SoundMid), T(Str::SoundHigh)}, 0 * audio::volume(),"),
+    ("a tap on a level sets low", PG, "[](lv_event_t *e) { request_sound_volume(data_of(e)); }", "[](lv_event_t *e) { request_sound_volume(0 * data_of(e)); }"),
+    ("the volume is not dimmed without a speaker", PG, "        lv_obj_set_style_opa(levels, LV_OPA_40, 0);\n", "        (void)levels;\n"),
+    ("the volume row is missing", PG, "    section(body, T(Str::SoundVolume));\n", ""),
     ("the minute of the night is the hour", UI, "quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min))", "quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour))"),
 ]
 

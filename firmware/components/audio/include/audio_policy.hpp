@@ -25,6 +25,14 @@ std::optional<Tone> tone_for_command(const std::string &);
 bool parse_enabled(const std::string &);
 std::string serialize_enabled(bool);
 
+// The volume: three levels, 0 low (the default, the fixed volume of 0.3.7), 1 medium, 2 high. The codec's own volume for a
+// level (its curve is 1 to 100 for -49.5 to 0 dB, so the levels are 10 dB apart); a level out of range plays at low.
+constexpr int kVolumeLevels = 3;
+int codec_volume(int level);
+// The stored level: only "0", "1" and "2"; anything else, a missing entry included, is low. A level out of range is stored as low.
+int parse_volume(const std::string &);
+std::string serialize_volume(int level);
+
 // When a sound may play. Not when it is switched off, not in the quiet hours of the night, and not twice within 600 ms.
 // A test tone (the person pressed "listen") ignores the setting and the night, and is limited to one in 300 ms.
 class Gate {
