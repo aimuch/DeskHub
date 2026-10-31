@@ -1,0 +1,59 @@
+{
+  "version": "0.3.8",
+  "built_from": "提交 c67aaeb（升版）；构建时 firmware/ 目录与该提交一致（之后的提交只改文档）",
+  "build_dir": "firmware/build-0.3.8（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.7": [
+    "声音页多一行“音量”：低、中、高三档，默认低。三档是声音芯片的音量 50、70、90（芯片曲线 1 到 100 对应 −49.5 到 0 dB，每档差 10 dB）；低就是 0.3.7 的固定音量",
+    "点一档马上存下（NVS 的 dh_snd/vol，只认“0”“1”“2”），并用这一档响一声试听音；存不下就不变、写“没有保存，请再试一次”、不响；没有扬声器时变暗，点了不存",
+    "提示音和配对完成的音都用存下的这一档",
+    "错误那一行挪到两个选择下面；删掉“音量固定在较低的一档。”；设置里那一行的副标题改成“提示音、音量、试听”"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4480288,
+    "sha256": "7247afd47fc39a5f8a1f0ab4ea0724e7b976f0bf406c7ea3c54e6c3671fba3c1",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 29
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.8-esp32s3.zip",
+      "size_bytes": 2764282,
+      "sha256": "d6e557d409971a06c993c55c6d978a6439a49532f9f42c1d82cbf278729d5055",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.8",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要（签名只用于无线更新 OTA；USB 刷机不需要，OTA 也没有真机验证）"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，ESP-IDF 的 project_description.json 里 project_version 是 0.3.8",
+    "打包脚本自带的离线校验",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.8，4 个镜像尺寸与 SHA-256 一致，没有连接设备",
+    "解压出来的 deskhub.bin 与构建目录里的 deskhub.bin 逐字节相同（SHA-256 相同）",
+    "包内 README.txt 的声音一行写了音量三档",
+    "测试先红：新加的 S5 和声音页的音量检查在实现之前编译不过",
+    "主机测试 13 组、Agent 384 条、tools 113 条、协议检查全部通过；界面预览 25 组通过（声音组含音量的点选、存不下、没有扬声器、重新打开）",
+    "安全基线文件与归档逐字节相同的检查（docs/development.md 里的命令）输出为空",
+    "变异检查：声音规则 42 处（含音量 9 处）、声音页和触发 32 处（含音量 10 处）、闪电和首页 20 处，全部报红",
+    "网页管理台的浏览器测试这次没有重跑：这一版只改固件，Agent 和网页没有改动（上一次 63 项通过，见 firmware-0.3.7.json）"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到设备。设备上现在是 0.3.7。刷机等用户说“刷”，或用户自己刷",
+    "三档的响度没有人听过：中、高是按芯片的曲线算的，喇叭和功放在高档会不会失真，要人听",
+    "声音芯片和放大器的引脚用的是 Waveshare 板级包，没有核对原理图",
+    "提示音的触发（动作有结果、热点配对完成）和夜间不响没有在真机上试",
+    "声音页、电池里的闪电、没有动作时的首页没有在真机屏幕上看过",
+    "设计画布打不开（这个账号找不到它），只改了仓库里的 Dev-Sound 画板"
+  ],
+  "hardware_verified": false
+}
