@@ -66,7 +66,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/CMakeLists.txt`、`firmware/tests/audio_test.cpp` | 新增测试目标 `audio_test`（`sound_rules`）：提示音的波形、命令文字对应的音、什么时候可以响 |
 | `firmware/tests/`（`CMakeLists.txt`、`ui_model_test.cpp`、`ui_preview/CMakeLists.txt`、`ui_preview/harness.cpp`） | `ui_model_test` 带上 `policy.cpp`，加 T22（夜间不响）；界面预览带上 `audio_policy.cpp` 和一个假的扬声器，加声音页、闪电在电池里、没有动作时的首页三组检查 |
 | `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`）、`tools/provision.py`、`tools/tests/test_provision_sound.py` | 启动 `audio::init()`；能力 `audio` 按声音芯片是否应答报 `unverified` 加 ready 或 unavailable；USB 命令 `sound_test`（只回三个布尔值）；`--sound-test` 不能和别的操作混用，只打印检查过的三个值 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5、0.3.6、0.3.7，各两处 |
+| `firmware/tests/audio_test.cpp`、`firmware/tests/ui_preview/harness.cpp` | 音量三档：S5（存储只认“0”“1”“2”、默认低、每档至少差 6 dB、最高不到芯片 0 dB）；界面预览的声音组加音量的点选、存不下、没有扬声器 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5、0.3.6、0.3.7、0.3.8，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
@@ -94,6 +95,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 设备端的接线做完了（2026-10-29）：热点、配网页、TLS 兑换、保存路径、按键，`firmware/components/pairing_device/`；能在主机上测的部分在 `pairing_glue`（测试 `pairing_glue_test`，变异检查 46 处全部报红）。K1 复审在 [配对接口设计](pairing-design.md) 第 13 节。固件完整构建通过。**没有在真机上验证任何一步**：按键引脚（GPIO0）没有核对原理图，热点与 Wi-Fi 同信道、堆内存、手机能否打开配网页都要看真机。USB 状态的 `pairing` 对象（`tools/provision.py --status`）用来读它做到哪一步。
 - 有：管理员密码登录（R8，`admin_auth.py`：scrypt、锁定、命令行重置，40 条测试，64 处变异全部报红）和网页管理台（`agent/src/deskhub_agent/web/`，九个页面）。管理台用真实的 Agent 加真实的 Chrome 走过整套流程（`scripts/e2e/console.e2e.mjs`，62 项通过，证据在 `docs/evidence/console-e2e/`）；没有接真实设备和显示器。
 - 有：声音（N2，2026-10-30，0.3.7）。你确认板上有扬声器。规则在 `firmware/components/audio/audio_policy`（主机测试 `audio_test`），扬声器在 `audio.cpp`（板子的声音芯片、一个队列、NVS 里的开关）。设计稿 `Dev-Sound`：设置里多一行“声音”，提示音开关默认关，试听，没有扬声器时变暗。动作有结果（`ui.cpp` 看到新的命令文字）、热点配对完成时响；夜间限亮时段不响。USB 命令 `sound_test` 和 `tools/provision.py --sound-test`。变异检查 `audio_policy.py` 33 处、`sound_ui.py` 22 处全部报红。**没有人听过**：芯片应答只说明它在，不说明喇叭响了、响度合适。
+- 声音的音量三档（2026-10-31，0.3.8）：你听到声音以后要音量可调。低、中、高是声音芯片的音量 50、70、90（芯片曲线 0.5 dB 一级，每档差 10 dB），默认低就是 0.3.7 的固定音量；存在 NVS 的 `dh_snd/vol`，只认“0”“1”“2”。点一档马上存下并响一声试听音。测试 S5 和界面预览的声音组；变异检查 `audio_policy.py` 42 处、`sound_ui.py` 32 处全部报红。设计稿 `Dev-Sound` 已改；设计画布打不开，只改了仓库里的画板。
 - 顶栏的闪电挪进电池里，画在数字前面，和数字一起居中；USB 紧挨电池（`Dev-Header`）。没有动作时总览的圆环放大到 252 px 并上下居中（`Dev-HomeEmpty`）。变异检查 `header_home_ui.py` 20 处全部报红。
 - 没有：网页上开关充电保护（设备的上报里没有这一项）。
 - 固件版本 0.3.7（2026-10-30）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.6 多：声音（提示音、试听、`sound_test`）、闪电在电池里、没有动作时首页圆环放大居中。2026-10-30 已刷到设备：USB 状态里能力 audio 是 ready（声音芯片应答了），充电保护仍在上限处停充。2026-10-31 你在设备旁听到了试听音。响度、动作和配对触发的提示音还没有试；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.7.json](evidence/firmware-0.3.7.json)。
