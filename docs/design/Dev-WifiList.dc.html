@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 更换 Wi-Fi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} width: 2040px; height: 600px; display: flex; gap: 40px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: var(--ink)">
+
+  <sc-for list="{{connects}}" as="c" hint-placeholder-count="2">
+    <div style="width: 480px; flex: none">
+      <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+        <div style="position: absolute; left: 24px; top: 66px; font-size: 26px; font-weight: 500; color: var(--wifi)">连接与配对</div>
+        <div style="position: absolute; left: 24px; top: 108px; width: 432px; box-sizing: border-box; border-radius: 24px; border: 1px solid var(--edge); background: var(--card); padding: 4px 20px">
+          <div style="height: 56px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--edge); opacity: {{c.dim}}">
+            <span style="font-size: 16px; color: var(--muted)">Wi-Fi</span>
+            <span style="flex: 1 1 auto; text-align: right; font-size: 18px; font-weight: 500; color: {{c.wifiInk}}">{{c.wifi}}</span>
+            <span style="flex: none; font-size: 18px; font-weight: 500; color: var(--accent)">更换</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex: none; stroke: var(--accent)"><path d="M9 4l8 8-8 8"></path></svg>
+          </div>
+          <sc-for list="{{c.rows}}" as="r" hint-placeholder-count="4">
+            <div style="height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: {{r.line}}">
+              <span style="font-size: 16px; color: var(--muted)">{{r.k}}</span>
+              <span style="font-size: 18px; font-weight: 500; color: {{r.c}}">{{r.v}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position: absolute; left: 24px; top: 348px; width: 432px; font-size: 15px; line-height: 22px; color: {{c.hintInk}}; text-align: center">{{c.hint}}</div>
+        <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+            <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">{{c.note}}</div>
+    </div>
+  </sc-for>
+
+  <sc-for list="{{lists}}" as="l" hint-placeholder-count="2">
+    <div style="width: 480px; flex: none">
+      <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+        <div style="position: absolute; left: 30px; top: 58px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="返回" style="stroke: var(--muted)"><path d="M15 4 7 12l8 8"></path></svg></div>
+        <div style="position: absolute; left: 80px; top: 66px; font-size: 26px; font-weight: 500; color: var(--wifi)">更换 Wi-Fi</div>
+        <div style="position: absolute; right: 30px; top: 56px; width: 96px; height: 50px; box-sizing: border-box; border-radius: 25px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 500; color: var(--accent); opacity: {{l.rescanDim}}">重扫</div>
+
+        <div style="position: absolute; left: 24px; top: 114px; width: 432px; height: 288px; box-sizing: border-box; border-radius: 24px; border: 1px solid var(--edge); background: var(--card); padding: 2px 16px; overflow: hidden">
+          <sc-for list="{{l.nets}}" as="n" hint-placeholder-count="5">
+            <div style="height: 56px; display: flex; align-items: center; gap: 10px; border-bottom: {{n.line}}; opacity: {{n.dim}}">
+              <span style="flex: none; width: 24px; height: 20px; display: {{n.barsShow}}; align-items: flex-end; gap: 2px">
+                <span style="width: 4px; height: 5px; border-radius: 1px; background: {{n.b1}}"></span>
+                <span style="width: 4px; height: 10px; border-radius: 1px; background: {{n.b2}}"></span>
+                <span style="width: 4px; height: 15px; border-radius: 1px; background: {{n.b3}}"></span>
+                <span style="width: 4px; height: 20px; border-radius: 1px; background: {{n.b4}}"></span>
+              </span>
+              <span style="flex: 1 1 auto; font-size: 19px; font-weight: 500; color: {{n.ink}}; white-space: nowrap; overflow: hidden">{{n.name}}</span>
+              <span style="flex: none; font-size: 15px; color: {{n.tagInk}}">{{n.tag}}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex: none; stroke: var(--muted)"><path d="M9 4l8 8-8 8"></path></svg>
+            </div>
+          </sc-for>
+          <div style="display: {{l.emptyShow}}; height: 280px; flex-direction: column; align-items: center; justify-content: center; gap: 10px">
+            <span style="font-size: 20px; font-weight: 500; color: {{l.emptyInk}}">{{l.empty}}</span>
+            <span style="font-size: 15px; color: var(--muted)">{{l.emptySub}}</span>
+          </div>
+        </div>
+
+        <div style="position: absolute; left: 24px; top: 408px; width: 432px; height: 64px; box-sizing: border-box; border-radius: 32px; border: 1px solid var(--edge); background: var(--card); display: flex; padding: 3px; gap: 3px">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+            <div style="flex: 1 1 0; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; background: {{t.bg}}; color: {{t.ink}}">{{t.label}}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">{{l.note}}</div>
+    </div>
+  </sc-for>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":2040,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    const theme = this.props.theme || 'mint';
+    const names = ['总览', '动作', '电脑', '设置'];
+    const raw = [
+      { k: 'IP 地址', v: '10.10.10.21', c: 'var(--ink)' },
+      { k: 'Agent', v: '已连接 · 3 秒前同步', c: 'var(--agent)' },
+      { k: '配对', v: '已配对', c: 'var(--ink)' },
+      { k: '设备标识', v: 'deskhub-44bd…c598', c: 'var(--ink)' }
+    ];
+    const bars = (n, on) => ({ b1: n >= 1 ? on : 'var(--track)', b2: n >= 2 ? on : 'var(--track)', b3: n >= 3 ? on : 'var(--track)', b4: n >= 4 ? on : 'var(--track)' });
+    const net = (name, level, tag, tagInk, opts = {}) => ({
+      name, tag, tagInk, dim: opts.off ? '0.4' : '1', ink: opts.current ? 'var(--accent)' : 'var(--ink)',
+      barsShow: level === null ? 'none' : 'flex', ...bars(level || 0, opts.current ? 'var(--accent)' : 'var(--wifi)')
+    });
+    const lined = list => list.map((n, i) => ({ ...n, line: i === list.length - 1 ? 'none' : '1px solid var(--edge)' }));
+    return {
+      vars: T[theme] || T.mint,
+      tabs: names.map((label, i) => ({ label, bg: i === 3 ? 'var(--sel)' : 'transparent', ink: i === 3 ? 'var(--accent)' : 'var(--muted)' })),
+      connects: [
+        {
+          rows: lined(raw), dim: '1', wifi: 'Office · 已连接', wifiInk: 'var(--agent)',
+          hint: '长按设备按键 3 秒，可重新进入配网页', hintInk: 'var(--muted)',
+          note: '① 连接与配对：Wi-Fi 那一行变成 56 px 高，右边多“更换”。点它进 Wi-Fi 列表。信号强度挪进列表里，这一页少一行。这一页只换 Wi-Fi；换电脑、换证书仍然要 USB 或热点配对。'
+        },
+        {
+          rows: lined([
+            { k: 'IP 地址', v: '没有', c: 'var(--muted)' },
+            { k: 'Agent', v: '未配对', c: 'var(--muted)' },
+            { k: '配对', v: '热点已打开 · 4:12', c: 'var(--power)' },
+            { k: '设备标识', v: 'deskhub-44bd…c598', c: 'var(--ink)' }
+          ]), dim: '0.4', wifi: '未连接', wifiInk: 'var(--muted)',
+          hint: '配对热点打开时不能更换 Wi-Fi。关掉热点后再试。', hintInk: 'var(--power)',
+          note: '② 配对热点开着（没配对的设备开机就会开）：“更换”变暗，点了不动，下面一行写原因（电源色）。热点和试连抢同一个 Wi-Fi 驱动，所以不能同时进行（失败模式 W5）。'
+        }
+      ],
+      lists: [
+        {
+          rescanDim: '1', emptyShow: 'none', empty: '', emptySub: '', emptyInk: 'var(--ink)',
+          nets: lined([
+            net('Office', 4, '当前', 'var(--accent)', { current: true }),
+            net('Lab-Guest', 3, '开放', 'var(--muted)'),
+            net('Home-5G', 2, '', 'var(--muted)'),
+            net('CorpNet', 2, '不支持', 'var(--muted)', { off: true }),
+            net('其他（手动输入名称）', null, '', 'var(--muted)')
+          ]),
+          note: '③ 扫描结果，按信号强弱排，同名只留最强的一个，名称为空的不显示。正在用的写“当前”。没有密码的写“开放”，点了直接试连。企业 Wi-Fi 和 WEP 变暗，写“不支持”。最后一行“其他”手动输入名称（隐藏网络）。列表可以上下滑。'
+        },
+        {
+          rescanDim: '1', emptyShow: 'flex', empty: '没有找到 Wi-Fi', emptySub: '靠近路由器后点“重扫”', emptyInk: 'var(--power)',
+          nets: [],
+          note: '④ 扫描 10 秒没有结果，或扫描失败：写“没有找到 Wi-Fi”。正在扫描时，框里写“正在扫描”，“重扫”变暗。扫描时设备暂停自己的重连（network_hold），扫完放开。'
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

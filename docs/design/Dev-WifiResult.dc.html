@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 更换 Wi-Fi 的结果</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} width: 2040px; height: 600px; display: flex; gap: 40px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: var(--ink)">
+  <sc-for list="{{screens}}" as="s" hint-placeholder-count="4">
+    <div style="width: 480px; flex: none">
+      <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+        <div style="position: absolute; left: 0; top: 70px; width: 480px; display: flex; justify-content: center">
+          <div style="position: relative; width: 112px; height: 112px; border-radius: 56px; border: 10px solid {{s.ringTrack}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center">
+            <div style="position: absolute; inset: -10px; border-radius: 56px; border: 10px solid transparent; border-top-color: {{s.ringArc}}; border-right-color: {{s.ringArc2}}; box-sizing: border-box"></div>
+            <span style="font-size: {{s.centerSize}}px; font-weight: 700; color: {{s.ringArc}}">{{s.center}}</span>
+          </div>
+        </div>
+        <div style="position: absolute; left: 40px; top: 200px; width: 400px; text-align: center; font-size: 26px; font-weight: 500; color: {{s.headInk}}">{{s.head}}</div>
+        <div style="position: absolute; left: 40px; top: 242px; width: 400px; text-align: center; font-size: 17px; line-height: 26px; color: var(--muted)">{{s.body}}</div>
+
+        <div style="position: absolute; left: 40px; top: 388px; width: 400px; height: 56px; display: flex; gap: 12px">
+          <sc-for list="{{s.buttons}}" as="b" hint-placeholder-count="2">
+            <div style="flex: 1 1 0; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid {{b.edge}}; background: {{b.bg}}; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: {{b.ink}}">{{b.label}}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">{{s.note}}</div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":2040,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    const theme = this.props.theme || 'mint';
+    const primary = label => ({ label, bg: 'var(--sel)', edge: 'var(--accent)', ink: 'var(--accent)' });
+    const plain = label => ({ label, bg: 'var(--card)', edge: 'var(--edge)', ink: 'var(--ink)' });
+    const full = (color, center, size) => ({ ringTrack: color, ringArc: color, ringArc2: color, center, centerSize: size });
+    const screens = [
+      {
+        ringTrack: 'var(--track)', ringArc: 'var(--wifi)', ringArc2: 'var(--wifi)', center: '18', centerSize: 34,
+        head: '正在连接 Lab-Guest', headInk: 'var(--ink)',
+        body: '还没有保存。连不上会自动改回 Office。',
+        buttons: [plain('取消')],
+        note: '① 试连：圆环转，中间是剩下的秒数（最多 20 秒，我定的）。这时存储里仍是原来的 Wi-Fi，断电重启也用原来的（W3）。没有页签，不能走开；“取消”等于失败，改回原来的（W14）。设备已配对时，连上 Wi-Fi 后接着连一次电脑，文字变成“正在连接电脑”。'
+      },
+      {
+        ...full('var(--agent)', 'OK', 30),
+        head: '已连接 Lab-Guest', headInk: 'var(--agent)',
+        body: 'IP 10.10.10.57 · 电脑已连接。已保存。',
+        buttons: [primary('完成')],
+        note: '② 成功：中间是 LVGL 自带的对勾图标（LV_SYMBOL_OK，字库里没有对勾），设计稿暂写 OK。拿到 IP，设备已配对时也连上了电脑，才保存、才写“已连接”（W16，K3）。没配对的设备只看 IP，这一行写“IP 10.10.10.57。已保存。”。点“完成”回到连接与配对。'
+      },
+      {
+        ...full('var(--power)', '45', 34),
+        head: '连不上电脑', headInk: 'var(--power)',
+        body: '已连上 Lab-Guest，但找不到电脑。电脑可能不在这个局域网里。45 秒后改回 Office。',
+        buttons: [primary('改回原来的'), plain('仍然使用')],
+        note: '③ 连上 Wi-Fi 但连不上电脑（W2）：还没保存。要人选；60 秒没人点就改回原来的（我定的，见设计说明第 6 节第 3 条）。“仍然使用”保存新的 Wi-Fi，设备照常重试连电脑。'
+      },
+      {
+        ...full('var(--power)', '!', 40),
+        head: '密码错误', headInk: 'var(--power)',
+        body: '没有保存。已改回 Office，已连接。',
+        buttons: [primary('重新输入'), plain('返回')],
+        note: '④ 没连上：不保存，改回原来的 Wi-Fi，写原因：“密码错误”“没有找到这个 Wi-Fi”“连接超时”。原来的也没连上时，第二行写“原来的 Wi-Fi 也没连上，设备会继续重试”（W4）。“重新输入”回键盘，输入框是空的。'
+      }
+    ];
+    return { vars: T[theme] || T.mint, screens };
+  }
+}
+</script>
+</body>
+</html>

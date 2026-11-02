@@ -222,6 +222,27 @@
       "w": 480,
       "h": 480,
       "title": "设备 · 总览（没有动作：环放大并居中）"
+    },
+    "Dev-WifiList.dc.html": {
+      "x": 0,
+      "y": 6200,
+      "w": 2040,
+      "h": 600,
+      "title": "设备 · 更换 Wi-Fi（入口、热点开着、列表、没找到）"
+    },
+    "Dev-Keyboard.dc.html": {
+      "x": 0,
+      "y": 6880,
+      "w": 2040,
+      "h": 600,
+      "title": "设备 · 软键盘（字母、大写、符号两页）"
+    },
+    "Dev-WifiResult.dc.html": {
+      "x": 0,
+      "y": 7560,
+      "w": 2040,
+      "h": 600,
+      "title": "设备 · 更换 Wi-Fi 的结果（试连、成功、连不上电脑、失败）"
     }
   },
   "createdOnFiles": {
@@ -237,7 +258,8 @@
     "n_dev",
     "n_state",
     "n_web",
-    "n_login"
+    "n_login",
+    "n_wifi"
   ],
   "notes": {
     "n_dev": {
@@ -279,6 +301,14 @@
       "w": 240,
       "x": 0,
       "y": 2640
+    },
+    "n_wifi": {
+      "kind": "title1",
+      "maxW": 2040,
+      "text": "设备 · 屏幕上更换 Wi-Fi（设计中，N3）",
+      "w": 240,
+      "x": 0,
+      "y": 5960
     }
   },
   "order": [
@@ -301,6 +331,9 @@
     "Dev-Rings.dc.html",
     "Dev-RingInfo.dc.html",
     "Dev-Sound.dc.html",
+    "Dev-WifiList.dc.html",
+    "Dev-Keyboard.dc.html",
+    "Dev-WifiResult.dc.html",
     "Web-Overview.dc.html",
     "Web-Devices.dc.html",
     "Web-Actions.dc.html",

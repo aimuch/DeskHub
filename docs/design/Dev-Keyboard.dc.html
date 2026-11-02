@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 软键盘</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} width: 2040px; height: 600px; display: flex; gap: 40px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: var(--ink)">
+  <sc-for list="{{screens}}" as="s" hint-placeholder-count="4">
+    <div style="width: 480px; flex: none">
+      <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+        <div style="position: absolute; left: 30px; top: 10px; width: 56px; height: 52px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="返回" style="stroke: var(--muted)"><path d="M15 4 7 12l8 8"></path></svg></div>
+        <div style="position: absolute; left: 88px; top: 20px; width: 340px; font-size: 22px; font-weight: 500; color: var(--wifi); white-space: nowrap; overflow: hidden">{{s.title}}</div>
+
+        <div style="position: absolute; left: 25px; top: 66px; width: 430px; height: 56px; box-sizing: border-box; border-radius: 16px; border: 1.5px solid var(--accent); background: var(--card); display: flex; align-items: center; padding: 0 6px 0 16px; gap: 8px">
+          <span style="flex: 1 1 auto; font-size: 24px; font-weight: 500; letter-spacing: {{s.spacing}}; white-space: nowrap; overflow: hidden">{{s.text}}<span style="display: inline-block; width: 2px; height: 26px; margin-left: 2px; vertical-align: -5px; background: var(--accent)"></span></span>
+          <span style="flex: none; font-size: 16px; color: var(--muted)">{{s.count}}</span>
+          <span style="flex: none; width: 56px; height: 44px; border-radius: 12px; display: {{s.eye}}; align-items: center; justify-content: center; background: var(--sel)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="按住显示" style="stroke: var(--accent)"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+        </div>
+        <div style="position: absolute; left: 25px; top: 128px; width: 430px; font-size: 15px; line-height: 22px; color: {{s.hintInk}}; text-align: center">{{s.hint}}</div>
+
+        <sc-for list="{{s.keys}}" as="k" hint-placeholder-count="31">
+          <div style="position: absolute; left: {{k.x}}px; top: {{k.y}}px; width: {{k.w}}px; height: 56px; box-sizing: border-box; border-radius: 14px; border: 1px solid {{k.edge}}; background: {{k.bg}}; color: {{k.ink}}; opacity: {{k.dim}}; display: flex; align-items: center; justify-content: center; font-size: {{k.size}}px; font-weight: 500">{{k.label}}</div>
+        </sc-for>
+      </div>
+      <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">{{s.note}}</div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":2040,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    // 键 58×56，间隔 4，一行 7 个共 430 px，左边 25。五行顶边 156、216、276、336、396。
+    const X0 = 25, KW = 58, GAP = 4, ROWS = [156, 216, 276, 336, 396];
+    const SHIFT = '⇧', DEL = '⌫';
+    const key = (label, col, row, span, kind) => {
+      const sel = kind === 'on' || kind === 'down';
+      const done = kind === 'done';
+      return {
+        label, x: X0 + col * (KW + GAP), y: ROWS[row], w: span * KW + (span - 1) * GAP,
+        size: label.length > 2 ? 18 : (label === SHIFT || label === DEL ? 24 : 24),
+        bg: done ? 'var(--accent)' : sel ? 'var(--sel)' : 'var(--card)',
+        ink: done ? 'var(--bg)' : sel ? 'var(--accent)' : 'var(--ink)',
+        edge: sel ? 'var(--accent)' : 'var(--edge)',
+        dim: kind === 'off' ? '0.4' : '1'
+      };
+    };
+    const rowKeys = (chars, row, from) => [...chars].map((c, i) => key(c, from + i, row, 1));
+    const bottom = (modeLabel, doneOff) => [
+      key(modeLabel, 0, 4, 2), key('空格', 2, 4, 3), key('完成', 5, 4, 2, doneOff ? 'off' : 'done')
+    ];
+    const letters = (caps, pressed) => {
+      const up = s => caps ? s.toUpperCase() : s;
+      const ks = [
+        ...rowKeys(up('abcdefg'), 0, 0), ...rowKeys(up('hijklmn'), 1, 0), ...rowKeys(up('opqrstu'), 2, 0),
+        key(SHIFT, 0, 3, 1, caps ? 'on' : undefined), ...rowKeys(up('vwxyz'), 3, 1), key(DEL, 6, 3, 1)
+      ];
+      if (pressed) ks.forEach(k => { if (k.label === pressed) Object.assign(k, key(pressed, (k.x - X0) / (KW + GAP), ROWS.indexOf(k.y), 1, 'down')); });
+      return ks;
+    };
+    const theme = this.props.theme || 'mint';
+    const screens = [
+      {
+        title: 'Office 的密码', text: '**********', spacing: '3px', count: '10/63', eye: 'flex',
+        hint: '8 到 63 个字符', hintInk: 'var(--muted)',
+        keys: [...letters(false, 'k'), ...bottom('123', false)],
+        note: '① 字母（小写）。每行 7 个键，键 58×56，不小于 56 px 的规则；所以不用 QWERTY，按 a 到 z 排。键盘页不画顶栏和页签。按下的键（这里是 k）变成选中色，松手才输入。密码画成 *。右边的眼睛是“按住显示”，要你按 K4 决定，见设计说明第 6 节。'
+      },
+      {
+        title: 'Office 的密码', text: '*****', spacing: '3px', count: '5/63', eye: 'flex',
+        hint: '还差 3 个字符', hintInk: 'var(--power)',
+        keys: [...letters(true), ...bottom('123', true)],
+        note: '② 大写开着：大写键是选中色，字母变大写，一直保持到再点一次。不够 8 个字符时“完成”变暗，下面写还差几个。正好 64 个十六进制字符也算合格（WPA2 的规定）。'
+      },
+      {
+        title: 'Office 的密码', text: '**************', spacing: '3px', count: '14/63', eye: 'flex',
+        hint: '8 到 63 个字符', hintInk: 'var(--muted)',
+        keys: [
+          ...rowKeys('1234567', 0, 0), ...rowKeys('890-_.@', 1, 0), ...rowKeys('!#$%&*+', 2, 0),
+          key('1/2', 0, 3, 1, 'on'), ...rowKeys('?=/:;', 3, 1), key(DEL, 6, 3, 1),
+          ...bottom('abc', false)
+        ],
+        note: '③ 数字和符号第一页。左下“1/2”换到第二页；最下面一行的“123”变成“abc”，回字母。两页合起来是全部 32 个 ASCII 符号。删除键按住 500 毫秒后，每 80 毫秒删一个。'
+      },
+      {
+        title: '输入 Wi-Fi 名称', text: 'Lab-Guest', spacing: '0', count: '9/32', eye: 'none',
+        hint: '名称不遮住；1 到 32 个字节', hintInk: 'var(--muted)',
+        keys: [
+          ...rowKeys('()[]{}<', 0, 0), ...rowKeys('>"\',`~\\', 1, 0), ...rowKeys('|^', 2, 0),
+          key('2/2', 0, 3, 1, 'on'), key(DEL, 6, 3, 1),
+          ...bottom('abc', false)
+        ],
+        note: '④ 符号第二页，这里是“其他（手动输入名称）”：名称不是秘密，不遮住，没有眼睛键。只能输入 ASCII；名称里有中文的 Wi-Fi 只能从列表里选。删除键和大写键在设备上用 LVGL 自带的图标，字库里没有这两个字。'
+      }
+    ];
+    return { vars: T[theme] || T.mint, screens };
+  }
+}
+</script>
+</body>
+</html>
