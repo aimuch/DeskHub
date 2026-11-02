@@ -46,14 +46,30 @@
     "变异检查：声音规则 42 处（含音量 9 处）、声音页和触发 32 处（含音量 10 处）、闪电和首页 20 处，全部报红",
     "网页管理台的浏览器测试这次没有重跑：这一版只改固件，Agent 和网页没有改动（上一次 63 项通过，见 firmware-0.3.7.json）"
   ],
-  "flashed": false,
+  "flashed": true,
+  "flash_record": {
+    "when": "2026-11-02 之前，不是我刷的",
+    "device": "deskhub-44bd8d60c598",
+    "how": "2026-11-02 你说“刷”。设备接上后，我先用 provision.py --identify 读到固件已经是 0.3.8，所以没有再写入。刷机的人和方法我不知道（推测是你自己用 USB 包刷的）",
+    "result": "2026-11-02 用 esptool verify-flash 只读核对：设备 0x20000 处 4480288 字节与 USB 包里的 deskhub.bin（SHA-256 7247afd4…）一致（digest matched）。只核对了应用镜像，没有核对 bootloader、分区表和 ota_data。配置没有被擦（主题 ocean、旋转 180、充电保护设置都在，config_revision 37）"
+  },
+  "observed_on_device": {
+    "note": "2026-11-02 读 USB 状态：打开串口让芯片复位，前几次读超时，大约一分钟后读到。这是设备自己报告的数值，没有用别的仪表对照；没有人看屏幕，没有人听。",
+    "firmware_version": "0.3.8",
+    "ui_alive": true,
+    "time_quality": "rtc",
+    "wifi_and_agent": "未配置、未配对",
+    "audio": "能力 audio：support unverified，availability ready（声音芯片应答了）。读状态时没有调用试听，没有读音量档位（USB 状态里没有这一项）",
+    "pairing": "phase open，open true，why none：未配对的设备开机后自动开了热点",
+    "power": "电量 96%，电池 4105 mV，USB 5154 mV，芯片 39.1 °C，measurement ok，无故障，充电状态 idle",
+    "charge_protection": "已开启（上限 90%，回充 85%），状态 holding，开关 stopped，原因 LEVEL_AT_LIMIT；事件：开机发现开关停着（BOOT_FOUND_STOPPED）并恢复，随后因电量到上限停充，写入与读回都是 ok"
+  },
+  "hardware_verified": "部分：只有上面 observed_on_device 里的几项是在真机上读到的；其余见 not_done",
   "not_done": [
-    "没有刷到设备。设备上现在是 0.3.7。刷机等用户说“刷”，或用户自己刷",
-    "三档的响度没有人听过：中、高是按芯片的曲线算的，喇叭和功放在高档会不会失真，要人听",
+    "三档的响度没有人听过（设置 → 声音 → 音量，点一档会响一声）",
     "声音芯片和放大器的引脚用的是 Waveshare 板级包，没有核对原理图",
     "提示音的触发（动作有结果、热点配对完成）和夜间不响没有在真机上试",
     "声音页、电池里的闪电、没有动作时的首页没有在真机屏幕上看过",
     "设计画布打不开（这个账号找不到它），只改了仓库里的 Dev-Sound 画板"
-  ],
-  "hardware_verified": false
+  ]
 }
