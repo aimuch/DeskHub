@@ -53,7 +53,18 @@ ConfigDraft config_draft();
 esp_err_t save_config(DisplayConfig);
 esp_err_t save_config(const ConfigDraft &);
 esp_err_t save_managed_config(DisplayConfig, uint64_t generation);
-esp_err_t save_secrets(const Secrets &);
+enum class NetworkOwner { None, Pairing, WifiChange };
+esp_err_t save_secrets(const Secrets &, NetworkOwner writer = NetworkOwner::None);
+// Radio ownership also excludes durable config/reset writers and OTA start.
+// Acquisition waits for the current normal Wi-Fi iteration to finish.
+bool network_acquire(NetworkOwner);
+// connection_applied retains a verified current connection after trial/save.
+void network_release(NetworkOwner, bool connection_applied = false);
+NetworkOwner network_owner();
+bool network_begin_update(uint64_t generation);
+esp_err_t save_wifi_credentials(const std::string &ssid, const std::string &password);
+void network_trial_reset();
+int network_disconnect_reason();
 esp_err_t reset_config();
 esp_err_t reset_config(const ConfigDraft &);
 enum class ConfigJobState { Unknown, Pending, Succeeded, Failed };

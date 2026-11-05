@@ -39,7 +39,7 @@ struct HwRandom : Random {
 struct DeviceSink : Sink {
     bool current(Secrets &out) override { out = dh::secrets(); return true; }
     bool set_time(const std::string &utc) override { return dh::set_time_utc(utc.c_str(), "manual"); }
-    bool commit(const Secrets &s) override { return dh::save_secrets(s) == ESP_OK; }
+    bool commit(const Secrets &s) override { return dh::save_secrets(s, dh::NetworkOwner::Pairing) == ESP_OK; }
     bool readback(Secrets &out) override { out = dh::secrets(); return true; }
 };
 

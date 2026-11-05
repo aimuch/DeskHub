@@ -34,7 +34,9 @@ static bool schema_unsupported = false;
 static bool wifi_started = false;
 static bool reconnect_requested = false;
 static bool wifi_reconfigure = false;
-static bool network_held = false;   // hotspot pairing owns the radio
+static NetworkOwner radio_owner = NetworkOwner::None;
+static SemaphoreHandle_t radio_lock;
+static int disconnect_reason = 0;
 static int64_t reconnect_at = 0;
 static Backoff backoff;
 static bool ntp_started = false;
@@ -115,6 +117,7 @@ static bool decode_config(cJSON *o, DisplayConfig &c) {
 void core_init() {
     lock = xSemaphoreCreateMutex();
     storage_lock = xSemaphoreCreateMutex();
+    radio_lock = xSemaphoreCreateMutex();
     config_jobs_init();
     setenv("TZ", "CST-8", 1); tzset();
     uint8_t mac[6]{}; esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -146,7 +149,7 @@ void core_init() {
                 auto ntp=field(o,"ntp_server");if(!ntp.empty())s.ntp_server=ntp;
                 s.revision = number(o,"revision",0);
                 if(s.update_public_key_pem!=credentials.update_public_key_pem)unmatched_pairing=true;
-                else if (s.ready() && s.url.rfind("https://",0) == 0 && valid_ntp_server(s.ntp_server)) credentials = s;
+                else if (!s.ssid.empty() && s.ssid.size()<=32 && s.password.size()<=64 && (s.url.empty() || s.url.rfind("https://",0) == 0) && valid_ntp_server(s.ntp_server)) credentials = s;
             }
             cJSON_Delete(o);
         }
@@ -190,7 +193,7 @@ esp_err_t save_config(const ConfigDraft &draft) {
     StorageGuard storage;
     {
         Guard g;
-        if(draft.generation!=credential_generation||c.revision!=display_cfg.revision||c.revision==UINT32_MAX)return ESP_ERR_INVALID_STATE;
+        if(radio_owner!=NetworkOwner::None||draft.generation!=credential_generation||c.revision!=display_cfg.revision||c.revision==UINT32_MAX)return ESP_ERR_INVALID_STATE;
         ++c.revision;
     }
     const auto e = persist_config(c);
@@ -206,19 +209,40 @@ esp_err_t save_managed_config(DisplayConfig c,uint64_t generation) {
     if(!valid_config(c))return ESP_ERR_INVALID_ARG;
     StorageGuard storage;
     Guard g;
-    if(generation!=credential_generation||c.managed_agent_id!=credentials.agent_id||c.revision!=display_cfg.revision||c.revision==UINT32_MAX)return ESP_ERR_INVALID_STATE;
+    if(radio_owner!=NetworkOwner::None||generation!=credential_generation||c.managed_agent_id!=credentials.agent_id||c.revision!=display_cfg.revision||c.revision==UINT32_MAX)return ESP_ERR_INVALID_STATE;
     ++c.revision;
     const auto e=persist_config(c);
     if(e==ESP_OK)display_cfg=std::move(c);
     return e;
 }
-esp_err_t save_secrets(const Secrets &input) {
+static esp_err_t persist_credentials(const Secrets &s) {
+    auto *o = cJSON_CreateObject(); cJSON_AddNumberToObject(o,"schema",1); cJSON_AddNumberToObject(o,"revision",s.revision);
+    cJSON_AddStringToObject(o,"ssid",s.ssid.c_str()); cJSON_AddStringToObject(o,"password",s.password.c_str());
+    cJSON_AddStringToObject(o,"url",s.url.c_str()); cJSON_AddStringToObject(o,"agent_id",s.agent_id.c_str());
+    cJSON_AddStringToObject(o,"token",s.token.c_str()); cJSON_AddStringToObject(o,"ca_pem",s.ca_pem.c_str());
+    cJSON_AddStringToObject(o,"ntp_server",s.ntp_server.c_str());
+    cJSON_AddStringToObject(o,"expected_update_key_pem",s.update_public_key_pem.c_str());
+    auto e=store_blob("dh_secrets",s.revision,o);cJSON_Delete(o);return e;
+}
+esp_err_t save_wifi_credentials(const std::string &ssid,const std::string &password) {
+    if(ssid.empty()||ssid.size()>32||password.size()>64)return ESP_ERR_INVALID_ARG;
+    StorageGuard storage;Guard g;
+    if(radio_owner!=NetworkOwner::WifiChange||!state.wifi_ready||credentials.revision==UINT32_MAX)return ESP_ERR_INVALID_STATE;
+    Secrets next=credentials;next.ssid=ssid;next.password=password;++next.revision;
+    auto e=persist_credentials(next);
+    if(e==ESP_OK){credentials=next;++credential_generation;state.agent_ready=false;state.action_count=0;}
+    // A failed commit leaves both RAM credentials and the preceding NVS slot intact.
+    volatile char *p=next.password.empty()?nullptr:&next.password[0];for(size_t i=0;i<next.password.size();++i)p[i]=0;
+    return e;
+}
+esp_err_t save_secrets(const Secrets &input, NetworkOwner writer) {
     if (!input.ready() || input.ssid.size() > 32 || input.password.size() > 63 || input.token.size() < 32 || input.token.size() > 256 || input.agent_id.size() > 96 ||
         input.update_public_key_pem.size()>2048 || input.update_public_key_pem.find("PRIVATE KEY")!=std::string::npos || input.url.size() > 256 || input.ca_pem.size() > 8192 || input.agent_id.empty() || input.url.rfind("https://",0) != 0 ||
         input.url.find('@') != std::string::npos || input.url.find('#') != std::string::npos || input.url.find('?') != std::string::npos || !valid_ntp_server(input.ntp_server))
         return ESP_ERR_INVALID_ARG;
     StorageGuard storage;
     Guard g;
+    if(radio_owner!=writer)return ESP_ERR_INVALID_STATE;
     // Any USB re-provision attempt invalidates network work, including a failed
     // multi-record commit whose final persistent result is not yet known.
     ++credential_generation;state.agent_ready=false;state.action_count=0;
@@ -228,14 +252,7 @@ esp_err_t save_secrets(const Secrets &input) {
     credentials.update_public_key_pem=persisted_key;
     Secrets s = input; s.revision = credentials.revision + 1;
     if(!input.update_key_explicit)s.update_public_key_pem=persisted_key;
-    auto *o = cJSON_CreateObject(); cJSON_AddNumberToObject(o,"schema",1); cJSON_AddNumberToObject(o,"revision",s.revision);
-    cJSON_AddStringToObject(o,"ssid",s.ssid.c_str()); cJSON_AddStringToObject(o,"password",s.password.c_str());
-    cJSON_AddStringToObject(o,"url",s.url.c_str()); cJSON_AddStringToObject(o,"agent_id",s.agent_id.c_str());
-    cJSON_AddStringToObject(o,"token",s.token.c_str()); cJSON_AddStringToObject(o,"ca_pem",s.ca_pem.c_str());
-    cJSON_AddStringToObject(o,"ntp_server",s.ntp_server.c_str());
-    cJSON_AddStringToObject(o,"expected_update_key_pem",s.update_public_key_pem.c_str());
-
-    auto e = store_blob("dh_secrets",s.revision,o); cJSON_Delete(o);
+    auto e = persist_credentials(s);
     if(e==ESP_OK&&s.update_public_key_pem!=credentials.update_public_key_pem){
         nvs_handle_t trust;e=nvs_open("dh_trust",NVS_READWRITE,&trust);
         if(e==ESP_OK){e=nvs_set_str(trust,"update_key",s.update_public_key_pem.c_str());if(e==ESP_OK)e=nvs_commit(trust);nvs_close(trust);}
@@ -245,6 +262,7 @@ esp_err_t save_secrets(const Secrets &input) {
     return e;
 }
 static esp_err_t reset_config_locked() {
+    if(radio_owner!=NetworkOwner::None)return ESP_ERR_INVALID_STATE;
     if (!storage_ready) return ESP_ERR_INVALID_STATE;
     for (auto ns : {"dh_config", "dh_secrets"}) {
         nvs_handle_t h; auto e = nvs_open(ns,NVS_READWRITE,&h); if (e != ESP_OK) return e;
@@ -299,13 +317,15 @@ static void wifi_event(void *, esp_event_base_t base, int32_t id, void *data) {
         auto *ev = static_cast<wifi_event_sta_disconnected_t *>(data);
         state.wifi = ev->reason == WIFI_REASON_AUTH_FAIL || ev->reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ? "Wi-Fi密码错误" :
             ev->reason == WIFI_REASON_NO_AP_FOUND ? "未找到Wi-Fi" : "Wi-Fi已断开";
-        state.wifi_ready = false; state.agent_ready = false; state.action_count = 0;
+        disconnect_reason=ev->reason;
+        state.ip.clear();state.wifi_ready = false; state.agent_ready = false; state.action_count = 0;
         reconnect_at = monotonic_ms() + backoff.next_ms(esp_random()); reconnect_requested = true;
     }
 }
 static void wifi_task(void *) {
     while (true) {
-        { bool held; { Guard g; held = network_held; } if (held) { vTaskDelay(pdMS_TO_TICKS(500)); continue; } }   // pairing owns the radio
+        xSemaphoreTake(radio_lock,portMAX_DELAY);
+        { bool held; { Guard g; held = radio_owner!=NetworkOwner::None; } if (held) { xSemaphoreGive(radio_lock);vTaskDelay(pdMS_TO_TICKS(50)); continue; } }
         bool reconfigure,start_ntp; { Guard g; reconfigure = wifi_reconfigure; wifi_reconfigure = false;start_ntp=ntp_start_requested;ntp_start_requested=false; }
         if (reconfigure) {
             auto s = secrets();
@@ -325,6 +345,7 @@ static void wifi_task(void *) {
         bool retry; { Guard g; retry = reconnect_requested && monotonic_ms() >= reconnect_at && !credentials.ssid.empty(); if (retry) { reconnect_requested = false; reconnect_at = monotonic_ms() + 15000; } }
         if (retry) { esp_wifi_connect(); Guard g; reconnect_requested = true; }
         if (snapshot().wifi_ready) { wifi_ap_record_t ap{}; if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) { Guard g; state.rssi = ap.rssi; } }
+        xSemaphoreGive(radio_lock);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -338,6 +359,25 @@ void network_start() {
     wifi_reconfigure = true; xTaskCreate(wifi_task,"dh_wifi",4096,nullptr,4,nullptr);
 }
 void network_reconfigure() { Guard g; wifi_reconfigure = true; }
-void network_hold(bool hold) { Guard g; network_held = hold; }
+bool network_acquire(NetworkOwner owner) {
+    if(owner==NetworkOwner::None||!radio_lock)return false;
+    xSemaphoreTake(radio_lock,portMAX_DELAY);
+    bool ok=false;
+    { StorageGuard storage;Guard g;
+      if(radio_owner==NetworkOwner::None&&state.update_state!="downloading"&&state.update_state!="writing"&&state.update_state!="verifying"&&state.update_state!="rebooting") {radio_owner=owner;ok=true;}
+    }
+    xSemaphoreGive(radio_lock);return ok;
+}
+void network_release(NetworkOwner owner,bool connection_applied) {
+    Guard g;if(radio_owner!=owner)return;
+    if(connection_applied)wifi_started=true;
+    wifi_reconfigure=!(connection_applied&&state.wifi_ready);
+    radio_owner=NetworkOwner::None;
+}
+NetworkOwner network_owner(){Guard g;return radio_owner;}
+bool network_begin_update(uint64_t generation){Guard g;if(radio_owner!=NetworkOwner::None||generation!=credential_generation)return false;state.update_state="verifying";return true;}
+void network_trial_reset(){Guard g;++credential_generation;state.wifi_ready=false;state.agent_ready=false;state.action_count=0;state.ip.clear();disconnect_reason=0;}
+int network_disconnect_reason(){Guard g;return disconnect_reason;}
+void network_hold(bool hold) {if(hold)network_acquire(NetworkOwner::Pairing);else network_release(NetworkOwner::Pairing);}
 bool network_wifi_started() { Guard g; return wifi_started; }
 }

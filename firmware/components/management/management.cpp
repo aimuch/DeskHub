@@ -159,6 +159,9 @@ static bool image_header(const std::vector<unsigned char> &prefix,const UpdateMa
 static void install(cJSON *job,const Secrets &s){
     auto job_id=text(job,"job_id"),package=text(job,"package_id"),path=text(job,"image_path"),expiry=text(job,"expires_at");
     if(!valid_update_id(job_id)||!valid_update_hash(package)||!valid_update_path(package,path)||job_id==journal.job_id)return;
+    // Claim the transition under Core's mutex before any journal or flash write.
+    // An in-flight management reply cannot start OTA during a Wi-Fi trial.
+    if(!network_begin_update(s.generation))return;
     time_t expires;auto *next=esp_ota_get_next_update_partition(nullptr);
     journal={};journal.job_id=job_id;journal.package_id=package;journal.agent_id=s.agent_id;journal.previous_version=VERSION;if(next)journal.target_partition=next->label;
     if(!journal_healthy||self_test_pending||!core_storage_healthy()||!snapshot().time_valid||!parse_utc(expiry.c_str(),expires)||expires<=time(nullptr)||!next||!stable_power()){stage("failed",0,"UPDATE_PRECONDITION_FAILED");send_progress(s);return;}
@@ -241,7 +244,7 @@ static void self_test(){
 static void task(void *){
     restore_journal();int64_t next=0;
     for(;;){self_test();auto st=snapshot();auto s=secrets();
-        if(st.wifi_ready&&st.agent_ready&&st.time_valid&&s.ready()&&monotonic_ms()>=next){
+        if(network_owner()==NetworkOwner::None&&st.wifi_ready&&st.agent_ready&&st.time_valid&&s.ready()&&monotonic_ms()>=next){
             auto *request=report(s);auto *reply=post(s,request);cJSON_Delete(request);
             if(reply){apply(cJSON_GetObjectItemCaseSensitive(reply,"desired"),s);mutate_if_generation(s.generation,[](Snapshot &v,void*){v.management="管理台已连接";});install(cJSON_GetObjectItemCaseSensitive(reply,"update"),s);cJSON_Delete(reply);next=monotonic_ms()+10000;}
             else {mutate_if_generation(s.generation,[](Snapshot &v,void*){v.management="管理台不可用或未授权";});next=monotonic_ms()+30000;}

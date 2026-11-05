@@ -41,8 +41,8 @@ void wipe(void *p, size_t n) {
 }  // namespace
 
 bool radio_start_driver() {
-    if (!prepare()) return false;
-    dh::network_hold(true);  // the Wi-Fi task neither reconnects nor reconfigures while pairing owns the radio
+    if (!dh::network_acquire(dh::NetworkOwner::Pairing)) return false;
+    if (!prepare()) {dh::network_release(dh::NetworkOwner::Pairing);return false;}
     if (dh::network_wifi_started()) return true;
     if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK || esp_wifi_start() != ESP_OK) {
         dh::network_hold(false);
