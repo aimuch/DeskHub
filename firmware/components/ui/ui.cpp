@@ -88,6 +88,8 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
 }
 
 void rebuild_shell() {
+    if (wifi_opened()) wifi_close();
+    wifi_reset();
     lv_obj_clean(screen);
     pairing_view = nullptr;
     build_shell(screen);
@@ -141,7 +143,7 @@ void update() {
     {   // The pairing page is read, not touched: the code and the hotspot password must not vanish with the screen.
         // Night limits and power protection are policy rules of their own and still apply.
         std::lock_guard<std::mutex> lock(pairing_mutex);
-        if (pairing_on) policy.last_activity_ms = now;
+        if (pairing_on || wifi_opened()) policy.last_activity_ms = now;
     }
     policy.update(c, now, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min));
     bool visible = page == Page::Computer && policy.mode == DisplayMode::Active;
@@ -212,6 +214,8 @@ void update() {
     refresh_shell(f, page, pairing_now);
     if (!pairing_now) refresh_page(page, tab, f);
     if (pairing_view) refresh_pairing(info, deadline, now);
+    wifi_tick(screen, now, blocked, pairing_now);
+    if (blocked && shield) lv_obj_move_foreground(shield);
 
     // Always-on keeps the mode Active, so the clock page still needs its burn-in shift.
     const int offset = page == Page::Clock && c.protection && (policy.mode != DisplayMode::Active || c.off_s == 0) ? static_cast<int>((now / 60000) % 5) - 2 : 0;
@@ -368,6 +372,7 @@ void reset_for_test() {
     if (ui_timer) { lv_timer_delete(ui_timer); ui_timer = nullptr; }
     auto *next_blank = lv_obj_create(nullptr);
     lv_screen_load(next_blank);
+    wifi_reset();
     if (screen) lv_obj_delete(screen);
     if (blank) lv_obj_delete(blank);
     blank = next_blank;

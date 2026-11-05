@@ -16,11 +16,11 @@ add_subdirectory("${LVGL_ROOT}" lvgl)
 # The real UI sources, the baseline display policy, and the simulated services in harness.cpp.
 set(UI "${FIRMWARE}/components/ui")
 add_executable(deskhub_ui_preview harness.cpp
-  "${UI}/ui.cpp" "${UI}/ui_kit.cpp" "${UI}/ui_pages.cpp" "${UI}/ui_model.cpp" "${UI}/ui_theme.cpp" "${UI}/ui_text.cpp"
+  "${UI}/ui.cpp" "${UI}/ui_wifi.cpp" "${UI}/ui_kit.cpp" "${UI}/ui_pages.cpp" "${UI}/ui_model.cpp" "${UI}/ui_theme.cpp" "${UI}/ui_text.cpp"
   "${FIRMWARE}/components/core/policy.cpp" "${FIRMWARE}/components/charge/charge_policy.cpp" "${FIRMWARE}/components/audio/audio_policy.cpp"
   "${UI}/btr_ui_16.c" "${UI}/btr_ui_20.c" "${UI}/btr_ui_28.c" "${UI}/font_clock_72.c")
 target_include_directories(deskhub_ui_preview PRIVATE stubs
-  "${FIRMWARE}/components/core/include" "${FIRMWARE}/components/board_support/include"
+  "${FIRMWARE}/components/wifi_change/include" "${FIRMWARE}/components/core/include" "${FIRMWARE}/components/board_support/include"
   "${FIRMWARE}/components/agent_client/include" "${FIRMWARE}/components/charge/include" "${FIRMWARE}/components/audio/include" "${UI}/include")
 target_compile_definitions(deskhub_ui_preview PRIVATE UI_CHARS_FILE="${FIRMWARE}/fonts/btr_ui.chars.txt")
 target_compile_options(deskhub_ui_preview PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Werror>)

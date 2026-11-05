@@ -1,6 +1,7 @@
 // The pages of the device UI (docs/design Dev-*). Each page has a builder, which makes the objects once, and a
 // refresher, which only sets text and colours that the view models in ui_model.cpp say. A refresher never builds.
 #include "audio.hpp"
+#include "wifi_change.hpp"
 #include "ui_internal.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -38,6 +39,7 @@ struct Widgets {
     lv_obj_t *brightness{}, *detail{}, *slider{};
     lv_obj_t *first_action{};
     std::vector<lv_obj_t *> connect_values;
+    lv_obj_t *wifi_change_button{}, *wifi_change_note{};
     std::array<lv_obj_t *, 6> swatch{};
 } w;
 lv_obj_t *g_pairing_bar = nullptr, *g_pairing_time = nullptr, *g_pairing_fill = nullptr;
@@ -473,19 +475,36 @@ void build_connect(lv_obj_t *body, const Frame &f) {
     heading(body, T(Str::ConnectTitle), P().wifi);
     const auto rows = make_connect(look.lang, f.s, f.paired);
     const int row_h = std::max(44, lh(look.body) + 8);
-    auto *c = card(body, row_h * static_cast<int>(rows.size()) + 12);
+    auto *c = card(body, row_h * static_cast<int>(rows.size() - 2) + 56 + 12);
     int y = 6;
-    for (const auto &r : rows) {
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto &r = rows[i];
+        if (i == 1) { w.connect_values.push_back(nullptr); continue; } // signal strength is in the scan list
+        if (i == 0) {
+            w.wifi_change_button = button(c, [](lv_event_t *) { wifi_open(); }, nullptr, kContentW - 24, 56);
+            lv_obj_set_pos(w.wifi_change_button, 12, y);
+            label_at(w.wifi_change_button, r.key, 8, 18, 70, look.caption, P().muted);
+            auto *v = label_at(w.wifi_change_button, r.value, 86, 16, 150, &btr_ui_20, tone_color(r.tone));
+            single_line(v, 26); w.connect_values.push_back(v);
+            auto *change = label_at(w.wifi_change_button, look.lang == Lang::EnUS ? "Change Wi-Fi" : "更换 Wi-Fi", 244, 18, 156, &btr_ui_16, P().accent);
+            lv_obj_set_style_text_align(change, LV_TEXT_ALIGN_RIGHT, 0);
+            y += 56; continue;
+        }
         label_at(c, r.key, 20, y + (row_h - lh(look.caption)) / 2, 150, look.caption, P().muted);
         auto *v = label_at(c, r.value, 170, y + (row_h - lh(look.body)) / 2, 242, look.body, r.tone == Tone::Off ? P().ink : tone_color(r.tone));
         single_line(v, lh(look.body));
         w.connect_values.push_back(v);
         y += row_h;
     }
+    w.wifi_change_note = caption(body, "", P().power);
     caption(body, T(Str::ConnectHint), P().muted);
     w.error = caption(body, "", P().power);
 }
 void refresh_connect(const Frame &f) {
+    const bool can_change = wifi_change::available();
+    if (can_change) lv_obj_remove_state(w.wifi_change_button, LV_STATE_DISABLED);
+    else lv_obj_add_state(w.wifi_change_button, LV_STATE_DISABLED);
+    set_optional_text(w.wifi_change_note, can_change ? "" : look.lang == Lang::EnUS ? "Close the pairing hotspot to change Wi-Fi" : "配对热点打开时不能更换 Wi-Fi");
     const auto rows = make_connect(look.lang, f.s, f.paired);
     for (size_t i = 0; i < rows.size() && i < w.connect_values.size(); ++i) {
         set_text(w.connect_values[i], rows[i].value);

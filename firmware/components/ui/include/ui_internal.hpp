@@ -112,6 +112,12 @@ void request_ring_info();            // a tap on the ring of the home page
 void request_sound_set(bool on);     // the switch of the sound page
 void request_sound_test();           // "listen"
 void request_sound_volume(int level);   // a level of the volume: stored, then one test tone at it
+void wifi_open();
+void wifi_close();
+bool wifi_opened();
+void wifi_tick(lv_obj_t *screen, int64_t now, bool blocked, bool pairing);
+void wifi_reset();
+lv_obj_t *wifi_reveal_object();
 void note_activity();
 void user_screen_off();
 void schedule_brightness(int percent);

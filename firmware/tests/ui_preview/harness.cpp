@@ -62,6 +62,7 @@
 #include "lvgl.h"
 #include "ui_internal.hpp"
 #include "ui_store.hpp"
+#include "wifi_change.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -202,6 +203,24 @@ bool store_save(const std::string &text) {
 }  // namespace ui
 }  // namespace dh
 
+// Radio service simulated at its public boundary; LVGL input and widgets are real.
+static dh::wifi_change::Status wifi_state;
+static bool wifi_allowed = true;
+static std::string wifi_sent_ssid, wifi_sent_password;
+static int wifi_begins = 0, wifi_keeps = 0, wifi_reverts = 0;
+namespace dh::wifi_change {
+void init() {}
+bool available() { return wifi_allowed; }
+bool start_scan() { if (!wifi_allowed) return false; wifi_state.phase=Phase::Typing; wifi_state.busy=true; return true; }
+std::vector<Network> networks() { return {{"Office",Security::Personal,-40,true},{"Guest",Security::Open,-60,false},{"CorpNet",Security::Unsupported,-70,false}}; }
+bool begin(const std::string &ssid,const std::string &password,bool) { ++wifi_begins; wifi_sent_ssid=ssid; wifi_sent_password=password; wifi_state.phase=Phase::Testing; wifi_state.remaining_s=20; return true; }
+bool keep() { ++wifi_keeps; wifi_state.phase=Phase::Saved; return true; }
+bool revert() { ++wifi_reverts; wifi_state.phase=Phase::Reverted; wifi_state.restored=true; return true; }
+void cancel() { wifi_state={}; }
+void touch() {}
+Status status() { return wifi_state; }
+}
+
 // ---------------------------------------------------------------- display and input
 static void flush(lv_display_t *d, const lv_area_t *area, uint8_t *pixels) {
     ++flush_calls;
@@ -338,6 +357,7 @@ static bool arc_filled(lv_obj_t *a) { return lv_obj_get_style_arc_opa(a, LV_PART
 
 // ---------------------------------------------------------------- mock world
 static void reset_world() {
+    wifi_state={}; wifi_allowed=true; wifi_begins=wifi_keeps=wifi_reverts=0; wifi_sent_ssid.clear(); wifi_sent_password.clear();
     mock_ms = 1000; pointer_pressed = false; power_auto = true; mock_paired = true;
     mock_snapshot = {};
     mock_snapshot.device_id = "dh-0a1b2c";
@@ -1361,6 +1381,77 @@ static void case_sound() {   // A25
     fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Sound);
     EXPECT(has("Sound") && has("Alert sound") && has("Off") && has("On") && has("Listen") && has("Volume") && has("Low") && has("Medium") && has("High"));
 }
+// A26 failure cases written before implementation: real pointer press/release,
+// secret masking on press-lost/sleep/exit; disabled completion; every ASCII page;
+// unsupported AP, open network, manual SSID, backend outcomes and timeout.
+static void case_wifi_keyboard() {
+    fresh(); goto_view(Page::Connect);
+    EXPECT(click_text("更换 Wi-Fi")); step();
+    EXPECT(has("Office") && has("CorpNet"));
+    EXPECT(click_text("CorpNet")); step(); EXPECT(!has("空格"));
+    EXPECT(click_text("Office")); step();
+    EXPECT(has("空格") && has("a") && !has("A"));
+    pointer(true,54,184); pointer(true,240,145); pointer(false,240,145); step();
+    EXPECT(!has("*")); // dragging out cancels the character
+
+    EXPECT(click_text("完成")); step(); EXPECT(wifi_begins==0);
+    for (const char *c : {"a","b","c","d","e","f","g"}) EXPECT(click_text(c));
+    EXPECT(click_text("完成")); step(); EXPECT(wifi_begins==0); // seven characters must still refuse submission
+    EXPECT(click_text("h"));
+    step(); EXPECT(has("********") && !has("abcdefgh"));
+    pointer(true,415,94); step(); EXPECT(has("abcdefgh"));
+    pointer(false,415,94); step(); EXPECT(has("********") && !has("abcdefgh"));
+    pointer(true,415,94); step(); EXPECT(has("abcdefgh"));
+    pointer(true,240,145); step(); // actual drag outside the eye, not a synthetic PRESS_LOST
+    EXPECT(!has("abcdefgh")); pointer(false,415,94);
+    pointer(true,415,94); step(); detail::user_screen_off(); step(); EXPECT(!has("abcdefgh"));
+    pointer(false,415,94); tap(240,240); step(); // first touch wakes only
+    EXPECT(has("********"));
+    EXPECT(click_text("123")); step(); EXPECT(has("1/2"));
+    EXPECT(click_text("1/2")); step(); EXPECT(has("2/2") && has("\\"));
+    EXPECT(click_text("abc")); step();
+    save_png_source("wifi-keyboard"); check_layout("wifi-keyboard"); check_targets("wifi-keyboard");
+    EXPECT(click_text("完成")); step();
+    EXPECT(wifi_begins==1 && wifi_sent_ssid=="Office" && wifi_sent_password=="abcdefgh");
+    EXPECT(!has("abcdefgh") && !has("********"));
+    wifi_state.phase=dh::wifi_change::Phase::Asking; wifi_state.remaining_s=60; step();
+    EXPECT(has("仍然使用") && has("改回原来的")); save_png_source("wifi-asking");
+    EXPECT(click_text("改回原来的")); step(); EXPECT(wifi_reverts==1);
+    EXPECT(click_text("重新输入")); step(); EXPECT(!has("********"));
+    detail::wifi_close(); step(); EXPECT(!has("空格"));
+    EXPECT(click_text("更换 Wi-Fi")); step(); EXPECT(click_text("Guest")); step();
+    EXPECT(wifi_sent_ssid=="Guest" && wifi_sent_password.empty());
+    wifi_state.phase=dh::wifi_change::Phase::Reverted; wifi_state.restored=true; step();
+    EXPECT(click_text("重试")); step(); EXPECT(has("Guest") && !has("空格"));
+    EXPECT(click_text("Guest")); step(); EXPECT(wifi_sent_password.empty());
+
+    wifi_state.phase=dh::wifi_change::Phase::Saved; step(); EXPECT(has("已连接")); save_png_source("wifi-saved");
+    detail::wifi_close(); step(); EXPECT(click_text("更换 Wi-Fi")); step();
+    EXPECT(click_text("其他（手动输入名称）")); step();
+    EXPECT(click_text("a")); EXPECT(click_text("完成")); step();
+    EXPECT(has("有密码") && has("没有密码"));
+    EXPECT(click_text("有密码")); step();
+    wifi_state.phase=dh::wifi_change::Phase::Idle; step(180001); EXPECT(!has("空格"));
+    fresh(); goto_view(Page::Connect); EXPECT(click_text("更换 Wi-Fi")); step();
+    wifi_state.phase=dh::wifi_change::Phase::Idle; wifi_state.reason=dh::wifi_change::Reason::ScanFailed; step();
+    EXPECT(has("没有找到 Wi-Fi") && has("重扫"));
+    EXPECT(click_text("重扫")); step(); EXPECT(has("Office"));
+    wifi_state.phase=dh::wifi_change::Phase::Scanning; step();
+    EXPECT(click_text("其他（手动输入名称）")); step();
+    EXPECT(click_text("a")); EXPECT(click_text("b"));
+    pointer(true,425,365); step(100);
+    wifi_state.phase=dh::wifi_change::Phase::Typing; step(); // rebuild while delete is held
+    pointer(false,425,365); EXPECT(click_text("c")); step(1000);
+    EXPECT(has("abc")); // deleted button cannot leave a repeating deletion behind
+    detail::wifi_close(); step();
+    fresh(); wifi_allowed=false; goto_view(Page::Connect);
+    EXPECT(click_text("更换 Wi-Fi")); step(); EXPECT(!has("Office"));
+    EXPECT(has("配对热点打开时不能更换 Wi-Fi"));
+    fresh("ocean|-|en-US|large"); goto_view(Page::Connect);
+    EXPECT(click_text("Change Wi-Fi")); step(); EXPECT(click_text("Office")); step();
+    EXPECT(has("Space") && has("Done")); check_layout("wifi-en-large"); check_targets("wifi-en-large");
+}
+
 static void case_screenshots() {
     if (out_dir.empty()) return;
     for (const char *theme : {"mint", "ocean", "amber"}) {
@@ -1409,12 +1500,13 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";
     bool first = true;
     for (const auto &c : cases) {
+        if (const char *only=std::getenv("DESKHUB_PREVIEW_CASE")) { if (std::string(c.name)!=only) continue; }
         current_case = c.name;
         failures_now.clear();
         c.fn();

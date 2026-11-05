@@ -79,7 +79,7 @@ class Component extends DCLogic {
         title: 'Office 的密码', text: '**********', spacing: '3px', count: '10/63', eye: 'flex',
         hint: '8 到 63 个字符', hintInk: 'var(--muted)',
         keys: [...letters(false, 'k'), ...bottom('123', false)],
-        note: '① 字母（小写）。每行 7 个键，键 58×56，不小于 56 px 的规则；所以不用 QWERTY，按 a 到 z 排。键盘页不画顶栏和页签。按下的键（这里是 k）变成选中色，松手才输入。密码画成 *。右边的眼睛是“按住显示”，要你按 K4 决定，见设计说明第 6 节。'
+        note: '① 字母（小写）。每行 7 个键，键 58×56，不小于 56 px 的规则；所以不用 QWERTY，按 a 到 z 排。键盘页不画顶栏和页签。按下的键（这里是 k）变成选中色，松手才输入。密码画成 *。右边的眼睛是“按住显示”（2026-11-03 用户同意，K4）：仅按住时显示明文，松手、触摸取消、离开键盘页或息屏时立即隐藏。'
       },
       {
         title: 'Office 的密码', text: '*****', spacing: '3px', count: '5/63', eye: 'flex',
