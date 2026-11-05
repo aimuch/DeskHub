@@ -191,8 +191,19 @@ lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg){
     return &display;
 }
 lv_indev_t *bsp_display_get_input_dev(){return &input;}
-esp_err_t bsp_display_brightness_set(int){return ESP_OK;}
-esp_err_t bsp_display_rotation_set(bsp_display_rotation_t){return ESP_OK;}
+// Initialization failures, before the fix: unlocked panel commands race with
+// the newly started LVGL task; lock/rotation/brightness failure must leave the
+// display unavailable, propagate the error, and release an acquired lock.
+static bool display_locked = false;
+static int display_unlocks = 0, display_commands = 0;
+static esp_err_t display_lock_result = ESP_OK, display_rotation_result = ESP_OK, display_brightness_result = ESP_OK;
+esp_err_t esp_lv_adapter_lock(int32_t) {
+    if (display_lock_result == ESP_OK) { check(!display_locked, "display lock nested"); display_locked = true; }
+    return display_lock_result;
+}
+void esp_lv_adapter_unlock() { check(display_locked, "display unlock without lock"); display_locked = false; ++display_unlocks; }
+esp_err_t bsp_display_brightness_set(int) { check(display_locked, "unlocked display brightness command"); ++display_commands; return display_brightness_result; }
+esp_err_t bsp_display_rotation_set(bsp_display_rotation_t) { check(display_locked, "unlocked display rotation command"); ++display_commands; return display_rotation_result; }
 void lv_display_set_rotation(lv_display_t *,lv_display_rotation_t){}
 void lv_indev_wait_release(lv_indev_t *){}
 lv_obj_t *lv_screen_active(){return &screen;}
@@ -241,7 +252,20 @@ int main(int argc,char **argv) {
         check_initialization_failure();return 0;
     }
     check(dh::board_init()==ESP_OK,"board initialization failed");
+    display_lock_result = ESP_ERR_TIMEOUT;
+    check(dh::board_display_init() == ESP_ERR_TIMEOUT, "display lock failure hidden");
+    check(display_commands == 0 && display_unlocks == 0, "command or unlock after failed display lock");
+    display_lock_result = ESP_OK; display_rotation_result = ESP_FAIL;
+    check(dh::board_display_init() == ESP_FAIL, "display rotation failure hidden");
+    check(!display_locked && display_unlocks == 1, "rotation failure leaked display lock");
+    check(dh::board_brightness(5) == ESP_ERR_INVALID_STATE, "failed display exposed as ready");
+    display_rotation_result = ESP_OK; display_brightness_result = ESP_FAIL;
+    check(dh::board_display_init() == ESP_FAIL, "display brightness failure hidden");
+    check(!display_locked && display_unlocks == 2, "brightness failure leaked display lock");
+    check(dh::board_brightness(5) == ESP_ERR_INVALID_STATE, "failed brightness exposed as ready");
+    display_brightness_result = ESP_OK;
     check(dh::board_display_init()==ESP_OK,"explicit display initialization failed");
+    check(!display_locked && display_unlocks == 3, "successful display initialization leaked lock");
     auto initial=dh::board_power();
     check(!initial.fault&&initial.vbus=="present"&&initial.battery=="present"&&initial.charging=="charging"&&initial.observed_ms==100,"initial sample incorrect");
     // Battery level is the PMIC gauge's own estimate, shown only with a present battery.

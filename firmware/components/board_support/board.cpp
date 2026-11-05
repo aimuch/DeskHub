@@ -5,6 +5,7 @@
 #include "driver/i2c_master.h"
 #include "esp_flash.h"
 #include "esp_psram.h"
+#include "esp_lv_adapter.h"
 #include "freertos/semphr.h"
 #include <cstring>
 #include <cstdio>
@@ -155,13 +156,19 @@ esp_err_t board_display_init() {
     cfg.touch_flags.mirror_y = 0;
     display = bsp_display_start_with_config(&cfg);
     if (!display) return ESP_FAIL;
+    // The BSP has already started the LVGL task. Serialize panel commands with
+    // its flush callback, just as ui_start and runtime UI updates do.
+    const auto locked = esp_lv_adapter_lock(1000);
+    if (locked != ESP_OK) return locked;
+    struct DisplayLockGuard { ~DisplayLockGuard() { esp_lv_adapter_unlock(); } } guard;
     // The vendor panel command table ends with MADCTL=0xa0 independently of
     // the adapter's zero rotation. Establish a matching physical zero baseline
     // even when the saved UI angle is zero and its first tick makes no change.
     const auto error = bsp_display_rotation_set(BSP_DISPLAY_ROTATE_0);
     if (error != ESP_OK) return error;
+    const auto brightness = bsp_display_brightness_set(5);
+    if (brightness != ESP_OK) return brightness;
     display_ok = true;
-    bsp_display_brightness_set(5);
     return ESP_OK;
 }
 esp_err_t board_brightness(int v) { return display_ok ? bsp_display_brightness_set(v) : ESP_ERR_INVALID_STATE; }
