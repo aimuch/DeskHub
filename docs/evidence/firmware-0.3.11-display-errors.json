@@ -1,0 +1,24 @@
+{
+  "sample_seconds": 15,
+  "errors": [
+    "E (10158) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10158) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10165) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10165) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10170) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10170) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10177) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10177) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10182) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10183) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10188) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10188) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10194) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10194) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10197) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10198) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed",
+    "E (10203) spi_common: spicommon_dma_setup_priv_buffer(430): Failed to allocate priv TX buffer",
+    "E (10203) lcd_panel.io.spi: panel_io_spi_tx_color(406): spi transmit (queue) color failed"
+  ],
+  "note": "只保留串口实际收到的指定图形驱动错误；没有收到错误不证明面板正常"
+}

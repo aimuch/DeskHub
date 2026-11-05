@@ -36,7 +36,7 @@ Agent 的其余模块（`cli.py`、`metrics.py`、`snapshots.py`、`management_m
 检查“原样”：
 
 ```sh
-git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/tests/charge_test.cpp' ':!firmware/main/CMakeLists.txt' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!tools/tests/test_provision_charge.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json' ':!firmware/components/core/core.cpp' ':!firmware/components/core/include/core.hpp' ':!firmware/tests/pairing_glue_test.cpp' ':!firmware/tests/audio_test.cpp' ':!tools/create_tls.py' ':!tools/tests/test_create_tls_reuse.py' ':!tools/tests/test_provision_pairing.py' ':!tools/tests/test_provision_sound.py'
+git diff --stat archive/v0.2 main -- tools protocol firmware/components/core firmware/components/management firmware/components/agent_client firmware/main firmware/tests ':!firmware/tests/board_cache_test.cpp' ':!firmware/tests/CMakeLists.txt' ':!firmware/tests/ui_model_test.cpp' ':!firmware/tests/ui_preview' ':!firmware/tests/power_wire_test.cpp' ':!firmware/tests/pairing_test.cpp' ':!firmware/tests/charge_test.cpp' ':!firmware/main/CMakeLists.txt' ':!firmware/components/management/management.cpp' ':!firmware/components/management/CMakeLists.txt' ':!firmware/components/management/power_wire.cpp' ':!firmware/components/management/include/power_wire.hpp' ':!firmware/main/app_main.cpp' ':!tools/provision.py' ':!tools/tests/test_provision_power.py' ':!tools/tests/test_provision_charge.py' ':!protocol/openapi.json' ':!protocol/schemas/device-report.schema.json' ':!protocol/export_openapi.py' ':!protocol/README.md' ':!protocol/examples/device-report-power.json' ':!protocol/examples/pairing-package.json' ':!protocol/schemas/agent-config.schema.json' ':!firmware/components/core/core.cpp' ':!firmware/components/core/include/core.hpp' ':!firmware/tests/pairing_glue_test.cpp' ':!firmware/tests/audio_test.cpp' ':!tools/create_tls.py' ':!tools/tests/test_create_tls_reuse.py' ':!tools/tests/test_provision_pairing.py' ':!tools/tests/test_provision_sound.py' ':!tools/tests/test_provision_wifi_change.py' ':!firmware/tests/display_transfer_test.cpp' ':!firmware/tests/keyboard_test.cpp' ':!firmware/tests/wifi_change_test.cpp' ':!firmware/tests/board_stubs/driver/spi_common.h' ':!firmware/tests/board_stubs/esp_lv_adapter.h'
 ```
 
 输出为空，就表示这些文件与归档逐字节相同。
@@ -67,7 +67,11 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/`（`CMakeLists.txt`、`ui_model_test.cpp`、`ui_preview/CMakeLists.txt`、`ui_preview/harness.cpp`） | `ui_model_test` 带上 `policy.cpp`，加 T22（夜间不响）；界面预览带上 `audio_policy.cpp` 和一个假的扬声器，加声音页、闪电在电池里、没有动作时的首页三组检查 |
 | `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`）、`tools/provision.py`、`tools/tests/test_provision_sound.py` | 启动 `audio::init()`；能力 `audio` 按声音芯片是否应答报 `unverified` 加 ready 或 unavailable；USB 命令 `sound_test`（只回三个布尔值）；`--sound-test` 不能和别的操作混用，只打印检查过的三个值 |
 | `firmware/tests/audio_test.cpp`、`firmware/tests/ui_preview/harness.cpp` | 音量三档：S5（存储只认“0”“1”“2”、默认低、每档至少差 6 dB、最高不到芯片 0 dB）；界面预览的声音组加音量的点选、存不下、没有扬声器 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5、0.3.6、0.3.7、0.3.8，各两处 |
+| `firmware/components/core/`、`firmware/components/management/management.cpp` | 无线独占（NetworkOwner），配对、换 Wi-Fi、配置写入和 OTA 互斥；`save_wifi_credentials` 只改名称和密码；只有 Wi-Fi、没有 Agent 的凭据也能读回 |
+| `firmware/components/board_support/`、`firmware/tests/board_cache_test.cpp`、`firmware/tests/display_transfer_test.cpp`、`firmware/tests/board_stubs/` | 修显示横纹：LCD 的 SPI DMA 每块不超过 4092 字节；开机的旋转和亮度命令先拿显示锁（`docs/evidence/display-corruption.md`） |
+| `firmware/main/`、`tools/provision.py`、`tools/tests/test_provision_wifi_change.py` | USB 状态加只读的 `wifi_change`；无线被占用时 USB 配对回 BUSY |
+| `firmware/tests/`（`CMakeLists.txt`、`keyboard_test.cpp`、`wifi_change_test.cpp`、`ui_preview/`） | 键盘、换网状态机和触屏流程的测试 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.13，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
@@ -98,12 +102,36 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 声音的音量三档（2026-10-31，0.3.8）：你听到声音以后要音量可调。低、中、高是声音芯片的音量 50、70、90（芯片曲线 0.5 dB 一级，每档差 10 dB），默认低就是 0.3.7 的固定音量；存在 NVS 的 `dh_snd/vol`，只认“0”“1”“2”。点一档马上存下并响一声试听音。测试 S5 和界面预览的声音组；变异检查 `audio_policy.py` 42 处、`sound_ui.py` 32 处全部报红。设计稿 `Dev-Sound` 已改；设计画布打不开，只改了仓库里的画板。
 - 顶栏的闪电挪进电池里，画在数字前面，和数字一起居中；USB 紧挨电池（`Dev-Header`）。没有动作时总览的圆环放大到 252 px 并上下居中（`Dev-HomeEmpty`）。变异检查 `header_home_ui.py` 20 处全部报红。
 - 没有：网页上开关充电保护（设备的上报里没有这一项）。
-- 固件版本 0.3.8（2026-10-31）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.7 多：声音的音量三档。2026-11-02 核对：设备上已是 0.3.8，应用镜像与包里的逐字节相同（不是我刷的），USB 状态正常、充电保护仍在上限处停充。三档的响度没有人听过；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.8.json](evidence/firmware-0.3.8.json)。
+- 固件版本 0.3.13（2026-11-03）：已刷到设备，你确认显示正常。比 0.3.8 多：屏幕上换 Wi-Fi（软键盘）、显示横纹的修复。中间版本 0.3.9 到 0.3.12 都是调查用的。记录在 [docs/evidence/firmware-0.3.13.json](evidence/firmware-0.3.13.json) 和 [display-corruption.md](evidence/display-corruption.md)。
+- 上一个版本 0.3.8（2026-10-31）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.7 多：声音的音量三档。2026-11-02 核对：设备上已是 0.3.8，应用镜像与包里的逐字节相同（不是我刷的），USB 状态正常、充电保护仍在上限处停充。三档的响度没有人听过；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.8.json](evidence/firmware-0.3.8.json)。
 - 上一个版本 0.3.7（2026-10-30）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.6 多：声音（提示音、试听、`sound_test`）、闪电在电池里、没有动作时首页圆环放大居中。2026-10-30 已刷到设备：USB 状态里能力 audio 是 ready（声音芯片应答了），充电保护仍在上限处停充。2026-10-31 你在设备旁听到了试听音。响度、动作和配对触发的提示音还没有试；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.7.json](evidence/firmware-0.3.7.json)。
 - 上一个版本 0.3.6（2026-10-29）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.4 多：电池数字居中、首页圆环加说明（点圆环看四段的意思）、设备端热点配网接线（没有真机验证）、配网时屏幕不熄灭、首页没有动作时不画设置卡片、USB 状态的 pairing 对象。2026-10-29 已刷到设备，读到了 USB 状态（热点自动打开、充电保护停充；屏幕和手机没有看过）。不生成签名 OTA 包。记录在 [docs/evidence/firmware-0.3.6.json](evidence/firmware-0.3.6.json)；0.3.5 从未刷到设备，已被它取代（[firmware-0.3.5.json](evidence/firmware-0.3.5.json)）。
 - 上一个版本 0.3.4（图标顶栏、电池里写百分比、圆环粗细可调、没有“实验功能”字样）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。**还没有刷到任何设备**。不生成签名 OTA 包（你决定不需要）。哈希和做过的检查记在 [docs/evidence/firmware-0.3.4.json](evidence/firmware-0.3.4.json)。上一个版本 0.3.3 的记录在 [docs/evidence/firmware-0.3.3.json](evidence/firmware-0.3.3.json)。
 - 上一个版本 0.3.1 已用 USB 包刷到设备：写入校验通过，开机后界面心跳正常，USB 状态里读到了电源数据；刷完以后没有人看过屏幕。记录在 [docs/evidence/firmware-0.3.1.json](evidence/firmware-0.3.1.json)。
 - 上一个版本 0.3.0 的记录在 [docs/evidence/firmware-0.3.0.json](evidence/firmware-0.3.0.json)。0.3.0 刷入后用户在设备旁确认“屏幕显示正常，新界面已经出来”；那次也没有逐页检查。
+
+### 屏幕软键盘换 Wi-Fi（2026-11-03，0.3.13 起）
+
+实现位置：`firmware/components/wifi_change/` 管理扫描、试连、检查 Agent、确认和超时回退；`ui/ui_wifi.cpp` 和 `ui/include/ui_keyboard.hpp` 提供全屏软键盘。输入名称、大小写和全部 ASCII 符号；密码仅在按住眼睛键时显示。键盘页退出、取消触摸和息屏都会隐藏密码。
+
+安全基线的这批改动已按 K7 单独提交（2026-11-05，`ef1065d` 到 `49bf5e3`）：
+
+| 文件 | 原因与验证 |
+| --- | --- |
+| `firmware/components/core/core.cpp`、`include/core.hpp` | 无线独占与配置写入互斥；临时 Wi-Fi 凭据只在 RAM 中，验证成功后复用双槽 NVS 保存；保留 Agent 地址、CA、令牌和升级公钥；独占期间拒绝配置、重置和 OTA。状态机先写失败用例，真实驱动与 NVS 断电行为尚未实测 |
+| `firmware/components/management/management.cpp` | 试连期间暂停管理请求，并在开始 OTA 前原子检查无线所有权，防止在途回复启动更新 |
+| `firmware/main/app_main.cpp`、`main/CMakeLists.txt` | 初始化换网组件，USB 状态加白名单诊断 `wifi_change`，配对和换网互斥 |
+| `tools/provision.py`、`tools/tests/test_provision_wifi_change.py` | 过滤新状态中的阶段、原因、时间和布尔值；不回显名称、密码或未知字段，先写失败用例 |
+| `firmware/tests/CMakeLists.txt`、`keyboard_test.cpp`、`wifi_change_test.cpp` | 新增键盘输入和换网失败场景；其余目标保留 |
+| `firmware/tests/ui_preview/` | 新增真实 LVGL 触屏流程，Wi-Fi 为替身；模拟真实拖出、按住、松手、重建和息屏。测试脚本支持 `DESKHUB_PREVIEW_CASE` 只跑指定组 |
+
+验证结果：15 组固件主机检查、116 条工具检查、26 组原生 LVGL 流程通过。ESP-IDF v6.0.2 完整构建通过，无编译警告。键盘模型 7 处、触屏流程 4 处、换网状态机 8 处变异全部被发现。报告、截图和重复命令在 [软键盘验证证据](evidence/wifi-change/README.md)。网页管理台未改，本轮没有重跑浏览器 E2E。
+
+实现阶段先用临时 0.3.8 构建完成主机验证。2026-11-03 用户要求“刷到设备”后，版本升为 0.3.9（`firmware/CMakeLists.txt` 两处，K7 版本基线改动），重新完整构建，无编译警告，并生成独立 USB 包 `dist/deskhub-0.3.9-esp32s3.zip`。四个镜像写入并校验成功；USB 读回 0.3.9、`ui_alive: true`，主题 ocean、旋转 180、配置版本 37 均保留。设备尚未配置 Wi-Fi 或配对 Agent；启动后配对热点打开，热点期间换网入口禁用。证据见 [0.3.9 刷机记录](evidence/firmware-0.3.9.json)。没有生成签名 OTA 包，没有提交代码。真实路由器、NVS 断电回退和触屏手感仍未验证。
+
+### 既有显示条带对照（2026-11-03，0.3.10）
+
+用户在 0.3.9 刷入后提供键盘照片，显示条带、缺笔和旧内容残留，并说明上一版本已有同样问题。尚未确认根因。0.3.10 只将失效区在绘制前扩展为整行，保留硬件旋转、QSPI 时钟和缓冲配置，用于对比小窗口刷新路径。`board_support/board.cpp` 与版本号属于本轮基线改动，尚未提交。先写失败方式和板级检查并确认失败，再实现回调；15 组主机检查通过。不能把该对照称为已验证修复。用户反馈所有页面仍有横纹，故撤回整行刷新和对应板级检查。0.3.11 恢复原刷新范围，并用 `display_clock.cpp` 包装 LCD SPI 创建调用，将 40 MHz 限速为 20 MHz，保留其他配置；不修改 managed_components。先写全部失败方式和检查，首次因实现文件尚不存在而编译失败，实现后 16 组主机检查通过；最终 ELF map 与反汇编确认包装调用和限速常量生效。0.3.11 真机连续报告 `Failed to allocate priv TX buffer` 和像素入队失败，降频没有消除错误。0.3.12 已移除降频包装和检查，恢复 40 MHz；`display_transfer.cpp` 改为包装 SPI2 总线初始化，将 DMA 事务限定为 4092 字节，利用 IDF LCD 驱动现有分块逻辑降低内部连续临时内存需求。先写失败方式和检查，首次因实现文件不存在而编译失败；实现后 16 组主机检查通过，完整构建无警告，ELF map 确认 BSP 调用已包装。0.3.12 真机采样中 DMA 分配错误消失，但启动命令仍有 SPI 总线冲突。0.3.13 给 `board.cpp` 中启动后的旋转、亮度命令加现有显示锁，并传播亮度失败；新增检查在修复前以 `unlocked display rotation command` 失败，修复后 16 组主机检查通过。已完整构建、打包、刷机，四个镜像校验通过，读回 0.3.13 和 ui_alive true；30 秒驱动采样未再记录此前错误。基线文件 `board.cpp`、版本和组件链接配置的修改尚未提交；2026-11-03 用户确认“显示正常”，长期稳定尚未验证。真实驱动日志和用户观察结果见 [显示问题记录](evidence/display-corruption.md)。
 
 运行基线测试：
 

@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-03",
+  "version": "0.3.11",
+  "purpose": "撤回无效的整行刷新对照，恢复原局部刷新，并将 LCD QSPI 从 40 MHz 限速为 20 MHz；未确认根因或修复",
+  "source": "main 未提交工作区，含软键盘换 Wi-Fi；board.cpp 和对应板级显示测试已恢复到 0.3.9 的刷新逻辑",
+  "diagnostic_change": {
+    "file": "firmware/components/board_support/display_clock.cpp",
+    "clock_limit_hz": 20000000,
+    "rotation_changed": false,
+    "draw_buffer_configuration_changed": false,
+    "vendor_dependency_modified": false,
+    "link_verified": "最终 ELF map 的交叉引用确认 Waveshare BSP 调用 __wrap_esp_lcd_new_panel_io_spi；反汇编中 0x1312d00 为 20000000，并在复制配置后限速"
+  },
+  "build": {
+    "toolchain": "ESP-IDF v6.0.2",
+    "passed": true,
+    "compiler_warnings": 0,
+    "app_size_bytes": 4518160,
+    "app_sha256": "adc0031d64e24be13a5ef65612d6cc0a10e3f09136bfb58a5480a2efc76a0ade"
+  },
+  "usb_bundle": {
+    "path": "dist/deskhub-0.3.11-esp32s3.zip",
+    "sha256": "5921aba346c40424982e7d803aaa1df9759413f054bff1a22448ba24676e59fe"
+  },
+  "host_checks": {
+    "test_first_failure": "display_clock_test 编译时 display_clock.cpp 尚不存在",
+    "after_implementation": "16/16 CTest passed",
+    "checks": ["40 MHz 降到 20 MHz", "更低时钟不提高", "调用方配置不修改", "其他参数与句柄保留", "错误透传", "空配置透传"],
+    "limitations": "主机检查不验证物理面板或 QSPI 信号；降频仍是诊断对照"
+  },
+  "device_id": "deskhub-44bd8d60c598",
+  "flashed": true,
+  "status": "四个镜像写入并校验完成，读回 0.3.11、ui_alive true、配置版本 37；仍捕获连续 DMA 临时 TX 缓冲分配失败，降频未消除驱动错误",
+  "after_status": "firmware-0.3.11-status.json",
+  "display_errors": "firmware-0.3.11-display-errors.json",
+  "display_fix_verified": false
+}

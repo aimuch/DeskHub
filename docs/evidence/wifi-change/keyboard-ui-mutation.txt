@@ -1,0 +1,6 @@
+baseline exit 0
+caught   short passwords submitted
+caught   released eye keeps password visible
+caught   drag outside still activates key
+caught   rebuild keeps deleting
+mutations: 4 not caught: 0

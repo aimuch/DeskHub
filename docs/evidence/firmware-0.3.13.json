@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-03",
+  "version": "0.3.13",
+  "source": "main 未提交工作区，含软键盘换 Wi-Fi 与显示修复",
+  "causes": [
+    "实际 0.3.11 日志：内部 DMA 临时 TX 缓冲分配失败，导致像素块入队失败",
+    "实际 0.3.12 日志：启动阶段 SPI polling/bus 冲突；BSP 已启动 LVGL 后，本项目未加锁发送旋转和亮度命令"
+  ],
+  "fixes": [
+    "SPI2 LCD DMA 事务上限 4092 字节，使用 IDF 现有分块发送，降低内部连续临时内存需求",
+    "板级显示初始化的旋转、亮度命令获取现有显示锁；所有返回路径解锁；失败不报告显示就绪",
+    "撤回整行刷新与临时降频，恢复原局部刷新、40 MHz、180 度配置"
+  ],
+  "build": {
+    "toolchain": "ESP-IDF v6.0.2",
+    "passed": true,
+    "compiler_warnings": 0,
+    "app_size_bytes": 4518096,
+    "app_sha256": "f5af4ae77fb054be610dc3447438fc097aa49d750f51ca0f1dc50478992e2e39"
+  },
+  "usb_bundle": {
+    "path": "dist/deskhub-0.3.13-esp32s3.zip",
+    "sha256": "0c7b0141e832559642a5ea2d95cdca658bff3bdd664e958873ba5b80abc91585"
+  },
+  "host_checks": {
+    "passed": 16,
+    "failed": 0,
+    "test_first": [
+      "DMA 分块检查先写失败方式，首次因 display_transfer.cpp 不存在而编译失败",
+      "初始化互斥检查先写，修复前以 unlocked display rotation command 失败；修复后通过",
+      "锁、旋转和亮度失败均验证错误透传、解锁与保持不可用"
+    ],
+    "link_verified": "ELF map 确认 Waveshare BSP 调用 __wrap_spi_bus_initialize，原 20 MHz 包装函数不存在"
+  },
+  "device_id": "deskhub-44bd8d60c598",
+  "flashed": true,
+  "status": "四个镜像写入并校验成功；读回版本 0.3.13、ui_alive true、主题 ocean、旋转 180、配置版本 37；Wi-Fi 已连接，Agent 未配对，provision_revision 1",
+  "flash_log": "firmware-0.3.13-flash.txt",
+  "after_status": "firmware-0.3.13-status.json",
+  "driver_log": "firmware-0.3.13-display-errors.json",
+  "driver_sampling": "30 秒串口采样未记录此前 DMA TX 分配失败、像素入队失败或 SPI polling/bus 冲突；采样不代替用户观察屏幕",
+  "user_display_observation": "2026-11-03 用户回复：显示正常。确认针对 0.3.13 的横纹修复；未据此推断长期稳定或所有交互均已验证",
+  "long_duration_verified": false
+}

@@ -1,0 +1,9 @@
+baseline exit 0
+caught   controls accepted
+caught   password length cap missing
+caught   name length cap missing
+caught   64 byte nonhex accepted
+caught   password never masked
+caught   reveal never shows
+caught   erase does nothing
+mutations: 7 not caught: 0

@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-03",
+  "version": "0.3.10",
+  "purpose": "既有屏幕条带、缺笔和旧内容残留的单变量诊断对照；尚未确认根因或修复",
+  "source": "main 未提交工作区，含软键盘换 Wi-Fi；仅将显示失效区在绘制前扩展为整行，并升版",
+  "diagnostic_change": {
+    "file": "firmware/components/board_support/board.cpp",
+    "event": "LV_EVENT_INVALIDATE_AREA",
+    "horizontal_bounds": [0, 479],
+    "vertical_bounds": "保留原覆盖范围并向外对齐为偶数行",
+    "rotation_changed": false,
+    "qspi_clock_changed": false,
+    "draw_buffer_configuration_changed": false
+  },
+  "build": {
+    "toolchain": "ESP-IDF v6.0.2",
+    "passed": true,
+    "compiler_warnings": 0,
+    "app_size_bytes": 4518160,
+    "app_sha256": "af7719bb0be37ced71d4aba6bd66a3a7d7abed245d84822c6216e85ca9c8b31b"
+  },
+  "usb_bundle": {
+    "path": "dist/deskhub-0.3.10-esp32s3.zip",
+    "sha256": "425fdd8b3d38fb8b3ed4ab308a6528f7f25280999259857383d56e5464b378c6"
+  },
+  "host_checks": {
+    "test_first_failure": "board cache regression: full-width diagnostic callback missing",
+    "after_implementation": "15/15 CTest passed",
+    "limitations": "板级显示调用由替身提供，不验证物理面板或 QSPI 传输"
+  },
+  "device_id": "deskhub-44bd8d60c598",
+  "flashed": true,
+  "status": "四个镜像 USB 写入并校验通过；读回 0.3.10、ui_alive true、主题 ocean、旋转 180、配置版本 37；配对热点已关闭",
+  "flash_log": "firmware-0.3.10-flash.txt",
+  "after_status": "firmware-0.3.10-status.json",
+  "display_fix_verified": false,
+  "user_result": "仍有乱码；随后补充现在所有页面都是横纹乱码。整行刷新对照未消除故障，已决定撤回",
+  "requires_observation": "进入键盘并切换大小写、数字页；观察条带、缺笔和旧内容残留是否仍存在"
+}

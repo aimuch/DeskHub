@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-03",
+  "version": "0.3.12",
+  "source": "main 未提交工作区，含软键盘换 Wi-Fi；原刷新范围和 40 MHz 时钟已恢复",
+  "problem_evidence": "firmware-0.3.11-display-errors.json：连续 Failed to allocate priv TX buffer，随后像素传输入队失败",
+  "fix": {
+    "file": "firmware/components/board_support/display_transfer.cpp",
+    "lcd_bus": "SPI2_HOST",
+    "max_dma_transaction_bytes": 4092,
+    "reason": "限制 PSRAM 像素转内部 DMA 缓冲的连续临时分配；复用 IDF LCD 驱动现有分块发送和最后一块完成回调",
+    "rotation_changed": false,
+    "clock_hz": 40000000,
+    "draw_buffer_configuration_changed": false,
+    "vendor_dependency_modified": false,
+    "link_verified": "ELF map 交叉引用确认 Waveshare BSP 调用 __wrap_spi_bus_initialize；临时降频包装函数已移除"
+  },
+  "build": {
+    "toolchain": "ESP-IDF v6.0.2",
+    "passed": true,
+    "compiler_warnings": 0,
+    "app_size_bytes": 4518176,
+    "app_sha256": "3537171d9cd25413048322fec2b18d1a41e8ffa6c86a891f4ecc8b83de9cc902"
+  },
+  "usb_bundle": {
+    "path": "dist/deskhub-0.3.12-esp32s3.zip",
+    "sha256": "97729a1d8d5212b6dec5ea66a77a03fb1b14087c346e68847ed1f40c47d343a5"
+  },
+  "host_checks": {
+    "test_first_failure": "display_transfer_test 编译时 display_transfer.cpp 尚不存在",
+    "after_implementation": "16/16 CTest passed",
+    "checks": ["大块限制为 4092", "小块不提高", "原配置不修改", "其他总线和无 DMA 路径保留", "引脚与标志保留", "错误与空参数透传"],
+    "limitations": "主机检查不证明物理屏幕显示正确"
+  },
+  "device_id": "deskhub-44bd8d60c598",
+  "flashed": true,
+  "status": "镜像写入并校验成功，读回 0.3.12 和 ui_alive true。30 秒采样未再收到 DMA TX 分配失败；但启动阶段仍有两条 SPI polling/bus 冲突错误，继续修复",
+  "after_status": "firmware-0.3.12-status.json",
+  "display_errors": "firmware-0.3.12-display-errors.json",
+  "display_observed_by_user": false
+}

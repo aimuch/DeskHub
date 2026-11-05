@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-03",
+  "base_commit": "72318f290c82cf657b1cf2dcbc2d7ca30e73d815",
+  "working_tree_changes": "未提交的软键盘换 Wi-Fi 实现，以及先前批准的 K4 和设计文档修改",
+  "simulation_only": true,
+  "hardware_tested": false,
+  "flashed": false,
+  "release_packaged": false,
+  "firmware_version_changed": false,
+  "firmware_build": {
+    "toolchain": "ESP-IDF v6.0.2 / ESP32-S3",
+    "directory": "/tmp/deskhub-wifi-idf",
+    "passed": true,
+    "compiler_warnings": 0,
+    "environment_note": "ESP-IDF fatfs Kconfig 输出 FATFS_PRINT_FLOAT 默认值不是 bool 的 NOTE；没有 C/C++ 编译警告",
+    "version": "0.3.8",
+    "release_image": false,
+    "app_size_bytes": 4518096,
+    "app_slot_bytes": 6291456,
+    "app_sha256": "3f03e8afcf62092cb57e0ee5db60c428b7b9a598c667b9975c546a9439383f10"
+  },
+  "checks": {
+    "firmware_host_groups": {"passed": 15, "failed": 0},
+    "usb_tool_tests": {"passed": 116, "failed": 0},
+    "native_lvgl_groups": {"passed": 26, "failed": 0, "report": "ui-report.json"},
+    "keyboard_model_mutations": {"caught": 7, "survived": 0, "invalid": 0, "report": "keyboard-mutation.txt"},
+    "keyboard_touch_mutations": {"caught": 4, "survived": 0, "invalid": 0, "report": "keyboard-ui-mutation.txt"},
+    "wifi_session_mutations": {"caught": 8, "survived": 0, "invalid": 0, "report": "wifi-change-mutation.txt"}
+  },
+  "not_run": [
+    "网页管理台浏览器 E2E：本轮未改 Agent 和网页",
+    "真实设备上的 Wi-Fi 扫描、连网、Agent 连通性和 60 秒回退",
+    "真实 NVS 在保存时断电的恢复行为",
+    "真实触屏上的键盘手感、长按删除和圆角可见性"
+  ],
+  "test_first_evidence": [
+    "keyboard_test.cpp 先写失败场景，首次编译因 ui_keyboard.hpp 尚不存在而失败",
+    "ui_preview/harness.cpp 的 wifi_keyboard 流程先于 ui_wifi.cpp 写入，首次编译因 wifi_change.hpp 尚未接入而失败",
+    "拖出取消、扫描失败、开放网络重试和重建期间删除的触屏场景在修复前报错，修复后通过"
+  ]
+}

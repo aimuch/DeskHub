@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-03",
+  "version": "0.3.9",
+  "source": "main 工作区的未提交软键盘换 Wi-Fi 实现；基础提交 72318f290c82cf657b1cf2dcbc2d7ca30e73d815",
+  "build": {
+    "directory": "/tmp/deskhub-wifi-idf",
+    "toolchain": "ESP-IDF v6.0.2",
+    "passed": true,
+    "compiler_warnings": 0,
+    "app_size_bytes": 4518096,
+    "app_sha256": "7a878fbb5d2ad2482715276560fd67ec9716553aa9aac2ffbfbef95ca5852b8d"
+  },
+  "usb_bundle": {
+    "path": "dist/deskhub-0.3.9-esp32s3.zip",
+    "sha256": "607aee9c18036952652adacede507e9ebe89452e3a637c8b2ba23fa153f16802",
+    "signed_ota_created": false
+  },
+  "implementation_verification": "wifi-change/verification.json：升版前 15 组固件主机检查、116 条工具检查、26 组原生 LVGL 流程和 19 处变异检查通过；本轮仅改版本号并重新完整构建",
+  "device": "deskhub-44bd8d60c598",
+  "port": "/dev/cu.usbmodem20101",
+  "before": {
+    "version": "0.3.8",
+    "ui_alive": true,
+    "theme": "ocean",
+    "rotation": 180,
+    "config_revision": 37,
+    "provision_revision": 0,
+    "wifi": "未配置",
+    "agent": "未配对"
+  },
+  "flashed": true,
+  "flash_status": "USB 四个镜像写入完成，esptool 校验通过；重启后读回版本 0.3.9、ui_alive true。前几次查询超时；保持 DTR/RTS 为 false 并等待 15 秒后读取成功",
+  "flash_log": "firmware-0.3.9-flash.txt",
+  "after_status": "firmware-0.3.9-status.json",
+  "hardware_feature_verification": false,
+  "reported_display_defect": "刷机后用户提供 IMG_6318.HEIC：键盘页出现条带、字符缺笔和旧内容残留；用户补充上一版本已有同样问题。USB ui_alive 为 true 不能证明屏幕显示正常；原因正在调查",
+  "not_verified": [
+    "实际屏幕显示和触摸操作",
+    "真实路由器连接、错误密码恢复和 Agent 不可达后 60 秒回退",
+    "保存后重启和保存期间断电恢复"
+  ]
+}

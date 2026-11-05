@@ -1,0 +1,31 @@
+{
+  "simulation_only": true,
+  "cases": [
+    {"name": "init_lock", "passed": true, "failed_checks": 0},
+    {"name": "heartbeat", "passed": true, "failed_checks": 0},
+    {"name": "layout_matrix", "passed": true, "failed_checks": 0},
+    {"name": "state_fidelity", "passed": true, "failed_checks": 0},
+    {"name": "navigation", "passed": true, "failed_checks": 0},
+    {"name": "wake_on_touch", "passed": true, "failed_checks": 0},
+    {"name": "actions", "passed": true, "failed_checks": 0},
+    {"name": "appearance", "passed": true, "failed_checks": 0},
+    {"name": "reset_restart", "passed": true, "failed_checks": 0},
+    {"name": "idle_and_leaks", "passed": true, "failed_checks": 0},
+    {"name": "orchestration", "passed": true, "failed_checks": 0},
+    {"name": "pairing_page", "passed": true, "failed_checks": 0},
+    {"name": "protect_dialog", "passed": true, "failed_checks": 0},
+    {"name": "protect_tab", "passed": true, "failed_checks": 0},
+    {"name": "protect_flow", "passed": true, "failed_checks": 0},
+    {"name": "appearance_options", "passed": true, "failed_checks": 0},
+    {"name": "no_experimental_word", "passed": true, "failed_checks": 0},
+    {"name": "battery_digits", "passed": true, "failed_checks": 0},
+    {"name": "bolt_in_battery", "passed": true, "failed_checks": 0},
+    {"name": "home_without_actions", "passed": true, "failed_checks": 0},
+    {"name": "pairing_keeps_awake", "passed": true, "failed_checks": 0},
+    {"name": "no_setup_card", "passed": true, "failed_checks": 0},
+    {"name": "ring_info", "passed": true, "failed_checks": 0},
+    {"name": "sound", "passed": true, "failed_checks": 0},
+    {"name": "wifi_keyboard", "passed": true, "failed_checks": 0},
+    {"name": "screenshots", "passed": true, "failed_checks": 0}
+  ]
+}

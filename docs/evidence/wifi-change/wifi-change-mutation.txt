@@ -1,0 +1,10 @@
+baseline exit 0
+caught   empty SSID accepted
+caught   short password accepted
+caught   64 byte nonhex PSK accepted
+caught   ownership ignored
+caught   same SSID not deduplicated
+caught   wrong password never restores
+caught   unreachable computer defaults to keep
+caught   save failure reports success
+mutations: 8 not caught: 0

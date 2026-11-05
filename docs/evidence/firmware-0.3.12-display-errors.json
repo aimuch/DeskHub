@@ -1,0 +1,8 @@
+{
+  "sample_seconds": 30,
+  "errors": [
+    "E (3426) spi_master: spi_device_acquire_bus(1312): Cannot acquire bus when a polling transaction is in progress.",
+    "E (3426) lcd_panel.io.spi: panel_io_spi_tx_param(217): acquire spi bus failed"
+  ],
+  "note": "只保留串口实际收到的指定图形驱动错误；没有收到错误不证明面板正常"
+}

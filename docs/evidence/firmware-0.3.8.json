@@ -48,9 +48,9 @@
   ],
   "flashed": true,
   "flash_record": {
-    "when": "2026-11-02 之前，不是我刷的",
+    "when": "2026-10-31，用户说“刷”之后，由当时的会话刷入",
     "device": "deskhub-44bd8d60c598",
-    "how": "2026-11-02 你说“刷”。设备接上后，我先用 provision.py --identify 读到固件已经是 0.3.8，所以没有再写入。刷机的人和方法我不知道（推测是你自己用 USB 包刷的）",
+    "how": "解压后的 USB 包，包内 flash.py --port /dev/cu.usbmodem21101（ESP-IDF 的 esptool）；esptool 校验数据哈希通过。更正：这里原来写着“不是我刷的，推测是用户刷的”，那是另一个会话不知道这次刷机时写的，是错的（2026-11-05 更正）",
     "result": "2026-11-02 用 esptool verify-flash 只读核对：设备 0x20000 处 4480288 字节与 USB 包里的 deskhub.bin（SHA-256 7247afd4…）一致（digest matched）。只核对了应用镜像，没有核对 bootloader、分区表和 ota_data。配置没有被擦（主题 ocean、旋转 180、充电保护设置都在，config_revision 37）"
   },
   "observed_on_device": {
