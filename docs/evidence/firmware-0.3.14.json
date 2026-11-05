@@ -1,0 +1,62 @@
+{
+  "version": "0.3.14",
+  "built_from": "提交 f62f801（升版）；构建时 firmware/ 目录与该提交一致（之后的提交只改文档和打包说明）",
+  "build_dir": "firmware/build-0.3.14（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.13": [
+    "已存 Wi-Fi 的设备开机不再自动开配对热点（R7 第 1 条）。0.3.13 上读到：热点开着时 Wi-Fi 已断开，热点超时关闭后已连接",
+    "连接页可以开始配对（已配对时写“重新配对”），和长按按键一样打开热点",
+    "换 Wi-Fi 的结果页：不再盖掉失败原因；改回期间写“正在改回”且没有按钮；“取消”留在页面直到有结果；60 秒后写“连不上电脑”；加密方式不一致时回到列表并说明；扫描没完点“完成”时说明（W17 到 W22）",
+    "连接页：写 Wi-Fi 名称，恢复信号行，设备编号只在设备信息页；只有热点真的开着才说是热点的原因",
+    "键盘：提示跟着输入变，数字写 /63（满 64 位十六进制才写 /64），眼睛键在输入框旁边，返回键移出圆角",
+    "Wi-Fi 列表：信号格代替 dBm，名称靠左，去掉重复的返回，写明只显示 2.4 GHz",
+    "设备信息：没有更新时不写 idle，电源正常时不写 ok。显示页写明点一行换下一个值",
+    "新页“日期与时间”：时区（38 个真实偏移，默认 UTC+8，不处理夏令时）、手动校时（写入 RTC）。来源文字“USB 校时”改成“手动校时”"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4527904,
+    "sha256": "667d4e72ee1c915dd8cf36271ed0c00e1eeb8c94a2153d7d017db942a04ea3a4",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 28
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.14-esp32s3.zip",
+      "size_bytes": 2797473,
+      "sha256": "d4ee2fcd1178e071d8f5615056cf406a5edd7f03c6bcda18bf4de15f71ba0949",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.14",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，project_version 是 0.3.14",
+    "解压 USB 包后运行包内 flash.py --check：DeskHub 0.3.14，4 个镜像尺寸与 SHA-256 一致，没有连接设备；包内 deskhub.bin 与构建目录的 SHA-256 相同",
+    "主机测试 16 组、Agent 384 条、tools 116 条、协议检查全部通过",
+    "render.py 恢复：界面流程 28 组和触摸方向回归都通过（全部是模拟数据）",
+    "安全基线文件与归档逐字节相同的检查输出为空",
+    "变异检查全部报红：pairing_glue 51、wifi_change 17、keyboard 11、wifi_keyboard_ui 4、wifi_pages_ui 25、time_ui 25 + 17、sound_ui 4 + 28、header_home_ui 20",
+    "网页管理台的浏览器测试这次没有重跑：Agent 和网页没有改动（上一次 63 项通过）"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到设备。设备上现在是 0.3.13。刷机等用户说“刷”，或用户自己刷",
+    "core 里设置 TZ 的部分只在设备上跑，主机测试只覆盖 tz_env：时区切换后时钟是否马上变，要在真机上看",
+    "屏幕上开始配对、新的连接页、列表、键盘、日期与时间页都没有在真机屏幕上看过；开始配对的请求经过 UI 回调到 pairing_device 任务，这一段没有主机测试",
+    "换 Wi-Fi 的完整流程没有在真实路由器上走过：错误密码、改回、60 秒超时、保存后重启",
+    "手机连热点后的配对流程没有走过；GPIO0 按键没有核对原理图",
+    "时间要等 RTC 和 NTP 在真机上配合确认：手动校时后重启、联网后 NTP 覆盖都没有试",
+    "还没有做：忘记 Wi-Fi、12/24 小时、设备上显示秒数的开关；夜间时段仍然只有几个固定值可选",
+    "设计画布打不开，新画板 Dev-Time 和改过的画板只在仓库里"
+  ],
+  "hardware_verified": false
+}
