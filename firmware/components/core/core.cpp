@@ -90,6 +90,7 @@ static esp_err_t store_blob(const char *ns, uint32_t revision, cJSON *json) {
     if (e == ESP_OK) e = nvs_commit(h);
     nvs_close(h); return e;
 }
+static void apply_time_zone(int minutes) { setenv("TZ",tz_env(minutes).c_str(),1);tzset(); }
 static bool decode_config(cJSON *o, DisplayConfig &c) {
     if (!cJSON_IsObject(o)) return false;
     int brightness = number(o, "brightness", -1), night_cap = number(o, "night_cap", -1);
@@ -101,6 +102,7 @@ static bool decode_config(cJSON *o, DisplayConfig &c) {
     c.clock_s = number(o, "clock_s", 0); c.dim_s = number(o, "dim_s", 0); c.off_s = number(o, "off_s", 0);
     c.night_start = number(o, "night_start", 1440); c.night_end = number(o, "night_end", 1440);
     c.night_enabled = flag(o, "night_enabled", true); c.protection = flag(o, "protection", true);
+    const int tz = number(o, "tz_minutes", kDefaultTzMinutes); c.tz_minutes = valid_tz(tz) ? tz : kDefaultTzMinutes;   // older configurations have none
     auto *layout=cJSON_GetObjectItemCaseSensitive(o,"layout");
     if(layout){
         if(!cJSON_IsObject(layout))return false;
@@ -119,7 +121,7 @@ void core_init() {
     storage_lock = xSemaphoreCreateMutex();
     radio_lock = xSemaphoreCreateMutex();
     config_jobs_init();
-    setenv("TZ", "CST-8", 1); tzset();
+    apply_time_zone(kDefaultTzMinutes);
     uint8_t mac[6]{}; esp_read_mac(mac, ESP_MAC_WIFI_STA);
     char id[32]; snprintf(id, sizeof(id), "deskhub-%02x%02x%02x%02x%02x%02x", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
     state.device_id = id;
@@ -131,7 +133,7 @@ void core_init() {
         for (auto key : {"slot_a", "slot_b"}) {
             cJSON *o = load_slot(h, key); DisplayConfig c;
             if(cJSON_IsObject(o)&&number(o,"schema",0)!=1)schema_unsupported=true;
-            if (decode_config(o, c) && c.revision > display_cfg.revision) display_cfg = c;
+            if (decode_config(o, c) && c.revision > display_cfg.revision) { display_cfg = c; apply_time_zone(c.tz_minutes); }
             cJSON_Delete(o);
         }
         nvs_close(h);
@@ -177,6 +179,7 @@ static esp_err_t persist_config(const DisplayConfig &c) {
     cJSON_AddNumberToObject(o,"night_start",c.night_start); cJSON_AddNumberToObject(o,"night_end",c.night_end);
     cJSON_AddNumberToObject(o,"night_cap",c.night_cap); cJSON_AddBoolToObject(o,"night_enabled",c.night_enabled);
     cJSON_AddBoolToObject(o,"protection",c.protection);
+    cJSON_AddNumberToObject(o,"tz_minutes",c.tz_minutes);
     auto *layout=cJSON_AddObjectToObject(o,"layout");cJSON_AddStringToObject(layout,"preset",c.layout.preset.c_str());cJSON_AddBoolToObject(layout,"show_seconds",c.layout.show_seconds);cJSON_AddBoolToObject(layout,"show_cpu",c.layout.show_cpu);
     cJSON_AddStringToObject(layout,"theme",c.layout.theme.c_str());
     auto *ids=cJSON_AddArrayToObject(layout,"action_ids");for(size_t i=0;i<c.layout.action_count;++i)cJSON_AddItemToArray(ids,cJSON_CreateString(c.layout.action_ids[i].c_str()));
@@ -201,7 +204,7 @@ esp_err_t save_config(const ConfigDraft &draft) {
         // Identity/reset/managed writers are serialized by storage_lock. A Wi-Fi
         // disconnect may advance generation meanwhile, but cannot undo a durable
         // local commit or justify leaving RAM behind its persisted revision.
-        Guard g;display_cfg=std::move(c);
+        Guard g;apply_time_zone(c.tz_minutes);display_cfg=std::move(c);
     }
     return e;
 }
@@ -268,7 +271,7 @@ static esp_err_t reset_config_locked() {
         nvs_handle_t h; auto e = nvs_open(ns,NVS_READWRITE,&h); if (e != ESP_OK) return e;
         e = nvs_erase_all(h); if (e == ESP_OK) e = nvs_commit(h); nvs_close(h); if (e != ESP_OK) return e;
     }
-    auto trusted_key=credentials.update_public_key_pem;credentials = {};credentials.update_public_key_pem=trusted_key; ++credential_generation;display_cfg = {}; state.agent_ready = false; state.action_count = 0;schema_unsupported=false;
+    auto trusted_key=credentials.update_public_key_pem;credentials = {};credentials.update_public_key_pem=trusted_key; ++credential_generation;display_cfg = {};apply_time_zone(kDefaultTzMinutes); state.agent_ready = false; state.action_count = 0;schema_unsupported=false;
     wifi_reconfigure = true; return ESP_OK;
 }
 esp_err_t reset_config() {

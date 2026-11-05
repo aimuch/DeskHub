@@ -288,6 +288,32 @@ void protect_confirm(int limit) {
     request_update();
 }
 void protect_cancel() { request_update(); }
+// Date and time (docs/design Dev-Time).
+void request_time_zone(int delta) {
+    note_activity();
+    auto c = config_due ? pending_config : config();
+    config_due = 0;
+    c.tz_minutes = static_cast<int16_t>(tz_step(c.tz_minutes, delta));
+    last_error = tr(look.lang, save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);
+    desired = Page::Time;
+    rebuilding = true;
+    request_update();
+}
+bool request_time_save(const std::string &utc) {
+    note_activity();
+    const bool ok = !utc.empty() && set_time_utc(utc.c_str(), "manual");
+    if (ok) board_rtc_write(time(nullptr));
+    last_error = tr(look.lang, ok ? Str::TimeSavedDone : Str::SoundNotSaved);
+    rebuilding = true;
+    request_update();
+    return ok;
+}
+void request_time_redraw() {
+    note_activity();
+    last_error.clear();
+    rebuilding = true;
+    request_update();
+}
 void request_pairing() {
     note_activity();
     if (pairing_request) pairing_request();

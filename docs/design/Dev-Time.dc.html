@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备 日期与时间</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{vars}} width: 1000px; height: 620px; display: flex; gap: 40px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; color: var(--ink)">
+  <div style="width: 480px; flex: none">
+    <div style="position: relative; width: 480px; height: 480px; overflow: hidden; background: linear-gradient(160deg, var(--bg), var(--bg2))">
+      <div style="position: absolute; left: 24px; top: 66px; font-size: 26px; font-weight: 500; color: var(--accent)">日期与时间</div>
+      <div style="position: absolute; left: 24px; top: 108px; font-size: 15px; color: var(--muted)">现在 2026-11-05 14:32 · 网络校时</div>
+      <div style="position: absolute; left: 24px; top: 136px; font-size: 15px; color: var(--muted)">时区</div>
+      <div style="position: absolute; left: 24px; top: 160px; width: 432px; height: 56px; display: flex; align-items: center; justify-content: space-between">
+        <span style="width: 56px; height: 56px; box-sizing: border-box; border-radius: 14px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 24px">−</span>
+        <span style="font-size: 22px; font-weight: 500">UTC+8</span>
+        <span style="width: 56px; height: 56px; box-sizing: border-box; border-radius: 14px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 24px">+</span>
+      </div>
+      <div style="position: absolute; left: 24px; top: 226px; font-size: 15px; color: var(--muted)">手动校时</div>
+      <div style="position: absolute; left: 24px; top: 250px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1px solid var(--edge); background: var(--card); display: flex">
+        <sc-for list="{{fields}}" as="f" hint-placeholder-count="5">
+          <span style="flex: 1 1 0; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; background: {{f.bg}}; color: {{f.ink}}">{{f.label}}</span>
+        </sc-for>
+      </div>
+      <div style="position: absolute; left: 24px; top: 316px; width: 432px; display: flex; gap: 12px">
+        <span style="flex: 1 1 0; height: 56px; box-sizing: border-box; border-radius: 14px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 20px">-1</span>
+        <span style="flex: 1 1 0; height: 56px; box-sizing: border-box; border-radius: 14px; border: 1px solid var(--edge); background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 20px">+1</span>
+      </div>
+      <div style="position: absolute; left: 24px; top: 382px; width: 432px; height: 56px; box-sizing: border-box; border-radius: 28px; border: 1.5px solid var(--accent); background: var(--sel); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 500; color: var(--accent)">保存时间</div>
+    </div>
+    <div style="margin-top: 14px; font-size: 14px; line-height: 1.6; color: var(--muted)">① 设置里多一行“日期与时间”。时区：− 和 + 逐个切换真实存在的偏移，马上保存，时钟马上变；默认 UTC+8；不处理夏令时，要人自己改。页面可以上下滚动，“保存时间”下面还有一行说明。</div>
+  </div>
+  <div style="width: 480px; flex: none; font-size: 15px; line-height: 1.8; color: var(--muted)">
+    <div style="font-size: 20px; font-weight: 500; color: var(--ink)">② 手动校时</div>
+    <div>五段是年、月、日、时、分，默认选中“分”。点一段选中它，用 -1 和 +1 改。</div>
+    <div>月、日、时、分到头会回绕；年只能在 2024 到 2099 之间。换月份时，日子超过当月天数就退到月底（1 月 31 日 +1 月 = 2 月 28 日）。</div>
+    <div>只有点“保存时间”才生效，并写入 RTC。成功写“已校时”，时间来源写“手动校时”；失败写“没有保存，请再试一次”，改过的数字保留。</div>
+    <div>联网后 NTP 会覆盖手动时间，所以下面写一行“联网后会用网络时间”。时间无效时，从 2026-01-01 00:00 开始改。</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"mint","options":["mint","ocean","amber"]},"$preview":{"width":1000,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const T = {
+      mint: '--bg:#03100e;--bg2:#082520;--card:#0b1d1a;--edge:#1b3d37;--ink:#e6f7f2;--muted:#8aa8a1;--accent:#5ee6b8;--sel:#103a30;--track:#0f2622;--wifi:#4fd1ff;--agent:#5be38c;--power:#f2b544;--time:#c38bff;',
+      ocean: '--bg:#03131c;--bg2:#062a3a;--card:#0a2130;--edge:#173c50;--ink:#e6f6ff;--muted:#86a9bb;--accent:#4fc3f7;--sel:#0f3a52;--track:#0f2938;--wifi:#4fc3f7;--agent:#4de0b6;--power:#ffc857;--time:#9fa8ff;',
+      amber: '--bg:#120c08;--bg2:#24150a;--card:#1e1510;--edge:#3a2a1f;--ink:#f5e9dc;--muted:#b09a85;--accent:#ff9e4a;--sel:#3a2412;--track:#2a1f17;--wifi:#45c8ea;--agent:#8ddf6c;--power:#ffb347;--time:#db8ff2;'
+    };
+    const labels = ['2026', '11', '05', '14', '32'];
+    return {
+      vars: T[this.props.theme] || T.mint,
+      fields: labels.map((label, i) => ({ label, bg: i === 4 ? 'var(--sel)' : 'transparent', ink: i === 4 ? 'var(--accent)' : 'var(--muted)' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

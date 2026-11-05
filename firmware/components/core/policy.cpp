@@ -1,6 +1,7 @@
 #include "policy.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 namespace dh {
 bool valid_layout(const LayoutConfig &c) {
     if(c.preset!="desk"&&c.preset!="clock"&&c.preset!="focus")return false;
@@ -12,8 +13,30 @@ bool valid_layout(const LayoutConfig &c) {
     return true;
 }
 
+namespace {
+constexpr int kZones[] = {-720, -660, -600, -570, -540, -480, -420, -360, -300, -240, -210, -180, -120, -60, 0, 60, 120, 180, 210, 240,
+                          270, 300, 330, 345, 360, 390, 420, 480, 525, 540, 570, 600, 630, 660, 720, 765, 780, 840};
+constexpr int kZoneCount = static_cast<int>(sizeof(kZones) / sizeof(kZones[0]));
+int zone_index(int minutes) {
+    for (int i = 0; i < kZoneCount; ++i) if (kZones[i] == minutes) return i;
+    return -1;
+}
+}  // namespace
+bool valid_tz(int minutes) { return zone_index(minutes) >= 0; }
+int tz_step(int minutes, int delta) {
+    const int i = zone_index(minutes);
+    if (i < 0) return kDefaultTzMinutes;
+    return kZones[std::min(kZoneCount - 1, std::max(0, i + delta))];
+}
+std::string tz_env(int minutes) {
+    const int size = minutes < 0 ? -minutes : minutes;
+    char text[16];
+    snprintf(text, sizeof(text), "UTC%c%02d:%02d", minutes > 0 ? '-' : '+', size / 60, size % 60);
+    return text;
+}
+
 bool valid_config(const DisplayConfig &c) {
-    return valid_layout(c.layout) && c.schema == 1 && c.rotation<=270 && c.rotation%90==0 && c.brightness <= 100 && c.night_cap <= 100 &&
+    return valid_tz(c.tz_minutes) && valid_layout(c.layout) && c.schema == 1 && c.rotation<=270 && c.rotation%90==0 && c.brightness <= 100 && c.night_cap <= 100 &&
         c.night_start < 1440 && c.night_end < 1440 && c.clock_s >= 5 &&
         c.clock_s <= 86400 && c.dim_s >= c.clock_s && c.dim_s <= 86400 &&
         (c.off_s == 0 || (c.off_s >= c.dim_s && c.off_s <= 86400));

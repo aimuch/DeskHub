@@ -736,6 +736,60 @@ static void t22_quiet_hours() {
 // from what the device knows, the power words from the sample); a power fault read as "no reading"; the order of the rows
 // not the order of the ring (Wi-Fi, computer, power, time); the line under the ring naming the wrong segment, or naming
 // one when all four are lit; a missing English text; any row without a name, a state and a note.
+// ---- T23: the time zone and the time set by hand (docs/design Dev-Time) ----
+// Failure modes: the sign of POSIX TZ is the opposite of what people call the zone, so UTC+8 shown as UTC-8; a step past the end of
+// the table; a stored value that is no zone taken as one; a day that does not exist in the new month (Jan 31 + 1 month); a leap day
+// that is refused, or accepted in a year that has none; the local time saved as if it were UTC; a year the core will refuse offered.
+static void t23_time() {
+    CHECK_EQ(dh::kDefaultTzMinutes, 480);
+    CHECK(dh::valid_tz(480) && dh::valid_tz(0) && dh::valid_tz(330) && dh::valid_tz(345) && dh::valid_tz(-210) && dh::valid_tz(-720) && dh::valid_tz(840));
+    for (int bad : {1, 481, 7, -721, 841, 900, 100000}) CHECK(!dh::valid_tz(bad));
+    { DisplayConfig c; CHECK(dh::valid_config(c)); c.tz_minutes = 7; CHECK(!dh::valid_config(c)); }   // no value that is no zone is saved
+    CHECK_EQ(dh::tz_step(480, 1), 525); CHECK_EQ(dh::tz_step(525, -1), 480); CHECK_EQ(dh::tz_step(480, -1), 420);
+    CHECK_EQ(dh::tz_step(840, 1), 840); CHECK_EQ(dh::tz_step(-720, -1), -720);        // the ends do not wrap
+    CHECK_EQ(dh::tz_step(7, 1), dh::kDefaultTzMinutes);                               // not a zone: back to the default
+    int walked = -720, steps = 0; while (walked != 840 && steps < 60) { const int next = dh::tz_step(walked, 1); CHECK(next > walked); walked = next; ++steps; }
+    CHECK_EQ(walked, 840);
+    CHECK_EQ(dh::tz_env(480), std::string("UTC-08:00")); CHECK_EQ(dh::tz_env(345), std::string("UTC-05:45"));
+    CHECK_EQ(dh::tz_env(-210), std::string("UTC+03:30")); CHECK_EQ(dh::tz_env(0), std::string("UTC+00:00"));
+    CHECK_EQ(dh::tz_env(-720), std::string("UTC+12:00")); CHECK_EQ(dh::tz_env(840), std::string("UTC-14:00"));
+    {   // The C library reads it the way we mean it.
+        const char *old = getenv("TZ"); const std::string saved = old ? old : "";
+        setenv("TZ", dh::tz_env(330).c_str(), 1); tzset();
+        time_t epoch = 0; struct tm local{}; localtime_r(&epoch, &local);
+        CHECK_EQ(local.tm_hour, 5); CHECK_EQ(local.tm_min, 30);
+        if (old) setenv("TZ", saved.c_str(), 1); else unsetenv("TZ");
+        tzset();
+    }
+    CHECK_EQ(tz_label(480), std::string("UTC+8")); CHECK_EQ(tz_label(345), std::string("UTC+5:45"));
+    CHECK_EQ(tz_label(-210), std::string("UTC-3:30")); CHECK_EQ(tz_label(0), std::string("UTC"));
+    // The first numbers: the local time now, or a start when the time is not known.
+    TimeDraft d = time_draft(true, 1793860320, 480);        // 2026-11-05 06:32 UTC
+    CHECK(d.year == 2026 && d.month == 11 && d.day == 5 && d.hour == 14 && d.minute == 32);
+    d = time_draft(true, 1793860320, 0); CHECK(d.hour == 6 && d.minute == 32);
+    d = time_draft(false, 1793860320, 480); CHECK(d.year == 2026 && d.month == 1 && d.day == 1 && d.hour == 0 && d.minute == 0);
+    // Steps: the fields wrap, the year does not, and a day never leaves its month.
+    d = TimeDraft{}; d.month = 1; d.day = 31; time_draft_step(d, 1, 1); CHECK(d.month == 2 && d.day == 28);
+    d = TimeDraft{}; d.year = 2028; d.month = 1; d.day = 31; time_draft_step(d, 1, 1); CHECK(d.month == 2 && d.day == 29);   // a leap year
+    d.year = 2028; d.month = 2; d.day = 29; time_draft_step(d, 0, 1); CHECK(d.year == 2029 && d.day == 28);                 // the leap day goes with the year
+    d = TimeDraft{}; d.month = 12; time_draft_step(d, 1, 1); CHECK(d.month == 1); time_draft_step(d, 1, -1); CHECK(d.month == 12);
+    d = TimeDraft{}; d.month = 4; d.day = 30; time_draft_step(d, 2, 1); CHECK(d.day == 1); time_draft_step(d, 2, -1); CHECK(d.day == 30);
+    d = TimeDraft{}; d.hour = 23; time_draft_step(d, 3, 1); CHECK(d.hour == 0); time_draft_step(d, 3, -1); CHECK(d.hour == 23);
+    d = TimeDraft{}; d.minute = 59; time_draft_step(d, 4, 1); CHECK(d.minute == 0); time_draft_step(d, 4, -1); CHECK(d.minute == 59);
+    d = TimeDraft{}; d.year = 2099; time_draft_step(d, 0, 1); CHECK(d.year == 2099);
+    d.year = 2024; time_draft_step(d, 0, -1); CHECK(d.year == 2024);
+    const TimeDraft before = d; time_draft_step(d, 5, 1); time_draft_step(d, -1, 1); CHECK(d.year == before.year && d.month == before.month && d.minute == before.minute);
+    // Saving: the local time becomes UTC by the zone, across a day and a year; a time the core refuses is not offered.
+    d = TimeDraft{}; d.year = 2026; d.month = 11; d.day = 5; d.hour = 14; d.minute = 32;
+    CHECK_EQ(time_draft_utc(d, 480), std::string("2026-11-05T06:32:00Z"));
+    CHECK_EQ(time_draft_utc(d, -210), std::string("2026-11-05T18:02:00Z"));
+    d = TimeDraft{}; d.year = 2027; d.month = 1; d.day = 1; d.hour = 0; d.minute = 1;
+    CHECK_EQ(time_draft_utc(d, 480), std::string("2026-12-31T16:01:00Z"));
+    d = TimeDraft{}; d.year = 2024; d.month = 1; d.day = 1; CHECK_EQ(time_draft_utc(d, 480), std::string(""));              // 2023 in UTC
+    d = TimeDraft{}; d.year = 2026; d.month = 2; d.day = 30; CHECK_EQ(time_draft_utc(d, 480), std::string(""));             // no such day
+    d = TimeDraft{}; d.year = 2099; d.month = 12; d.day = 31; d.hour = 23; CHECK_EQ(time_draft_utc(d, -720), std::string(""));   // 2100 in UTC
+}
+
 static void t21_ring_info() {
     const Snapshot s = online_snapshot();
     for (Lang l : {Lang::ZhCN, Lang::EnUS}) {
@@ -751,7 +805,7 @@ static void t21_ring_info() {
     // Every segment on its own, and the ring agrees: a row is dark exactly when make_ring says the segment is dark.
     struct Case { int segment; const char *name; const char *state; const char *note; const char *line; };
     const Case cases[] = {{0, "网络", "没连上", nullptr, "网络没连上"}, {1, "电脑", "没连上", nullptr, "电脑没连上"},
-                          {2, "电源", "无读数", "还没有新的电源读数", "电源没有读数"}, {3, "时间", "未校准", "请用 USB 校时", "时间没校准"}};
+                          {2, "电源", "无读数", "还没有新的电源读数", "电源没有读数"}, {3, "时间", "未校准", "请到设置里校时", "时间没校准"}};
     for (const Case &c : cases) {
         Snapshot w = s; PowerState p = fresh_power();
         if (c.segment == 0) { w.wifi_ready = false; w.wifi = "未配置"; }
@@ -961,6 +1015,7 @@ int main() {
     t20_battery_fill_and_rings();
     t21_ring_info();
     t22_quiet_hours();
+    t23_time();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

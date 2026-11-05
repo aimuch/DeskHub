@@ -28,11 +28,17 @@ struct DisplayConfig {
     uint16_t night_end = 7 * 60;
     uint8_t night_cap = 15;
     bool protection = true;
+    int16_t tz_minutes = 480;   // east of UTC; a fixed offset (no daylight saving). Local only: never sent to the Agent.
     LayoutConfig layout;
     uint32_t managed_revision = 0;
     std::string managed_agent_id;
 };
 bool valid_config(const DisplayConfig &c);
+// The time zones the device offers: the offsets in use, from UTC-12 to UTC+14 (docs/design Dev-Time).
+constexpr int kDefaultTzMinutes = 480;
+bool valid_tz(int minutes);
+int tz_step(int minutes, int delta);        // the next offset in the table; stops at the ends; a value that is no zone gives the default
+std::string tz_env(int minutes);            // POSIX TZ, where the sign is the opposite: 480 is "UTC-08:00"
 bool in_night(uint16_t minute, uint16_t start, uint16_t end);
 bool valid_ntp_server(const std::string &);
 uint32_t crc32(const void *data, size_t len);

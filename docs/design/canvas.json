@@ -216,6 +216,13 @@
       "h": 560,
       "title": "设备 · 声音（设置里多一行、关、开、音量三档、没有扬声器）"
     },
+    "Dev-Time.dc.html": {
+      "x": 5600,
+      "y": 1200,
+      "w": 1000,
+      "h": 620,
+      "title": "设备 · 日期与时间（时区、手动校时）"
+    },
     "Dev-HomeEmpty.dc.html": {
       "x": 5040,
       "y": 1200,
@@ -331,6 +338,7 @@
     "Dev-Rings.dc.html",
     "Dev-RingInfo.dc.html",
     "Dev-Sound.dc.html",
+    "Dev-Time.dc.html",
     "Dev-WifiList.dc.html",
     "Dev-Keyboard.dc.html",
     "Dev-WifiResult.dc.html",

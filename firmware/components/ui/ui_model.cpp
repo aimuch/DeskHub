@@ -224,6 +224,47 @@ std::string ring_note(Lang l, const RingInfoView &v) {
 }
 
 // ---- clock ----
+std::string tz_label(int minutes) {
+    if (minutes == 0) return "UTC";
+    const int size = std::abs(minutes);
+    return size % 60 ? fmt("UTC%c%d:%02d", minutes > 0 ? '+' : '-', size / 60, size % 60) : fmt("UTC%c%d", minutes > 0 ? '+' : '-', size / 60);
+}
+static int days_in_month(int year, int month) {
+    static constexpr int kDays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    return month == 2 && leap ? 29 : kDays[month - 1];
+}
+TimeDraft time_draft(bool time_valid, time_t utc_now, int tz_minutes) {
+    TimeDraft d;
+    if (!time_valid) return d;
+    const time_t local = utc_now + static_cast<time_t>(tz_minutes) * 60;
+    struct tm t{};
+    gmtime_r(&local, &t);
+    d.year = t.tm_year + 1900; d.month = t.tm_mon + 1; d.day = t.tm_mday; d.hour = t.tm_hour; d.minute = t.tm_min;
+    return d;
+}
+void time_draft_step(TimeDraft &d, int field, int delta) {
+    const auto wrap = [](int value, int low, int high) { const int span = high - low + 1; return low + ((value - low) % span + span) % span; };
+    switch (field) {
+    case 0: d.year = std::min(2099, std::max(2024, d.year + delta)); break;
+    case 1: d.month = wrap(d.month + delta, 1, 12); break;
+    case 2: d.day = wrap(d.day + delta, 1, days_in_month(d.year, d.month)); break;
+    case 3: d.hour = wrap(d.hour + delta, 0, 23); break;
+    case 4: d.minute = wrap(d.minute + delta, 0, 59); break;
+    default: return;
+    }
+    d.day = std::min(d.day, days_in_month(d.year, d.month));
+}
+std::string time_draft_utc(const TimeDraft &d, int tz_minutes) {
+    if (d.month < 1 || d.month > 12 || d.day < 1 || d.day > days_in_month(d.year, d.month)) return "";
+    struct tm t{};
+    t.tm_year = d.year - 1900; t.tm_mon = d.month - 1; t.tm_mday = d.day; t.tm_hour = d.hour; t.tm_min = d.minute;
+    const time_t utc = timegm(&t) - static_cast<time_t>(tz_minutes) * 60;
+    struct tm u{};
+    gmtime_r(&utc, &u);
+    if (u.tm_year + 1900 < 2024 || u.tm_year + 1900 > 2099) return "";
+    return fmt("%04d-%02d-%02dT%02d:%02d:00Z", u.tm_year + 1900, u.tm_mon + 1, u.tm_mday, u.tm_hour, u.tm_min);
+}
 ClockView make_clock(Lang l, bool time_valid, time_t utc_now) {
     ClockView c;
     if (!time_valid || utc_now < kClockEpoch) {

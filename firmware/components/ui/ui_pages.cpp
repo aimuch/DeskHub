@@ -359,6 +359,7 @@ void build_settings(lv_obj_t *body) {
                         {Str::SettingPower, Str::SettingPowerSub, Page::Power, P().power},
                         {Str::SettingSound, Str::SettingSoundSub, Page::Sound, P().agent},
                         {Str::SettingClock, Str::SettingClockSub, Page::Clock, P().agent},
+                        {Str::SettingTime, Str::SettingTimeSub, Page::Time, P().clock},
                         {Str::SettingDevice, Str::SettingDeviceSub, Page::Device, P().muted}};
     const int h = std::max(72, lh(look.body) + lh(look.caption) + 16);
     for (const Row &r : rows) {
@@ -604,6 +605,70 @@ void build_sound(lv_obj_t *body, const Frame &) {
     }
 }
 void refresh_sound(const Frame &f) { set_optional_text(w.error, f.last_error); }
+
+// ---- Date and time (docs/design Dev-Time) ----
+// The numbers belong to the visit: a rebuild keeps them, another page starts them over from the time now.
+TimeDraft g_time_draft;
+int g_time_field = 4;
+bool g_time_seeded = false;
+std::vector<lv_obj_t *> g_time_fields;
+void build_time(lv_obj_t *body, const Frame &f) {
+    if (!g_time_seeded) { g_time_draft = time_draft(f.s.time_valid, f.wall, f.c.tz_minutes); g_time_field = 4; g_time_seeded = true; }
+    heading(body, T(Str::TimeTitle), P().clock);
+    w.meta = caption(body, "", P().muted);
+    section(body, T(Str::TimeZoneLabel));
+    auto *zone = holder(body, kContentW, 56);
+    const auto stepper = [](lv_obj_t *parent, const char *symbol, int x, int delta) {
+        auto *b = button(parent, [](lv_event_t *e) { g_time_seeded = false; request_time_zone(data_of(e) ? 1 : -1); }, data(delta > 0 ? 1 : 0), 56, 56);
+        lv_obj_set_pos(b, x, 0);
+        lv_obj_set_style_radius(b, 14, 0);
+        auto *l = label(b, symbol, 40, &lv_font_montserrat_24, P().ink);
+        centered(l);
+        lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    };
+    stepper(zone, LV_SYMBOL_MINUS, 0, -1);
+    stepper(zone, LV_SYMBOL_PLUS, kContentW - 56, 1);
+    auto *name = label_at(zone, tz_label(f.c.tz_minutes), 64, (56 - lh(look.body)) / 2, kContentW - 128, look.body, P().ink);
+    centered(name);
+    section(body, T(Str::TimeSetLabel));
+    char text[5][8];
+    snprintf(text[0], sizeof(text[0]), "%04d", g_time_draft.year);
+    snprintf(text[1], sizeof(text[1]), "%02d", g_time_draft.month);
+    snprintf(text[2], sizeof(text[2]), "%02d", g_time_draft.day);
+    snprintf(text[3], sizeof(text[3]), "%02d", g_time_draft.hour);
+    snprintf(text[4], sizeof(text[4]), "%02d", g_time_draft.minute);
+    g_time_fields.clear();
+    segmented(body, {text[0], text[1], text[2], text[3], text[4]}, g_time_field, [](lv_event_t *e) { g_time_field = data_of(e); request_time_redraw(); }, {0, 1, 2, 3, 4},
+              {look.body, look.body, look.body, look.body, look.body}, &g_time_fields);
+    auto *steps = holder(body, kContentW, 56);
+    for (int i = 0; i < 2; ++i) {
+        auto *b = button(steps, [](lv_event_t *e) { time_draft_step(g_time_draft, g_time_field, data_of(e) ? 1 : -1); request_time_redraw(); }, data(i), (kContentW - 12) / 2, 56);
+        lv_obj_set_pos(b, i * (kContentW + 12) / 2, 0);
+        lv_obj_set_style_radius(b, 14, 0);
+        auto *l = label(b, i ? "+1" : "-1", 80, look.body, P().ink);
+        centered(l);
+        lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    }
+    auto *save = button(body, [](lv_event_t *) { if (request_time_save(time_draft_utc(g_time_draft, config().tz_minutes))) g_time_seeded = false; }, data(0), kContentW, 56);
+    lv_obj_set_style_radius(save, 28, 0);
+    select(save, true, false);
+    auto *sl = label(save, T(Str::TimeSave), kContentW - 8, look.body, P().accent);
+    centered(sl);
+    lv_obj_align(sl, LV_ALIGN_CENTER, 0, 0);
+    w.error = caption(body, "", P().power);
+    set_optional_text(w.error, "");
+    caption(body, T(Str::TimeNote), P().muted);
+}
+void refresh_time(const Frame &f) {
+    if (f.s.time_valid) {
+        struct tm t{};
+        localtime_r(&f.wall, &t);
+        char now[48];
+        snprintf(now, sizeof(now), "%s %04d-%02d-%02d %02d:%02d", T(Str::TimeNow).c_str(), t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min);
+        set_text(w.meta, now);
+    } else set_text(w.meta, T(Str::TimeUnset));
+    set_optional_text(w.error, f.last_error);
+}
 
 // ---- Display ----
 void build_display(lv_obj_t *body, const Frame &f) {
@@ -867,6 +932,7 @@ int body_scroll_y() { return g_body ? lv_obj_get_scroll_y(g_body) : 0; }
 
 void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     g_body = body;
+    if (page != Page::Time) g_time_seeded = false;
     w = Widgets{};
     ring = Ring{};
     lv_obj_clean(body);
@@ -888,6 +954,7 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     case Page::Connect: build_connect(body, f); break;
     case Page::Appearance: build_appearance(body, f); break;
     case Page::Sound: build_sound(body, f); break;
+    case Page::Time: build_time(body, f); break;
     case Page::Display: build_display(body, f); break;
     case Page::Clock: build_clock(body); break;
     case Page::Device: build_device(body, f); break;
@@ -906,6 +973,7 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     case Page::Connect: refresh_connect(f); break;
     case Page::Appearance: refresh_appearance(f); break;
     case Page::Sound: refresh_sound(f); break;
+    case Page::Time: refresh_time(f); break;
     case Page::Display: refresh_display(f); break;
     case Page::Clock: refresh_clock(f); break;
     case Page::Device: refresh_device(f); break;
@@ -1151,14 +1219,20 @@ static bool dimmed(const std::vector<lv_obj_t *> &parts) {
     return !parts.empty() && lv_obj_get_style_opa(lv_obj_get_parent(parts[0]), LV_PART_MAIN) < LV_OPA_COVER;
 }
 bool sound_controls_dimmed() { return current_page() == Page::Sound && dimmed(g_sound_switch) && dimmed(g_sound_volume); }
-static int selected_of(const std::vector<lv_obj_t *> &parts) {
-    if (current_page() != Page::Sound) return -1;
+static int selected_of(const std::vector<lv_obj_t *> &parts, Page page = Page::Sound) {
+    if (current_page() != page) return -1;
     for (size_t i = 0; i < parts.size(); ++i)
         if (lv_obj_get_style_border_width(parts[i], LV_PART_MAIN) == 2) return static_cast<int>(i);   // the selected part has the border
     return -1;
 }
 int sound_selected() { return selected_of(g_sound_switch); }
 int sound_volume_selected() { return selected_of(g_sound_volume); }
+int time_field_selected() { return selected_of(g_time_fields, Page::Time); }
+std::string time_draft_text() {
+    char text[24];
+    snprintf(text, sizeof(text), "%04d-%02d-%02d %02d:%02d", g_time_draft.year, g_time_draft.month, g_time_draft.day, g_time_draft.hour, g_time_draft.minute);
+    return text;
+}
 bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice_dot, x1, y1, x2, y2); }
 bool ring_info_dot_filled(int i) { return ring_info_open() && i >= 0 && i < 4 && g_ring_dots[i] && lv_obj_get_style_bg_opa(g_ring_dots[i], LV_PART_MAIN) == LV_OPA_COVER; }
 bool notice_dot_shown() { return visible(w.notice_dot); }

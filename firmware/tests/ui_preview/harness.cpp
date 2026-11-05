@@ -104,6 +104,9 @@ static bool charge_apply_ok = true;
 static unsigned charge_applies = 0;
 static bool power_auto = true;
 static bool mock_paired = true;
+static std::string mock_time_set;
+static bool mock_time_ok = true;
+static int mock_rtc_writes = 0;
 static int mock_brightness = -1;
 static esp_err_t mock_brightness_result = ESP_OK, mock_rotation_result = ESP_OK, mock_save_result = ESP_OK, mock_lock_result = ESP_OK;
 static int mock_rotation = 0;
@@ -140,6 +143,8 @@ esp_err_t save_config(DisplayConfig value) {
     return ESP_OK;
 }
 esp_err_t reset_config() { ++reset_calls; mock_config = {}; return ESP_OK; }
+bool set_time_utc(const char *s, const char *quality) { if (!mock_time_ok || strcmp(quality, "manual")) return false; mock_time_set = s; return true; }
+bool board_rtc_write(time_t) { ++mock_rtc_writes; return true; }
 Secrets secrets() {
     Secrets s;
     if (mock_paired) { s.ssid = "Office"; s.url = "https://x"; s.token = "t"; s.ca_pem = "p"; }
@@ -550,12 +555,12 @@ static void save_png_source(const std::string &name) {
 
 using detail::Page;
 using detail::PowerTab;
-static const std::array<std::pair<Page, PowerTab>, 13> kViews = {{
+static const std::array<std::pair<Page, PowerTab>, 14> kViews = {{
     {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Computer, PowerTab::Level}, {Page::Settings, PowerTab::Level},
     {Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Readings}, {Page::Power, PowerTab::Protect}, {Page::Connect, PowerTab::Level},
-    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}}};
+    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}, {Page::Time, PowerTab::Level}}};
 static const char *view_name(size_t i) {
-    static const char *n[] = {"home", "actions", "computer", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound"};
+    static const char *n[] = {"home", "actions", "computer", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time"};
     return n[i];
 }
 
@@ -619,7 +624,7 @@ static void case_matrix() {
                     dh::ui_pairing_hide(); step();
                 }
             }
-    EXPECT(views == 3 * 2 * 3 * 13);
+    EXPECT(views == 3 * 2 * 3 * 14);
 }
 static void case_state_fidelity() {
     using detail::header_battery_text;
@@ -721,7 +726,7 @@ static void case_navigation() {
     tap(380, 30); EXPECT(detail::current_page() == Page::Power);         // header right
     click_nav(3);
     struct Row { const char *label; Page page; };
-    for (Row r : {Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"声音", Page::Sound}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
+    for (Row r : {Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"声音", Page::Sound}, Row{"日期与时间", Page::Time}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
         click_nav(3);
         EXPECT(detail::current_page() == Page::Settings);
         EXPECT(click_text(r.label));
@@ -1388,6 +1393,50 @@ static void case_sound() {   // A25
 // A26 failure cases written before implementation: real pointer press/release,
 // secret masking on press-lost/sleep/exit; disabled completion; every ASCII page;
 // unsupported AP, open network, manual SSID, backend outcomes and timeout.
+//  A29 Date and time (docs/design Dev-Time): a row in Settings; the zone is saved at once and a failed save leaves it as it was and
+//      says so; the five numbers change only on this page until "save time"; a field is chosen by a tap and the others stay; saving
+//      turns the local time into UTC by the zone and writes the RTC; a refused time keeps the numbers and says so.
+static void case_time() {
+    fresh(); step(); step();
+    click_nav(3); EXPECT(has("日期与时间") && has("时区、手动校时"));
+    EXPECT(click_text("日期与时间")); step(); EXPECT(detail::current_page() == Page::Time);
+    EXPECT(has("时区") && has("手动校时") && has("UTC+8") && has("保存时间") && has("-1") && has("+1"));
+    check_layout("time"); check_targets("time");
+    // The zone.
+    EXPECT(mock_config.tz_minutes == 480);
+    EXPECT(click_text(LV_SYMBOL_PLUS)); step();
+    EXPECT(mock_config.tz_minutes == 525 && has("UTC+8:45") && has("已保存"));
+    EXPECT(click_text(LV_SYMBOL_MINUS)); step(); EXPECT(mock_config.tz_minutes == 480 && has("UTC+8"));
+    mock_save_result = ESP_FAIL;
+    EXPECT(click_text(LV_SYMBOL_MINUS)); step();
+    EXPECT(mock_config.tz_minutes == 480 && has("UTC+8") && has("保存失败"));
+    mock_save_result = ESP_OK;
+    for (int i = 0; i < 30; ++i) { EXPECT(click_text(LV_SYMBOL_PLUS)); step(); }
+    EXPECT(mock_config.tz_minutes == 840 && has("UTC+14"));      // the end of the table
+    // The numbers: from the start when the time is not known; the minute is chosen first.
+    fresh(); mock_snapshot.time_valid = false; mock_time_set.clear(); mock_rtc_writes = 0; mock_time_ok = true; goto_view(Page::Time); step();
+    EXPECT(detail::time_draft_text() == "2026-01-01 00:00" && detail::time_field_selected() == 4);
+    EXPECT(click_text("+1")); step(); EXPECT(detail::time_draft_text() == "2026-01-01 00:01" && mock_time_set.empty() && mock_rtc_writes == 0);
+    EXPECT(click_text("2026")); step(); EXPECT(detail::time_field_selected() == 0 && detail::time_draft_text() == "2026-01-01 00:01");
+    EXPECT(click_text("+1")); step(); EXPECT(detail::time_draft_text() == "2027-01-01 00:01");
+    EXPECT(click_text("-1")); step(); EXPECT(click_text("+1")); step(); EXPECT(detail::time_draft_text() == "2027-01-01 00:01");
+    // A refused time keeps the numbers.
+    mock_time_ok = false; EXPECT(click_text("保存时间")); step();
+    EXPECT(has("没有保存，请再试一次") && detail::time_draft_text() == "2027-01-01 00:01" && mock_rtc_writes == 0);
+    mock_time_ok = true; EXPECT(click_text("保存时间")); step();
+    EXPECT(mock_time_set == "2026-12-31T16:01:00Z" && mock_rtc_writes == 1 && has("已校时") && !has("没有保存，请再试一次"));
+    // Another page and back: the numbers start over from the time now.
+    goto_view(Page::Settings); step(); EXPECT(detail::time_field_selected() == -1);
+    goto_view(Page::Time); step(); EXPECT(detail::time_draft_text() == "2026-01-01 00:00" && detail::time_field_selected() == 4);
+    // The source of the time says what it is; the hints do not send the person to USB only.
+    fresh(); mock_snapshot.time_valid = true; mock_snapshot.time_quality = "manual"; goto_view(Page::Clock); step(); EXPECT(has("手动校时"));
+    fresh(); mock_snapshot.time_valid = false; goto_view(Page::Clock); step(); EXPECT(has("时间无效，请到设置里校时"));
+    // English.
+    fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Time); step();
+    EXPECT(has("Date and time") && has("Time zone") && has("Set the time") && has("Save time"));
+    check_layout("time-en");
+    fresh("mint|-|en-US|large|pct|standard"); goto_view(Page::Time); step(); check_layout("time-en-large"); check_targets("time-en-large");
+}
 static void case_wifi_pages() {   // W17 to W22, the list, the line under the field, the Connect page
     const auto typing = [] { fresh(); wifi_state = {}; wifi_hotspot = false; wifi_allowed = true; wifi_begin_ok = true; wifi_begins = wifi_reverts = 0; goto_view(Page::Connect); };
     typing(); step();
@@ -1587,7 +1636,7 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

@@ -16,7 +16,7 @@ LV_FONT_DECLARE(btr_ui_28);
 LV_FONT_DECLARE(font_clock_72);
 
 namespace dh::ui::detail {
-enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound };
+enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time };
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
 // The panel has rounded corners (Waveshare does not publish the radius). Text and marks in the four corners must stay
@@ -114,6 +114,9 @@ void request_sound_set(bool on);     // the switch of the sound page
 void request_sound_test();           // "listen"
 void request_sound_volume(int level);   // a level of the volume: stored, then one test tone at it
 void wifi_open();
+void request_time_zone(int delta);    // the next or the previous zone: saved at once
+bool request_time_save(const std::string &utc);   // false: not set, and the page says so
+void request_time_redraw();
 void request_pairing();              // "pair" on the Connect page: asks the backend for the hotspot
 void wifi_close();
 bool wifi_opened();
@@ -147,6 +150,8 @@ bool home_ring_area(int *x1, int *y1, int *x2, int *y2);     // the ring of the 
 bool home_notice_area(int *x1, int *y1, int *x2, int *y2);
 bool sound_controls_dimmed();        // the switch of the sound page is drawn dimmed (no speaker)
 int sound_selected();                // 0 off, 1 on: which half of the switch of the sound page is selected; -1 when that page is not shown
+int time_field_selected();           // the chosen number on the Date and time page; -1 when that page is not shown
+std::string time_draft_text();       // "2026-01-01 00:00": what the numbers on that page say
 int sound_volume_selected();         // the selected level of the volume on the sound page; -1 when that page is not shown
 bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2);   // the dot before the line (false when it is not shown)
 bool header_slashed(int which);     // 0 Wi-Fi, 1 computer, 2 battery: the slash is drawn

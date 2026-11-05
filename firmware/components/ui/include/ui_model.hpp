@@ -75,6 +75,12 @@ bool quiet_hours(const DisplayConfig &, bool time_valid, uint16_t minute_of_day)
 // ---- clock ----
 struct ClockView { bool valid = false; std::string hhmm = "--:--", seconds, date; };
 ClockView make_clock(Lang, bool time_valid, time_t utc_now);  // local time through the TZ the core set
+std::string tz_label(int minutes);   // "UTC+8", "UTC+5:45", "UTC-3:30", "UTC"
+// The numbers of "set the time" on the Date and time page. Field: 0 year, 1 month, 2 day, 3 hour, 4 minute.
+struct TimeDraft { int year = 2026, month = 1, day = 1, hour = 0, minute = 0; };
+TimeDraft time_draft(bool time_valid, time_t utc_now, int tz_minutes);    // the local time now; a start when the time is not known
+void time_draft_step(TimeDraft &, int field, int delta);                  // wraps, except the year (2024 to 2099); the day stays in its month
+std::string time_draft_utc(const TimeDraft &, int tz_minutes);            // "2026-11-05T06:32:00Z"; empty for a time that does not exist or that the core refuses
 
 // ---- computer ----
 struct Gauge { bool valid = false; float percent = 0; std::string text = "--"; };
