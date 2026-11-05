@@ -23,4 +23,12 @@ bool store_save(const std::string &text) {
     nvs_close(h);
     return ok;
 }
+bool store_clear() {
+    nvs_handle_t h;
+    if (nvs_open(kNamespace, NVS_READWRITE, &h) != ESP_OK) return false;
+    const esp_err_t e = nvs_erase_key(h, kKey);
+    const bool ok = (e == ESP_OK || e == ESP_ERR_NVS_NOT_FOUND) && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    return ok;
+}
 }  // namespace dh::ui

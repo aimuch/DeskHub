@@ -8,4 +8,6 @@ namespace dh::ui {
 std::string store_load();
 // true only when the value is durably written.
 bool store_save(const std::string &);
+// Factory reset: forget it. true when nothing is stored afterwards (also when nothing was stored before).
+bool store_clear();
 }  // namespace dh::ui

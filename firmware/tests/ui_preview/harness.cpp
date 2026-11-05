@@ -104,6 +104,7 @@ static bool charge_apply_ok = true;
 static unsigned charge_applies = 0;
 static bool power_auto = true;
 static bool mock_paired = true;
+static esp_err_t mock_reset_result = ESP_OK;
 static std::string mock_time_set;
 static bool mock_time_ok = true;
 static int mock_rtc_writes = 0;
@@ -142,7 +143,7 @@ esp_err_t save_config(DisplayConfig value) {
     mock_config = value;
     return ESP_OK;
 }
-esp_err_t reset_config() { ++reset_calls; mock_config = {}; return ESP_OK; }
+esp_err_t reset_config() { ++reset_calls; if (mock_reset_result != ESP_OK) return mock_reset_result; mock_config = {}; return ESP_OK; }
 bool set_time_utc(const char *s, const char *quality) { if (!mock_time_ok || strcmp(quality, "manual")) return false; mock_time_set = s; return true; }
 bool board_rtc_write(time_t) { ++mock_rtc_writes; return true; }
 Secrets secrets() {
@@ -173,6 +174,7 @@ bool set_enabled(bool on) {
     return true;
 }
 int volume() { return audio_volume; }
+bool reset_settings() { if (!audio_store_ok) return false; audio_enabled = false; audio_volume = 0; return true; }
 bool set_volume(int level) {
     if (!audio_store_ok || level < 0 || level >= kVolumeLevels) return false;
     audio_volume = level;
@@ -199,6 +201,7 @@ bool agent_submit(const Action &) {
 }
 namespace ui {
 std::string store_load() { return stored_text; }
+bool store_clear() { if (!store_ok) return false; stored_text.clear(); return true; }
 bool store_save(const std::string &text) {
     ++store_saves;
     if (!store_ok) return false;
@@ -387,7 +390,7 @@ static void reset_world() {
     mock_brightness = -1; mock_rotation = 0;
     mock_brightness_result = mock_rotation_result = mock_save_result = mock_lock_result = ESP_OK;
     rotation_calls = brightness_calls = save_calls = reset_calls = submit_calls = lock_calls = unlock_calls = restart_calls = 0;
-    submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0;
+    submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0; mock_reset_result = ESP_OK;
     audio_available = true; audio_enabled = false; audio_store_ok = true; audio_tests = audio_paired = audio_volume = 0; audio_commands.clear(); audio_test_levels.clear();
 }
 static void start_ui() {
@@ -845,6 +848,24 @@ static void case_reset_restart() {
     click_text("恢复出厂设置");
     click_text("再次点击确认删除");
     EXPECT(reset_calls == 1 && contains("已删除本机配置"));
+    // F1 to F4: a factory reset also forgets the sound and the appearance, which live apart from the configuration.
+    // F1 the sound is off and low again; F2 the appearance is the default on the screen and in the store;
+    // F3 a configuration that could not be erased leaves both as they were; F4 a sound or appearance that could not be
+    // erased is said, and the rest is still erased.
+    fresh("ocean|4fc3f7|en-US|large|pct|thick"); audio_enabled = true; audio_volume = 2; goto_view(Page::Device);
+    EXPECT(click_text("Factory reset")); EXPECT(click_text("Tap again to erase")); step();
+    EXPECT(reset_calls == 1 && !audio_enabled && audio_volume == 0 && stored_text.empty());
+    EXPECT(ui::serialize(detail::current_appearance()) == ui::serialize(dh::ui::Appearance{}));
+    EXPECT(contains("已删除本机配置"));                       // the page is in Chinese again, the default
+    fresh("ocean|4fc3f7|zh-CN|standard|pct|standard"); audio_enabled = true; audio_volume = 1; mock_reset_result = ESP_FAIL; goto_view(Page::Device);
+    click_text("恢复出厂设置"); click_text("再次点击确认删除"); step();
+    EXPECT(has("配置删除失败") && audio_enabled && audio_volume == 1 && stored_text == "ocean|4fc3f7|zh-CN|standard|pct|standard");
+    fresh("ocean|4fc3f7|zh-CN|standard|pct|standard"); audio_enabled = true; audio_store_ok = false; goto_view(Page::Device);
+    click_text("恢复出厂设置"); click_text("再次点击确认删除"); step();
+    EXPECT(has("配置已删除，但声音或外观没有清除，请再试一次") && stored_text.empty());
+    fresh("ocean|4fc3f7|zh-CN|standard|pct|standard"); store_ok = false; audio_enabled = true; goto_view(Page::Device);
+    click_text("恢复出厂设置"); click_text("再次点击确认删除"); step();
+    EXPECT(has("配置已删除，但声音或外观没有清除，请再试一次") && !audio_enabled);
     fresh();
     goto_view(Page::Device);
     click_text("重启设备");

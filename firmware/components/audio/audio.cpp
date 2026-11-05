@@ -91,6 +91,15 @@ bool set_enabled(bool on) {
 
 int volume() { return g_volume.load(); }
 
+bool reset_settings() {
+    nvs_handle_t h;
+    if (nvs_open(kNamespace, NVS_READWRITE, &h) != ESP_OK) return false;
+    const bool ok = nvs_erase_all(h) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    if (ok) { g_enabled.store(false); g_volume.store(0); }
+    return ok;
+}
+
 bool set_volume(int level) {
     if (level < 0 || level >= kVolumeLevels) return false;
     const bool ok = store(kVolumeKey, serialize_volume(level));

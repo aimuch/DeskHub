@@ -11,6 +11,7 @@ bool enabled();                 // the setting "sounds on"; off by default
 bool set_enabled(bool);         // false when it could not be stored; the setting is then unchanged
 int volume();                   // the level, 0 low (default) to kVolumeLevels - 1; every tone plays at it
 bool set_volume(int level);     // false for a level out of range or one that could not be stored; the level is then unchanged
+bool reset_settings();          // factory reset: off and low again. false when the stored values could not be erased
 // The person pressed "listen": plays a confirm tone, whatever the setting and the night. false: no speaker, or too soon after the last.
 bool test();
 // A command text of the snapshot, or the end of a pairing: plays when the rules allow it. `quiet_hours`: the night limit is on now.

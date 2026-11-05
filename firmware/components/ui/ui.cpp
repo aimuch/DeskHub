@@ -365,7 +365,10 @@ void do_restart() { esp_restart(); }
 void do_factory_reset() {
     if (!confirm_reset) { confirm_reset = true; rebuilding = true; request_update(); return; }
     if (reset_config() == ESP_OK) {
-        last_error = tr(look.lang, Str::ResetDone);  // stay on the page, so the message is read
+        // The sound and the appearance live in namespaces of their own, apart from the configuration: forget them too.
+        const bool sound = audio::reset_settings(), shown = store_clear();
+        if (shown) { appearance = Appearance{}; look = make_look(appearance); look_dirty = true; }
+        last_error = tr(look.lang, sound && shown ? Str::ResetDone : Str::ResetPartial);  // stay on the page, so the message is read
         confirm_reset = false;
     } else last_error = tr(look.lang, Str::ResetFailed);
     rebuilding = true;
