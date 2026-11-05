@@ -14,6 +14,9 @@
 // G4  The redemption request is the three members of the Agent's contract and nothing more, built from checked values.
 // G5  The page is small, posts to /setup, carries the five members, has no external address, no cookie, no script
 //     source, and asks the phone for its clock.
+// G6  The hotspot opens by itself only on a device with no Wi-Fi stored: a device that has one (paired, or set with the
+//     keyboard and not paired) would lose its network for five minutes after every start, seen on a device on 2026-11-05.
+//     It opens once, not again after it timed out, and not before the grace period.
 #include "pairing_glue.hpp"
 #include <cstdio>
 #include <string>
@@ -163,12 +166,25 @@ static void g5_page() {
     CHECK(answer.find("已收到") != std::string::npos && refused.find("没有接受") != std::string::npos && answer.find("没有接受") == std::string::npos && refused.find("已收到") == std::string::npos);
 }
 
+static void g6_auto_open() {
+    const int64_t grace = 8000;
+    CHECK(auto_open_hotspot(false, false, 8000, grace));           // no Wi-Fi: opens at the end of the grace period
+    CHECK(auto_open_hotspot(false, false, 60000, grace));
+    CHECK(!auto_open_hotspot(false, false, 7999, grace));          // not before
+    CHECK(!auto_open_hotspot(false, false, 0, grace));
+    CHECK(!auto_open_hotspot(false, true, 60000, grace));          // once: not again after it timed out
+    CHECK(!auto_open_hotspot(true, false, 8000, grace));           // a stored Wi-Fi keeps the network
+    CHECK(!auto_open_hotspot(true, false, 600000, grace));
+    CHECK(!auto_open_hotspot(true, true, 600000, grace));
+}
+
 int main() {
     g1_form();
     g2_tls();
     g3_peer();
     g4_request();
     g5_page();
+    g6_auto_open();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

@@ -22,7 +22,7 @@ using namespace dh::pairing;
 
 // BOOT, active low. The board schematic was not at hand: this pin is an assumption (docs/pairing-design.md section 13).
 constexpr gpio_num_t kButton = GPIO_NUM_0;
-constexpr int64_t kBootGraceMs = 8000;   // an unpaired device opens its hotspot this long after boot, once
+constexpr int64_t kBootGraceMs = 8000;   // a device with no Wi-Fi stored opens its hotspot this long after boot, once
 constexpr int kMaxSaveRetries = 3;       // a failing flash is not written to for the rest of the window
 constexpr int kJoinTimeoutMs = 20000;
 
@@ -158,8 +158,9 @@ void connect_and_redeem() {
 void service(int64_t now) {
     xSemaphoreTake(lock, portMAX_DELAY);
     if (!active) {
-        const bool paired = dh::secrets().ready();
-        const bool boot_open = !paired && !auto_tried && now >= kBootGraceMs;
+        const auto stored = dh::secrets();
+        const bool paired = stored.ready();
+        const bool boot_open = dh::pairing::auto_open_hotspot(!stored.ssid.empty(), auto_tried, now, kBootGraceMs);
         if (want_open || boot_open) {
             if (boot_open) auto_tried = true;
             begin(now, paired, want_open);

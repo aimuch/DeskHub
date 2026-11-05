@@ -23,6 +23,10 @@ FormError parse_form(const std::string &body, FormFields &out);
 // The verdict of a TLS handshake from the verify flags (mbedTLS: 0x01 expired, 0x02 revoked, 0x04 name, 0x08 not trusted).
 Tls tls_from_flags(bool connected, int flags);
 
+// Whether the hotspot opens by itself at boot (docs/rules.md R7): only when no Wi-Fi is stored, once, after the grace period.
+// A device that has a Wi-Fi would lose it while the hotspot owns the radio; a person opens the hotspot on such a device.
+bool auto_open_hotspot(bool has_wifi, bool already_tried, int64_t now_ms, int64_t grace_ms);
+
 // Host order. A zero network or a zero mask matches nothing.
 bool ipv4_in_subnet(uint32_t addr, uint32_t network, uint32_t mask);
 

@@ -90,6 +90,10 @@ FormError parse_form(const std::string &body, FormFields &out) {
     return FormError::None;
 }
 
+bool auto_open_hotspot(bool has_wifi, bool already_tried, int64_t now_ms, int64_t grace_ms) {
+    return !has_wifi && !already_tried && now_ms >= grace_ms;
+}
+
 Tls tls_from_flags(bool connected, int flags) {
     if (flags == 0) return connected ? Tls::Ok : Tls::Unreachable;
     if (flags & 0x08) return Tls::ChainInvalid;       // not trusted: the rest is noise

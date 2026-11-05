@@ -62,6 +62,12 @@ M = [
     ("the page lets the phone remember", G, 'autocomplete=\\"off\\" spellcheck=\\"false\\" required></textarea>', 'spellcheck=\\"false\\" required></textarea>'),
     ("the page has no code field", G, 'name=\\"code\\"', 'name=\\"c\\"'),
     ("the answers are the same", G, '(accepted ? "<h1>已收到</h1>', '(!accepted ? "<h1>已收到</h1>'),
+    # the hotspot at boot
+    ("a stored Wi-Fi still opens the hotspot", G, "return !has_wifi && !already_tried && now_ms >= grace_ms;", "(void)has_wifi; return !already_tried && now_ms >= grace_ms;"),
+    ("the hotspot opens again after it timed out", G, "return !has_wifi && !already_tried && now_ms >= grace_ms;", "(void)already_tried; return !has_wifi && now_ms >= grace_ms;"),
+    ("the hotspot opens before the grace period", G, "return !has_wifi && !already_tried && now_ms >= grace_ms;", "(void)now_ms; (void)grace_ms; return !has_wifi && !already_tried;"),
+    ("the hotspot never opens by itself", G, "return !has_wifi && !already_tried && now_ms >= grace_ms;", "return false && !has_wifi && !already_tried && now_ms >= grace_ms;"),
+    ("the end of the grace period is missed", G, "now_ms >= grace_ms;", "now_ms > grace_ms;"),
 ]
 
 if __name__ == "__main__":
