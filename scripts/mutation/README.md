@@ -21,6 +21,7 @@ scripts/mutation/wifi_change.py         # 换 Wi-Fi 的状态机：改 wifi_chan
 scripts/mutation/keyboard.py            # 软键盘：改 ui_keyboard.hpp，跑 keyboard_test
 scripts/mutation/wifi_keyboard_ui.py    # 键盘的触屏流程：改 ui_wifi.cpp、ui_keyboard.hpp，跑界面预览
 scripts/mutation/wifi_pages_ui.py       # 结果页、列表、连接页、设备信息页：跑界面预览
+scripts/mutation/factory_reset_ui.py    # 恢复出厂也清掉声音和外观：改 ui.cpp，跑界面预览
 scripts/mutation/time_ui.py             # 时区和手动校时：改 policy.cpp、ui_model.cpp、ui_pages.cpp、ui.cpp，跑 ui_model_test 和界面预览
 scripts/mutation/create_tls_reuse.py    # 证书续期：改 tools/create_tls.py 的 --ca-dir，跑 test_create_tls_reuse.py
 scripts/mutation/admin_password.py      # 管理员密码：改 admin_auth.py、management.py、cli.py，跑 test_admin_password.py

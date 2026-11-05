@@ -72,8 +72,9 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/main/`、`tools/provision.py`、`tools/tests/test_provision_wifi_change.py` | USB 状态加只读的 `wifi_change`；无线被占用时 USB 配对回 BUSY |
 | `firmware/tests/`（`CMakeLists.txt`、`keyboard_test.cpp`、`wifi_change_test.cpp`、`ui_preview/`） | 键盘、换网状态机和触屏流程的测试 |
 | `firmware/components/core/`（`core.cpp`、`policy.cpp`、`policy.hpp`）、`firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/` | 时区：配置多一个 `tz_minutes`（只在设备上，不发给 Agent），开机、保存、恢复出厂时设置 TZ；T23、A29 |
+| `firmware/tests/ui_preview/harness.cpp` | 恢复出厂的 F1 到 F4：声音和外观也被清掉，删不掉时要说 |
 | `scripts/ui_preview/touch_orientation_test.cpp` | 补上显示锁的替身：0.3.13 以后 `render.py` 整条命令链接失败，这个回归一直没有运行 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.14，各两处 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.15，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
@@ -104,7 +105,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 声音的音量三档（2026-10-31，0.3.8）：你听到声音以后要音量可调。低、中、高是声音芯片的音量 50、70、90（芯片曲线 0.5 dB 一级，每档差 10 dB），默认低就是 0.3.7 的固定音量；存在 NVS 的 `dh_snd/vol`，只认“0”“1”“2”。点一档马上存下并响一声试听音。测试 S5 和界面预览的声音组；变异检查 `audio_policy.py` 42 处、`sound_ui.py` 32 处全部报红。设计稿 `Dev-Sound` 已改；设计画布打不开，只改了仓库里的画板。
 - 顶栏的闪电挪进电池里，画在数字前面，和数字一起居中；USB 紧挨电池（`Dev-Header`）。没有动作时总览的圆环放大到 252 px 并上下居中（`Dev-HomeEmpty`）。变异检查 `header_home_ui.py` 20 处全部报红。
 - 没有：网页上开关充电保护（设备的上报里没有这一项）。
-- 固件版本 0.3.14（2026-11-05）：已构建（0 个警告）并打成 USB 刷机包，离线校验通过，**还没有刷到设备**。比 0.3.13 多：已存 Wi-Fi 的设备开机不再自动开热点（R7 第 1 条）；屏幕上开始配对；换 Wi-Fi 的结果页说真实的结果（W17 到 W22）；连接页写 Wi-Fi 名称和信号；键盘提示跟着输入变；列表用信号格；时区和手动校时（`Dev-Time`）。记录在 [docs/evidence/firmware-0.3.14.json](evidence/firmware-0.3.14.json)。
+- 固件版本 0.3.15（2026-11-06）：比 0.3.14 多一处修复：恢复出厂也清掉声音和外观设置。记录在 [docs/evidence/firmware-0.3.15.json](evidence/firmware-0.3.15.json)。
+- 0.3.14（2026-11-05）：已构建并打包，从没刷到设备，已被 0.3.15 取代。比 0.3.13 多：已存 Wi-Fi 的设备开机不再自动开热点（R7 第 1 条）；屏幕上开始配对；换 Wi-Fi 的结果页说真实的结果（W17 到 W22）；连接页写 Wi-Fi 名称和信号；键盘提示跟着输入变；列表用信号格；时区和手动校时（`Dev-Time`）。记录在 [docs/evidence/firmware-0.3.14.json](evidence/firmware-0.3.14.json)。
 - 上一个版本 0.3.13（2026-11-03）：已刷到设备，你确认显示正常。比 0.3.8 多：屏幕上换 Wi-Fi（软键盘）、显示横纹的修复。中间版本 0.3.9 到 0.3.12 都是调查用的。记录在 [docs/evidence/firmware-0.3.13.json](evidence/firmware-0.3.13.json) 和 [display-corruption.md](evidence/display-corruption.md)。
 - 上一个版本 0.3.8（2026-10-31）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.7 多：声音的音量三档。2026-11-02 核对：设备上已是 0.3.8，应用镜像与包里的逐字节相同（不是我刷的），USB 状态正常、充电保护仍在上限处停充。三档的响度没有人听过；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.8.json](evidence/firmware-0.3.8.json)。
 - 上一个版本 0.3.7（2026-10-30）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.6 多：声音（提示音、试听、`sound_test`）、闪电在电池里、没有动作时首页圆环放大居中。2026-10-30 已刷到设备：USB 状态里能力 audio 是 ready（声音芯片应答了），充电保护仍在上限处停充。2026-10-31 你在设备旁听到了试听音。响度、动作和配对触发的提示音还没有试；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.7.json](evidence/firmware-0.3.7.json)。
