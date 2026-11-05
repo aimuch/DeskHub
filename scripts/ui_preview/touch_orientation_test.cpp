@@ -117,6 +117,9 @@ lv_display_t *bsp_display_start(){
     return bsp_display_start_with_config(&vendor);
 }
 lv_indev_t *bsp_display_get_input_dev(){return test_input;}
+// board_display_init sends its first panel commands under the display lock; this test has one thread, so the lock always succeeds.
+esp_err_t esp_lv_adapter_lock(int32_t){return ESP_OK;}
+void esp_lv_adapter_unlock(){}
 esp_err_t bsp_display_brightness_set(int){++brightness_calls;return ESP_OK;}
 esp_err_t bsp_display_rotation_set(bsp_display_rotation_t rotation){
     ++rotation_calls;if(rotation_result!=ESP_OK)return rotation_result;
