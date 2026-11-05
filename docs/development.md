@@ -105,7 +105,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - 声音的音量三档（2026-10-31，0.3.8）：你听到声音以后要音量可调。低、中、高是声音芯片的音量 50、70、90（芯片曲线 0.5 dB 一级，每档差 10 dB），默认低就是 0.3.7 的固定音量；存在 NVS 的 `dh_snd/vol`，只认“0”“1”“2”。点一档马上存下并响一声试听音。测试 S5 和界面预览的声音组；变异检查 `audio_policy.py` 42 处、`sound_ui.py` 32 处全部报红。设计稿 `Dev-Sound` 已改；设计画布打不开，只改了仓库里的画板。
 - 顶栏的闪电挪进电池里，画在数字前面，和数字一起居中；USB 紧挨电池（`Dev-Header`）。没有动作时总览的圆环放大到 252 px 并上下居中（`Dev-HomeEmpty`）。变异检查 `header_home_ui.py` 20 处全部报红。
 - 没有：网页上开关充电保护（设备的上报里没有这一项）。
-- 固件版本 0.3.15（2026-11-06）：比 0.3.14 多一处修复：恢复出厂也清掉声音和外观设置。记录在 [docs/evidence/firmware-0.3.15.json](evidence/firmware-0.3.15.json)。
+- 固件版本 0.3.15（2026-11-06）：比 0.3.14 多一处修复：恢复出厂也清掉声音和外观设置。2026-11-06 已刷到设备：开机没有自动开热点，Wi-Fi 连续 150 秒都是已连接（设备自报）；屏幕没有人看过。记录在 [docs/evidence/firmware-0.3.15.json](evidence/firmware-0.3.15.json)。
 - 0.3.14（2026-11-05）：已构建并打包，从没刷到设备，已被 0.3.15 取代。比 0.3.13 多：已存 Wi-Fi 的设备开机不再自动开热点（R7 第 1 条）；屏幕上开始配对；换 Wi-Fi 的结果页说真实的结果（W17 到 W22）；连接页写 Wi-Fi 名称和信号；键盘提示跟着输入变；列表用信号格；时区和手动校时（`Dev-Time`）。记录在 [docs/evidence/firmware-0.3.14.json](evidence/firmware-0.3.14.json)。
 - 上一个版本 0.3.13（2026-11-03）：已刷到设备，你确认显示正常。比 0.3.8 多：屏幕上换 Wi-Fi（软键盘）、显示横纹的修复。中间版本 0.3.9 到 0.3.12 都是调查用的。记录在 [docs/evidence/firmware-0.3.13.json](evidence/firmware-0.3.13.json) 和 [display-corruption.md](evidence/display-corruption.md)。
 - 上一个版本 0.3.8（2026-10-31）：已构建（0 个警告）并打成 USB 刷机包，包在 `dist/`（不在 git 里），离线校验通过。比 0.3.7 多：声音的音量三档。2026-11-02 核对：设备上已是 0.3.8，应用镜像与包里的逐字节相同（不是我刷的），USB 状态正常、充电保护仍在上限处停充。三档的响度没有人听过；屏幕没有看过。记录在 [docs/evidence/firmware-0.3.8.json](evidence/firmware-0.3.8.json)。

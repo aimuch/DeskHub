@@ -1,0 +1,70 @@
+{
+  "version": "0.3.15",
+  "built_from": "提交 e66145a（升版）；构建时 firmware/ 目录与该提交一致（之后的提交只改文档）",
+  "build_dir": "firmware/build-0.3.15（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.13": [
+    "0.3.14 的全部改动（0.3.14 从没刷到设备）：已存 Wi-Fi 的设备开机不再自动开热点；屏幕上开始配对；换 Wi-Fi 结果页 W17 到 W22；连接页写 Wi-Fi 名称和信号；键盘提示和计数；列表用信号格；日期与时间（时区、手动校时）；设备信息页不显示 ok 和 idle。见 firmware-0.3.14.json",
+    "恢复出厂也清掉声音（dh_snd）和外观（dh_ui）设置；删不掉时写明"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4528304,
+    "sha256": "18bac564e3b8987c40e2af45febe62f193ddde6452956f551a2fbdea0ac83110",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 28
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.15-esp32s3.zip",
+      "size_bytes": 2797832,
+      "sha256": "be071b0d5e480a06d168748f1eca9e7fcd212d04988ee55ff1523031200fc791",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.15",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，project_version 是 0.3.15",
+    "解压 USB 包后运行包内 flash.py --check 通过；包内 deskhub.bin 与构建目录的 SHA-256 相同",
+    "主机测试 16 组、Agent 384 条、tools 116 条、协议检查全部通过；render.py 的界面流程 28 组和触摸方向回归都通过（模拟数据）",
+    "安全基线文件与归档逐字节相同的检查输出为空",
+    "变异检查：factory_reset_ui 7 处全部报红；0.3.14 的变异结果见 firmware-0.3.14.json，之后只改了恢复出厂"
+  ],
+  "flashed": true,
+  "flash_record": {
+    "when": "2026-11-06，用户说“先修再刷”之后",
+    "device": "deskhub-44bd8d60c598（刷之前用 provision.py --identify 核对过，固件 0.3.13）",
+    "how": "解压后的 USB 包，包内 flash.py --port /dev/cu.usbmodem20101（ESP-IDF 的 esptool）",
+    "result": "写入 4 个镜像，每个都是 Hash of data verified；没有擦除配置（主题 ocean、旋转 180、充电保护设置、config_revision 37 都还在）"
+  },
+  "observed_on_device": {
+    "note": "这是设备自己报告的数值，没有用别的仪表对照；没有人看屏幕，没有人听。",
+    "firmware_version": "0.3.15",
+    "ui_alive": true,
+    "time_quality": "rtc",
+    "hotspot_rule": "开机后热点没有自动打开（pairing phase closed，why none，open false）。0.3.13 上同一台设备开机会自动开热点，Wi-Fi 因此断开约 5 分钟",
+    "wifi": "刷机约 25 秒后第一次读超时，第二次读到“Wi-Fi 已断开”（刚开机）；随后只打开一次串口连续读 150 秒，11 次全部是“已连接”。Agent 仍未配对",
+    "audio": "能力 audio：unverified + ready",
+    "power": "电量 96%，电池 4102 mV，USB 5155 mV，芯片 42.5 °C，measurement ok，无故障",
+    "charge_protection": "已开启（上限 90%），holding，开关 stopped，原因 LEVEL_AT_LIMIT；事件：开机发现停着并恢复，随后到上限停充，写入与读回都是 ok",
+    "wifi_change": "idle"
+  },
+  "hardware_verified": "部分：只有上面 observed_on_device 里的几项是在真机上读到的；其余见 not_done",
+  "not_done": [
+    "屏幕没有人看过：连接页、开始配对、Wi-Fi 列表、键盘、结果页、日期与时间页、设备信息页",
+    "时区切换后时钟是否马上变、手动校时后重启时间是否还在、联网后 NTP 是否覆盖，都没有在真机上试",
+    "点“开始配对”是否真的打开热点，没有试；手机连热点配对的流程没有走过",
+    "恢复出厂没有在真机上做（会删掉 Wi-Fi 和配置，要用户决定）",
+    "换 Wi-Fi 的完整流程没有在真实路由器上走过",
+    "没有做：忘记 Wi-Fi、12/24 小时、设备上的秒数开关"
+  ]
+}
