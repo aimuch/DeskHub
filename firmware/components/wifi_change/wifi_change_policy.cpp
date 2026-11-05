@@ -26,7 +26,7 @@ bool Session::touch(int64_t now){if(state.phase!=Phase::Typing||!held)return fal
 bool Session::begin(const std::string &s,const std::string &p,bool open,int64_t now){
     if(state.phase!=Phase::Typing||!held||!valid_credentials(s,p,open))return false;
     // A scanned unsupported network cannot bypass the disabled UI entry.
-    for(const auto &n:list)if(n.ssid==s&&(n.security==Security::Unsupported||((n.security==Security::Open)!=open)))return false;
+    for(const auto &n:list)if(n.ssid==s&&(n.security==Security::Unsupported||((n.security==Security::Open)!=open))){state.reason=Reason::InvalidInput;return false;}
     ssid=s;password=p;state.phase=Phase::Testing;state.reason=Reason::None;state.busy=true;state.restored=false;deadline=now+20000;
     if(!port.join_start(ssid,password))restore(Reason::NotFound,now);
     return true;
@@ -39,10 +39,12 @@ void Session::save(int64_t now){
 bool Session::keep(int64_t now){if(state.phase!=Phase::Asking||restoring||now>=deadline)return false;save(now);return true;}
 void Session::restore(Reason reason,int64_t now){
     if(restoring)return;
-    wipe();state.reason=reason;state.busy=true;restoring=true;deadline=now+20000;
+    wipe();state.reason=reason;state.busy=true;state.had_previous=port.has_previous();
+    if(!state.had_previous){finish_restore(false,now);return;}   // nothing to go back to: the reason stays what the person is told
+    restoring=true;deadline=now+20000;
     if(!port.restore_start())finish_restore(false,now);
 }
-void Session::finish_restore(bool ok,int64_t now){state.phase=Phase::Reverted;state.restored=ok;if(!ok)state.reason=Reason::RestoreFailed;state.busy=false;state.result_ms=now;restoring=false;deadline=0;release();}
+void Session::finish_restore(bool ok,int64_t now){state.phase=Phase::Reverted;state.restored=ok;if(!ok&&state.had_previous&&state.reason==Reason::UserReverted)state.reason=Reason::RestoreFailed;state.busy=false;state.result_ms=now;restoring=false;deadline=0;release();}
 bool Session::revert(int64_t now){if(!held||restoring)return false;cancel(now);return true;}
 void Session::cancel(int64_t now){
     if(!held||restoring)return;
@@ -72,11 +74,12 @@ void Session::tick(int64_t now){
         else if(port.agent_ready())save(now);
         else if(now>=deadline){state.phase=Phase::Asking;state.reason=Reason::AgentUnreachable;deadline=now+60000;}
         break;
-    case Phase::Asking:if(!port.has_ip())restore(Reason::Timeout,now);else if(now>=deadline)restore(Reason::Timeout,now);break;
+    case Phase::Asking:if(!port.has_ip())restore(Reason::Timeout,now);else if(now>=deadline)restore(Reason::AgentUnreachable,now);break;
     default:break;
     }
 }
-Status Session::status(int64_t now)const{auto out=state;out.remaining_s=deadline>now?static_cast<int>((deadline-now+999)/1000):0;return out;}
+Status Session::status(int64_t now)const{auto out=state;out.remaining_s=deadline>now?static_cast<int>((deadline-now+999)/1000):0;out.restoring=restoring;return out;}
+int signal_bars(int rssi){return rssi>=0?0:rssi>=-55?4:rssi>=-67?3:rssi>=-78?2:1;}
 const char *phase_name(Phase p){static const char* const names[]={"idle","scanning","typing","testing","checking_agent","asking","saved","reverted"};auto i=static_cast<unsigned>(p);return i<8?names[i]:"idle";}
 const char *reason_name(Reason r){static const char* const names[]={"NONE","WRONG_PASSWORD","NOT_FOUND","TIMEOUT","AGENT_UNREACHABLE","USER_REVERTED","HOTSPOT_OPEN","BUSY","INVALID_INPUT","SCAN_FAILED","SAVE_FAILED","RESTORE_FAILED"};auto i=static_cast<unsigned>(r);return i<12?names[i]:"BUSY";}
 }

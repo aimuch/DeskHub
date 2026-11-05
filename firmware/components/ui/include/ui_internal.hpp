@@ -48,6 +48,7 @@ struct Frame {
     Snapshot s;
     DisplayConfig c;
     PowerState power;
+    std::string wifi_name;                // the stored network, on the pages that ask for it
     charge::Status charge;                // charge protection, as the controller reports it
     std::string charge_error;             // result of the last try to turn it on or off
     int64_t now_ms = 0;
@@ -113,6 +114,7 @@ void request_sound_set(bool on);     // the switch of the sound page
 void request_sound_test();           // "listen"
 void request_sound_volume(int level);   // a level of the volume: stored, then one test tone at it
 void wifi_open();
+void request_pairing();              // "pair" on the Connect page: asks the backend for the hotspot
 void wifi_close();
 bool wifi_opened();
 void wifi_tick(lv_obj_t *screen, int64_t now, bool blocked, bool pairing);

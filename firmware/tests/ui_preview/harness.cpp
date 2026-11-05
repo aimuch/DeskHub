@@ -142,7 +142,7 @@ esp_err_t save_config(DisplayConfig value) {
 esp_err_t reset_config() { ++reset_calls; mock_config = {}; return ESP_OK; }
 Secrets secrets() {
     Secrets s;
-    if (mock_paired) { s.ssid = "x"; s.url = "https://x"; s.token = "t"; s.ca_pem = "p"; }
+    if (mock_paired) { s.ssid = "Office"; s.url = "https://x"; s.token = "t"; s.ca_pem = "p"; }
     return s;
 }
 PowerState board_power() { return mock_power; }
@@ -208,14 +208,18 @@ static dh::wifi_change::Status wifi_state;
 static bool wifi_allowed = true;
 static std::string wifi_sent_ssid, wifi_sent_password;
 static int wifi_begins = 0, wifi_keeps = 0, wifi_reverts = 0;
+static bool wifi_hotspot = false, wifi_begin_ok = true;
+static int pairing_requests = 0;
 namespace dh::wifi_change {
 void init() {}
 bool available() { return wifi_allowed; }
+bool hotspot_open() { return wifi_hotspot; }
+int signal_bars(int rssi) { return rssi >= 0 ? 0 : rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1; }
 bool start_scan() { if (!wifi_allowed) return false; wifi_state.phase=Phase::Typing; wifi_state.busy=true; return true; }
-std::vector<Network> networks() { return {{"Office",Security::Personal,-40,true},{"Guest",Security::Open,-60,false},{"CorpNet",Security::Unsupported,-70,false}}; }
-bool begin(const std::string &ssid,const std::string &password,bool) { ++wifi_begins; wifi_sent_ssid=ssid; wifi_sent_password=password; wifi_state.phase=Phase::Testing; wifi_state.remaining_s=20; return true; }
+std::vector<Network> networks() { return {{"Office",Security::Personal,-40,true},{"Guest",Security::Open,-60,false},{"Lab",Security::Personal,-62,false},{"CorpNet",Security::Unsupported,-70,false}}; }
+bool begin(const std::string &ssid,const std::string &password,bool) { if (!wifi_begin_ok) return false; ++wifi_begins; wifi_sent_ssid=ssid; wifi_sent_password=password; wifi_state.phase=Phase::Testing; wifi_state.remaining_s=20; return true; }
 bool keep() { ++wifi_keeps; wifi_state.phase=Phase::Saved; return true; }
-bool revert() { ++wifi_reverts; wifi_state.phase=Phase::Reverted; wifi_state.restored=true; return true; }
+bool revert() { ++wifi_reverts; wifi_state.phase=Phase::Reverted; wifi_state.reason=Reason::UserReverted; wifi_state.restored=true; return true; }
 void cancel() { wifi_state={}; }
 void touch() {}
 Status status() { return wifi_state; }
@@ -1384,9 +1388,92 @@ static void case_sound() {   // A25
 // A26 failure cases written before implementation: real pointer press/release,
 // secret masking on press-lost/sleep/exit; disabled completion; every ASCII page;
 // unsupported AP, open network, manual SSID, backend outcomes and timeout.
+static void case_wifi_pages() {   // W17 to W22, the list, the line under the field, the Connect page
+    const auto typing = [] { fresh(); wifi_state = {}; wifi_hotspot = false; wifi_allowed = true; wifi_begin_ok = true; wifi_begins = wifi_reverts = 0; goto_view(Page::Connect); };
+    typing(); step();
+    EXPECT(has("Office · 已连接") && has("更换") && !has("dh-0a1b2c") && has("信号") && has("配对时设备打开热点，Wi-Fi 会暂时断开。"));
+    check_layout("wifi-connect");
+    // Pairing starts from the screen: the backend is asked, once a tap; a paired device says it pairs again.
+    dh::ui_set_pairing_request([] { ++pairing_requests; }); pairing_requests = 0;
+    EXPECT(has("重新配对")); EXPECT(click_text("重新配对")); step(); EXPECT(pairing_requests == 1);
+    mock_paired = false; goto_view(Page::Home); goto_view(Page::Connect); step();
+    EXPECT(has("开始配对") && !has("重新配对") && has("未配对")); EXPECT(click_text("开始配对")); step(); EXPECT(pairing_requests == 2);
+    dh::ui_set_pairing_request(nullptr); EXPECT(click_text("开始配对")); step(); EXPECT(pairing_requests == 2);   // no backend: nothing happens
+    typing(); step();
+    EXPECT(click_text("更换")); step();
+    // The list: bars instead of numbers, one way back, and what cannot be found.
+    EXPECT(has("Lab") && !has("-62 dBm") && !has("返回") && has("只显示 2.4 GHz 的 Wi-Fi") && has("Office") && has("当前") && has("开放"));
+    save_png_source("wifi-list"); check_layout("wifi-list");
+    // W21: refused by the session after it was asked: back to the list, and why.
+    EXPECT(click_text("Guest")); step();
+    wifi_state.phase = dh::wifi_change::Phase::Typing; wifi_state.reason = dh::wifi_change::Reason::InvalidInput; step();
+    EXPECT(has("这个 Wi-Fi 的加密方式和你选的不一样") && has("Office"));
+    // The line under the field, and the count.
+    typing(); EXPECT(click_text("更换")); step(); EXPECT(click_text("Office")); step();
+    EXPECT(has("8 到 63 个字符") && has("0/63"));
+    for (int i = 0; i < 5; ++i) EXPECT(click_text("a"));
+    step(); EXPECT(has("还差 3 个字符") && has("5/63"));
+    for (int i = 0; i < 3; ++i) EXPECT(click_text("a"));
+    step(); EXPECT(has("8 到 63 个字符") && has("8/63"));
+    // W22: refused while the scan runs: the button says why instead of doing nothing.
+    wifi_begin_ok = false; EXPECT(click_text("完成")); step();
+    EXPECT(has("现在不能连接，请稍等") && has("空格") && wifi_begins == 0);
+    wifi_begin_ok = true;
+    for (int i = 0; i < 55; ++i) EXPECT(click_text("a"));
+    step(); EXPECT(has("63/63") && has("8 到 63 个字符"));   // hex so far: one more is allowed
+    EXPECT(click_text("a")); step(); EXPECT(has("64/64") && has("64 位十六进制密码"));
+    typing(); EXPECT(click_text("更换")); step(); EXPECT(click_text("Office")); step();
+    EXPECT(click_text("123")); step();
+    for (int i = 0; i < 63; ++i) EXPECT(click_text("1"));
+    EXPECT(click_text("-")); step(); EXPECT(has("63/63"));
+    // The eye is beside the field, not on it; every key stays large enough with a full field.
+    check_targets("wifi-keyboard-full");
+    // W19: cancel starts going back and stays on the page until there is a result.
+    typing(); EXPECT(click_text("更换")); step(); EXPECT(click_text("Guest")); step();
+    EXPECT(has("正在连接") && has("取消"));
+    EXPECT(click_text("取消")); step();
+    EXPECT(wifi_reverts == 1 && detail::wifi_opened() && has("已改回原来的 Wi-Fi") && has("没有保存。已改回原来的 Wi-Fi。"));
+    // W18: while it goes back there is nothing to press.
+    wifi_state = {}; wifi_state.phase = dh::wifi_change::Phase::Asking; wifi_state.remaining_s = 60; step();
+    EXPECT(has("连不上电脑") && has("仍然使用") && has("改回原来的") && has("还没有保存。\n倒计时结束后改回原来的 Wi-Fi"));
+    wifi_state.restoring = true; wifi_state.reason = dh::wifi_change::Reason::UserReverted; wifi_state.remaining_s = 20; step();
+    EXPECT(has("正在改回") && has("没有保存。正在连回原来的 Wi-Fi") && !has("仍然使用") && !has("改回原来的") && !has("取消"));
+    // Only the going back changes (the 60 seconds ended): the page still has to change.
+    wifi_state = {}; wifi_state.phase = dh::wifi_change::Phase::Asking; wifi_state.reason = dh::wifi_change::Reason::AgentUnreachable; wifi_state.remaining_s = 1; step();
+    EXPECT(has("仍然使用"));
+    wifi_state.restoring = true; wifi_state.remaining_s = 20; step();
+    EXPECT(!has("仍然使用") && has("没有保存。正在连回原来的 Wi-Fi"));
+    wifi_state.phase = dh::wifi_change::Phase::Testing; wifi_state.reason = dh::wifi_change::Reason::WrongPassword; step();
+    EXPECT(has("密码错误") && has("没有保存。正在连回原来的 Wi-Fi") && !has("取消"));
+    wifi_state = {}; wifi_state.phase = dh::wifi_change::Phase::Testing; step(); EXPECT(has("正在连接") && has("取消"));
+    // W17: every end of the story says what happened and what is true now.
+    const auto ended = [](dh::wifi_change::Reason reason, bool restored, bool previous) {
+        wifi_state = {}; wifi_state.phase = dh::wifi_change::Phase::Reverted; wifi_state.reason = reason; wifi_state.restored = restored; wifi_state.had_previous = previous; step();
+    };
+    ended(dh::wifi_change::Reason::WrongPassword, false, false);
+    EXPECT(has("密码错误") && has("没有保存。") && !has("原来的 Wi-Fi 也没连上") && !has("原来的 Wi-Fi 也没连上，设备会继续重试"));
+    ended(dh::wifi_change::Reason::WrongPassword, false, true);
+    EXPECT(has("密码错误") && has("没有保存。原来的 Wi-Fi 也没连上，设备会继续重试。"));
+    ended(dh::wifi_change::Reason::WrongPassword, true, true);
+    EXPECT(has("密码错误") && has("没有保存。已改回原来的 Wi-Fi。"));
+    ended(dh::wifi_change::Reason::UserReverted, false, false);
+    EXPECT(has("已取消") && !has("已改回原来的 Wi-Fi"));
+    ended(dh::wifi_change::Reason::RestoreFailed, false, true);
+    EXPECT(has("原来的 Wi-Fi 也没连上"));
+    ended(dh::wifi_change::Reason::AgentUnreachable, true, true);
+    EXPECT(has("连不上电脑") && !has("连接超时"));
+    detail::wifi_close(); step();
+    // W20: the Connect page says the true reason.
+    typing(); wifi_allowed = false; wifi_hotspot = true; step(); EXPECT(has("配对热点打开时不能更换 Wi-Fi"));
+    typing(); wifi_allowed = false; wifi_hotspot = false; step(); EXPECT(has("现在不能更换 Wi-Fi，请稍后再试") && !has("配对热点打开时不能更换 Wi-Fi"));
+    wifi_allowed = true; wifi_state = {};
+    // The Device page has no words from the code when nothing is going on.
+    fresh(); goto_view(Page::Device); step();
+    EXPECT(!contains("idle") && !contains("\nok"));
+}
 static void case_wifi_keyboard() {
     fresh(); goto_view(Page::Connect);
-    EXPECT(click_text("更换 Wi-Fi")); step();
+    EXPECT(click_text("更换")); step();
     EXPECT(has("Office") && has("CorpNet"));
     EXPECT(click_text("CorpNet")); step(); EXPECT(!has("空格"));
     EXPECT(click_text("Office")); step();
@@ -1419,20 +1506,20 @@ static void case_wifi_keyboard() {
     EXPECT(click_text("改回原来的")); step(); EXPECT(wifi_reverts==1);
     EXPECT(click_text("重新输入")); step(); EXPECT(!has("********"));
     detail::wifi_close(); step(); EXPECT(!has("空格"));
-    EXPECT(click_text("更换 Wi-Fi")); step(); EXPECT(click_text("Guest")); step();
+    EXPECT(click_text("更换")); step(); EXPECT(click_text("Guest")); step();
     EXPECT(wifi_sent_ssid=="Guest" && wifi_sent_password.empty());
     wifi_state.phase=dh::wifi_change::Phase::Reverted; wifi_state.restored=true; step();
     EXPECT(click_text("重试")); step(); EXPECT(has("Guest") && !has("空格"));
     EXPECT(click_text("Guest")); step(); EXPECT(wifi_sent_password.empty());
 
     wifi_state.phase=dh::wifi_change::Phase::Saved; step(); EXPECT(has("已连接")); save_png_source("wifi-saved");
-    detail::wifi_close(); step(); EXPECT(click_text("更换 Wi-Fi")); step();
+    detail::wifi_close(); step(); EXPECT(click_text("更换")); step();
     EXPECT(click_text("其他（手动输入名称）")); step();
     EXPECT(click_text("a")); EXPECT(click_text("完成")); step();
     EXPECT(has("有密码") && has("没有密码"));
     EXPECT(click_text("有密码")); step();
     wifi_state.phase=dh::wifi_change::Phase::Idle; step(180001); EXPECT(!has("空格"));
-    fresh(); goto_view(Page::Connect); EXPECT(click_text("更换 Wi-Fi")); step();
+    fresh(); goto_view(Page::Connect); EXPECT(click_text("更换")); step();
     wifi_state.phase=dh::wifi_change::Phase::Idle; wifi_state.reason=dh::wifi_change::Reason::ScanFailed; step();
     EXPECT(has("没有找到 Wi-Fi") && has("重扫"));
     EXPECT(click_text("重扫")); step(); EXPECT(has("Office"));
@@ -1444,11 +1531,11 @@ static void case_wifi_keyboard() {
     pointer(false,425,365); EXPECT(click_text("c")); step(1000);
     EXPECT(has("abc")); // deleted button cannot leave a repeating deletion behind
     detail::wifi_close(); step();
-    fresh(); wifi_allowed=false; goto_view(Page::Connect);
-    EXPECT(click_text("更换 Wi-Fi")); step(); EXPECT(!has("Office"));
+    fresh(); wifi_allowed=false; wifi_hotspot=true; goto_view(Page::Connect);
+    EXPECT(click_text("更换")); step(); EXPECT(!has("Office"));
     EXPECT(has("配对热点打开时不能更换 Wi-Fi"));
     fresh("ocean|-|en-US|large"); goto_view(Page::Connect);
-    EXPECT(click_text("Change Wi-Fi")); step(); EXPECT(click_text("Office")); step();
+    EXPECT(click_text("Change")); step(); EXPECT(click_text("Office")); step();
     EXPECT(has("Space") && has("Done")); check_layout("wifi-en-large"); check_targets("wifi-en-large");
 }
 
@@ -1500,7 +1587,7 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
-        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
+        {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";

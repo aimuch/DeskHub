@@ -107,7 +107,7 @@ ChargeView make_charge(Lang, const charge::Status &, const PowerState &, int64_t
 // ---- connection ----
 struct ConnectRow { std::string key, value; Tone tone = Tone::Off; };
 // `paired` comes from the stored credentials (the snapshot does not carry it).
-std::vector<ConnectRow> make_connect(Lang, const Snapshot &, bool paired);
+std::vector<ConnectRow> make_connect(Lang, const Snapshot &, bool paired, const std::string &ssid = {});   // the Wi-Fi row names `ssid`
 
 // ---- actions and the transient command notice ----
 struct ActionView { std::string label, sub; bool enabled = false; };

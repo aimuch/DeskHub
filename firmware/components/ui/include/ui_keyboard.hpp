@@ -33,6 +33,9 @@ public:
     bool valid() const { return password_ ? (length_ >= 8 && (length_ <= 63 || (length_ == 64 && hex()))) : length_ >= 1; }
     bool password() const { return password_; }
     size_t size() const { return length_; }
+    size_t missing() const { return password_ && length_ < 8 ? 8 - length_ : 0; }   // how many until a password is long enough
+    size_t limit() const { return password_ ? (length_ == 64 ? 64 : 63) : 32; }      // what the count says: 64 only for a full hex key
+    bool full() const { return password_ ? length_ == 64 || (length_ == 63 && !hex()) : length_ == 32; }
     void reveal(bool on) { revealed_ = password_ && on; }
     std::string display() const { return password_ && !revealed_ ? std::string(length_, '*') : value(); }
     std::string value() const { return std::string(bytes_.data(), length_); }

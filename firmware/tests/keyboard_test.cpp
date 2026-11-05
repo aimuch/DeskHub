@@ -30,5 +30,19 @@ int main() {
         for (const auto &row : Keyboard::rows(page)) for (char c : row) coverage.insert(c);
     coverage.insert(' ');
     for (char c = 32; c < 127; ++c) assert(coverage.count(c));
+    // What the line under the field says: how many are missing, the limit, and when the field is full.
+    k.reset(true); assert(k.missing() == 8 && k.limit() == 63 && !k.full());
+    for (int i = 0; i < 5; ++i) k.append('x');
+    assert(k.missing() == 3);
+    for (int i = 0; i < 3; ++i) k.append('x');
+    assert(k.missing() == 0 && !k.full() && k.limit() == 63);
+    while (k.append('x')) {}
+    assert(k.size() == 63 && k.full() && k.limit() == 63);   // not hex: 63 is the end
+    k.reset(true); for (int i = 0; i < 63; ++i) k.append('a');
+    assert(k.size() == 63 && !k.full() && k.limit() == 63);  // hex: one more is allowed
+    k.append('a'); assert(k.size() == 64 && k.full() && k.limit() == 64);
+    k.reset(false); assert(k.missing() == 0 && k.limit() == 32 && !k.full());
+    for (int i = 0; i < 32; ++i) k.append('n');
+    assert(k.full());
     std::cout << "PASS keyboard: bounds, ASCII, PSK, reveal, clear, all printable keys\n";
 }

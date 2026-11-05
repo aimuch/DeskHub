@@ -663,6 +663,10 @@ static void t16_connect() {
     CHECK_EQ(row(rows, tr(Lang::ZhCN, Str::KeyAgent)), std::string("在线"));
     CHECK_EQ(row(rows, tr(Lang::ZhCN, Str::KeyPairing)), std::string("已配对"));
     CHECK_EQ(row(rows, tr(Lang::ZhCN, Str::KeyDeviceId)), std::string("dh-0a1b2c"));
+    // The Wi-Fi row names the network; a dropped link still says which network it is about.
+    CHECK_EQ(row(make_connect(Lang::ZhCN, s, true, "Office"), tr(Lang::ZhCN, Str::KeyWifi)), std::string("Office · 已连接"));
+    CHECK_EQ(row(make_connect(Lang::EnUS, s, true, "Office"), tr(Lang::EnUS, Str::KeyWifi)), std::string("Office - Connected"));   // English pages stay ASCII
+    { Snapshot off = s; off.wifi_ready = false; off.wifi = "正在连接Wi-Fi"; CHECK_EQ(row(make_connect(Lang::ZhCN, off, true, "Office"), tr(Lang::ZhCN, Str::KeyWifi)), std::string("Office · 正在连接")); }
     s.wifi_ready = false; s.wifi = "正在连接Wi-Fi"; s.agent_ready = false;
     rows = make_connect(Lang::ZhCN, s, false);
     CHECK_EQ(row(rows, tr(Lang::ZhCN, Str::KeyWifi)), std::string("正在连接"));

@@ -10,6 +10,10 @@ M = [
     ("password never masked", H, "password_ && !revealed_ ?", "password_ && false ?"),
     ("reveal never shows", H, "revealed_ = password_ && on;", "revealed_ = password_ && on && false;"),
     ("erase does nothing", H, "if (length_) bytes_[--length_] = 0;", "if (length_) bytes_[length_] = 0;"),
+    ("a password needs one fewer", H, "password_ && length_ < 8 ? 8 - length_ : 0", "password_ && length_ < 7 ? 7 - length_ : 0"),
+    ("the count of a name is wrong", H, "(length_ == 64 ? 64 : 63) : 32;", "(length_ == 64 ? 64 : 63) : 31;"),
+    ("the field is never full", H, "bool full() const { return password_ ? length_ == 64 || (length_ == 63 && !hex()) : length_ == 32; }", "bool full() const { return false; }"),
+    ("a hex key is full too soon", H, "(length_ == 63 && !hex())", "length_ == 63"),
 ]
 if __name__ == "__main__":
     raise SystemExit(firmware_main(M, "keyboard_test"))

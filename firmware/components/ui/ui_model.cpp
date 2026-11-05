@@ -368,11 +368,11 @@ ChargeView make_charge(Lang l, const charge::Status &s, const PowerState &p, int
 }
 
 // ---- connection, actions, notice ----
-std::vector<ConnectRow> make_connect(Lang l, const Snapshot &s, bool paired) {
+std::vector<ConnectRow> make_connect(Lang l, const Snapshot &s, bool paired, const std::string &ssid) {
     const WifiKind kind = wifi_kind(s);
     const bool up = kind == WifiKind::Connected;
     std::vector<ConnectRow> rows;
-    rows.push_back({T(l, Str::KeyWifi), wifi_text(l, kind), wifi_tone(kind)});
+    rows.push_back({T(l, Str::KeyWifi), ssid.empty() ? wifi_text(l, kind) : ssid + (l == Lang::EnUS ? " - " : " · ") + wifi_text(l, kind), wifi_tone(kind)});
     rows.push_back({T(l, Str::KeySignal), up && rssi_valid(s.rssi) ? fmt("%d dBm", s.rssi) : std::string("--"), Tone::Off});
     rows.push_back({T(l, Str::KeyIp), up && !s.ip.empty() ? s.ip : std::string("--"), Tone::Off});
     rows.push_back({T(l, Str::KeyAgent), T(l, s.agent_ready ? Str::ValueOnline : Str::ValueOffline), s.agent_ready ? Tone::Ok : Tone::Off});

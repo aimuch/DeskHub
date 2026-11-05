@@ -83,6 +83,7 @@ struct Device : Port {
     bool is_paired() override {auto s=dh::secrets();bool paired=s.ready();wipe(s.password);wipe(s.token);return paired;}
     bool agent_ready() override {return dh::snapshot().agent_ready;}
     bool save(const std::string &ssid,const std::string &password) override {return dh::save_wifi_credentials(ssid,password)==ESP_OK;}
+    bool has_previous() override {auto s=dh::secrets();const bool previous=!s.ssid.empty();wipe(s.password);wipe(s.token);return previous;}
     bool restore_start() override {auto old=dh::secrets();bool ok=!old.ssid.empty()&&join_start(old.ssid,old.password);wipe(old.password);wipe(old.token);return ok;}
 };
 enum class Request { None, Scan, Begin, Keep, Revert, Cancel };
@@ -123,9 +124,10 @@ void init(){
     if(xTaskCreate(run,"dh_wifi_change",8192,nullptr,3,&task)!=pdPASS)task=nullptr;
 }
 bool available(){if(!task)return false;auto s=dh::snapshot();return dh::network_owner()==dh::NetworkOwner::None&&s.update_state!="downloading"&&s.update_state!="writing"&&s.update_state!="verifying"&&s.update_state!="rebooting";}
+bool hotspot_open(){return dh::network_owner()==dh::NetworkOwner::Pairing;}
 bool start_scan(){if(!task)return false;Guard g;if(request!=Request::None||(shown.busy&&shown.phase!=Phase::Typing))return false;auto owner=dh::network_owner();if(owner!=dh::NetworkOwner::None&&owner!=dh::NetworkOwner::WifiChange){shown.reason=Reason::HotspotOpen;return false;}request=Request::Scan;shown.phase=Phase::Scanning;shown.busy=true;return true;}
 std::vector<Network> networks(){if(!lock)return {};Guard g;return list;}
-bool begin(const std::string &ssid,const std::string &password,bool open){if(!task||!valid_credentials(ssid,password,open))return false;Guard g;if(request!=Request::None||shown.phase!=Phase::Typing)return false;pending_ssid=ssid;pending_password=password;pending_open=open;request=Request::Begin;return true;}
+bool begin(const std::string &ssid,const std::string &password,bool open){if(!task||!valid_credentials(ssid,password,open))return false;Guard g;if(request!=Request::None||shown.phase!=Phase::Typing)return false;pending_ssid=ssid;pending_password=password;pending_open=open;request=Request::Begin;shown.reason=Reason::None;return true;}
 bool keep(){if(status().phase!=Phase::Asking)return false;return enqueue(Request::Keep);}
 bool revert(){return enqueue(Request::Revert);}
 void cancel(){if(!task)return;Guard g;wipe(pending_ssid);wipe(pending_password);request=Request::Cancel;}

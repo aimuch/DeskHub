@@ -48,6 +48,7 @@ DeviceSink sink;
 std::unique_ptr<Session> session;
 SemaphoreHandle_t lock = nullptr;
 LongPress press;
+std::atomic<bool> screen_request{false};   // set by the UI task; it must not wait for the lock held while the hotspot starts
 bool want_open = false, active = false, auto_tried = false, pending = false;
 std::string pending_ssid, pending_password;
 int save_retries = 0;
@@ -203,7 +204,8 @@ void run(void *) {
     for (;;) {
         const int64_t now = dh::monotonic_ms();
         press.edge(gpio_get_level(kButton) == 0, now);
-        if (press.poll(now)) {
+        const bool tapped = screen_request.exchange(false);   // "pair" on the Connect page: a person at the device, as for the button (R7)
+        if (press.poll(now) || tapped) {
             xSemaphoreTake(lock, portMAX_DELAY);
             want_open = true;
             xSemaphoreGive(lock);
@@ -239,6 +241,7 @@ void start() {
     if (lock) return;
     lock = xSemaphoreCreateMutex();
     session = std::make_unique<Session>(rng, sink, dh::snapshot().device_id);
+    ui_set_pairing_request([] { screen_request.store(true); });
     xTaskCreate(run, "dh_pair", 12288, nullptr, 3, nullptr);
 }
 

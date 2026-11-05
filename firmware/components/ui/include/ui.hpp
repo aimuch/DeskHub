@@ -19,4 +19,6 @@ struct PairingInfo {
 // May be called from any task. `on_cancel` runs in the UI task when the user taps "cancel".
 void ui_pairing_show(const PairingInfo &, void (*on_cancel)());
 void ui_pairing_hide();
+// `request` runs in the UI task when the person taps "pair" on the Connect page (docs/rules.md R7). It must not block.
+void ui_set_pairing_request(void (*request)());
 }

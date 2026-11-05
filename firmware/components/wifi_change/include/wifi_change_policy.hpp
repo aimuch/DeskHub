@@ -15,6 +15,7 @@ struct Port {
     virtual bool is_paired()=0;
     virtual bool agent_ready()=0;
     virtual bool save(const std::string&,const std::string&)=0;
+    virtual bool has_previous()=0;
     virtual bool restore_start()=0;
 };
 class Session {

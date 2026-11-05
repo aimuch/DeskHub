@@ -39,6 +39,7 @@ bool pairing_on = false, pairing_dirty = false;
 PairingInfo pairing_info;
 int64_t pairing_deadline = 0;
 void (*pairing_cancel)() = nullptr;
+void (*pairing_request)() = nullptr;
 
 constexpr int64_t kConfigDebounceMs = 2000;
 
@@ -76,7 +77,7 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.charge_error = charge_error;
     f.now_ms = now;
     f.wall = time(nullptr);
-    f.paired = want_paired && secrets().ready();
+    if (want_paired) { const auto stored = secrets(); f.paired = stored.ready(); f.wifi_name = stored.ssid; }
     f.command_changed_ms = command_changed_ms;
     f.config_pending = config_due != 0;
     f.effective_brightness = policy.effective;
@@ -287,6 +288,10 @@ void protect_confirm(int limit) {
     request_update();
 }
 void protect_cancel() { request_update(); }
+void request_pairing() {
+    note_activity();
+    if (pairing_request) pairing_request();
+}
 // The sound page. A switch that cannot be stored stays as it was and says so; with no speaker nothing is asked of it.
 void request_sound_set(bool on) {
     note_activity();
@@ -443,6 +448,7 @@ void ui_pairing_show(const PairingInfo &info, void (*on_cancel)()) {
     pairing_on = true;
     pairing_dirty = true;
 }
+void ui_set_pairing_request(void (*request)()) { ui::detail::pairing_request = request; }
 void ui_pairing_hide() {
     using namespace ui::detail;
     std::lock_guard<std::mutex> lock(pairing_mutex);

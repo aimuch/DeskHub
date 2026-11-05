@@ -473,20 +473,31 @@ void refresh_power(PowerTab tab, const Frame &f) {
 // ---- Connect ----
 void build_connect(lv_obj_t *body, const Frame &f) {
     heading(body, T(Str::ConnectTitle), P().wifi);
-    const auto rows = make_connect(look.lang, f.s, f.paired);
+    const auto rows = make_connect(look.lang, f.s, f.paired, f.wifi_name);
     const int row_h = std::max(44, lh(look.body) + 8);
-    auto *c = card(body, row_h * static_cast<int>(rows.size() - 2) + 56 + 12);
+    // The device ID is on the Device page. Wi-Fi and pairing are rows with an action on the right.
+    auto *c = card(body, row_h * 3 + 56 * 2 + 12);
     int y = 6;
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto &r = rows[i];
-        if (i == 1) { w.connect_values.push_back(nullptr); continue; } // signal strength is in the scan list
+        if (i == 5) { w.connect_values.push_back(nullptr); continue; }
+        if (i == 4) {
+            auto *pair = button(c, [](lv_event_t *) { request_pairing(); }, nullptr, kContentW - 24, 56);
+            lv_obj_set_pos(pair, 12, y);
+            label_at(pair, r.key, 8, 18, 70, look.caption, P().muted);
+            auto *v = label_at(pair, r.value, 86, 16, 150, &btr_ui_20, tone_color(r.tone));
+            single_line(v, 26); w.connect_values.push_back(v);
+            auto *go = label_at(pair, T(f.paired ? Str::PairAgain : Str::PairStart), 244, 18, 156, &btr_ui_16, P().accent);
+            lv_obj_set_style_text_align(go, LV_TEXT_ALIGN_RIGHT, 0);
+            y += 56; continue;
+        }
         if (i == 0) {
             w.wifi_change_button = button(c, [](lv_event_t *) { wifi_open(); }, nullptr, kContentW - 24, 56);
             lv_obj_set_pos(w.wifi_change_button, 12, y);
             label_at(w.wifi_change_button, r.key, 8, 18, 70, look.caption, P().muted);
-            auto *v = label_at(w.wifi_change_button, r.value, 86, 16, 150, &btr_ui_20, tone_color(r.tone));
+            auto *v = label_at(w.wifi_change_button, r.value, 86, 16, 250, &btr_ui_20, tone_color(r.tone));
             single_line(v, 26); w.connect_values.push_back(v);
-            auto *change = label_at(w.wifi_change_button, look.lang == Lang::EnUS ? "Change Wi-Fi" : "更换 Wi-Fi", 244, 18, 156, &btr_ui_16, P().accent);
+            auto *change = label_at(w.wifi_change_button, T(Str::WifiChange), 340, 18, 60, &btr_ui_16, P().accent);
             lv_obj_set_style_text_align(change, LV_TEXT_ALIGN_RIGHT, 0);
             y += 56; continue;
         }
@@ -504,8 +515,8 @@ void refresh_connect(const Frame &f) {
     const bool can_change = wifi_change::available();
     if (can_change) lv_obj_remove_state(w.wifi_change_button, LV_STATE_DISABLED);
     else lv_obj_add_state(w.wifi_change_button, LV_STATE_DISABLED);
-    set_optional_text(w.wifi_change_note, can_change ? "" : look.lang == Lang::EnUS ? "Close the pairing hotspot to change Wi-Fi" : "配对热点打开时不能更换 Wi-Fi");
-    const auto rows = make_connect(look.lang, f.s, f.paired);
+    set_optional_text(w.wifi_change_note, can_change ? "" : wifi_change::hotspot_open() ? (look.lang == Lang::EnUS ? "Close the pairing hotspot to change Wi-Fi" : "配对热点打开时不能更换 Wi-Fi") : (look.lang == Lang::EnUS ? "Wi-Fi cannot be changed now. Try again later." : "现在不能更换 Wi-Fi，请稍后再试"));
+    const auto rows = make_connect(look.lang, f.s, f.paired, f.wifi_name);
     for (size_t i = 0; i < rows.size() && i < w.connect_values.size(); ++i) {
         set_text(w.connect_values[i], rows[i].value);
         set_ink(w.connect_values[i], rows[i].tone == Tone::Off ? P().ink : tone_color(rows[i].tone));
@@ -627,6 +638,7 @@ void build_display(lv_obj_t *body, const Frame &f) {
     setting_row(body, T(Str::Rotation), buf, 9, false, false);
     w.error = caption(body, "", P().power);
     section(body, T(Str::SectionSleep));
+    caption(body, T(Str::DisplayCycleHint), P().muted);
     auto seconds = [&](uint32_t v) { snprintf(buf, sizeof(buf), tr(look.lang, Str::SecondsValue), static_cast<int>(v)); return std::string(buf); };
     setting_row(body, T(Str::ClockAfter), seconds(c.clock_s), 1, false, false);
     setting_row(body, T(Str::DimAfter), seconds(c.dim_s), 2, false, false);
@@ -668,9 +680,16 @@ void build_device(lv_obj_t *body, const Frame &f) {
 }
 void refresh_device(const Frame &f) {
     char buf[320];
-    snprintf(buf, sizeof(buf), "%s\n%s\n%s %u KiB\n%s %s %d%%\n%s", f.s.device_id.c_str(), f.power.reason.c_str(), T(Str::FreeHeap).c_str(),
-             static_cast<unsigned>(esp_get_free_heap_size() / 1024), T(Str::UpdateLabel).c_str(), f.s.update_state.c_str(), f.s.update_progress, f.s.update_error.c_str());
-    set_text(w.detail, buf);
+    // Words from the code only when they say something: not "ok", and not an update that is not going on.
+    snprintf(buf, sizeof(buf), "%s\n%s %u KiB", f.s.device_id.c_str(), T(Str::FreeHeap).c_str(), static_cast<unsigned>(esp_get_free_heap_size() / 1024));
+    std::string detail = buf;
+    if (!f.power.reason.empty() && f.power.reason != "ok") detail += "\n" + f.power.reason;
+    if (!f.s.update_state.empty() && f.s.update_state != "idle") {
+        snprintf(buf, sizeof(buf), "\n%s %s %d%%", T(Str::UpdateLabel).c_str(), f.s.update_state.c_str(), f.s.update_progress);
+        detail += buf;
+    }
+    if (!f.s.update_error.empty()) detail += "\n" + f.s.update_error;
+    set_text(w.detail, detail);
     set_optional_text(w.error, f.last_error);
 }
 }  // namespace

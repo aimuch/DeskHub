@@ -98,7 +98,6 @@ class Component extends DCLogic {
       { k: 'IP 地址', v: '10.10.10.21', c: 'var(--ink)' },
       { k: 'Agent', v: '已连接 · 3 秒前同步', c: 'var(--agent)' },
       { k: '配对', v: '已配对', c: 'var(--ink)' },
-      { k: '设备标识', v: 'deskhub-44bd…c598', c: 'var(--ink)' }
     ];
     const bars = (n, on) => ({ b1: n >= 1 ? on : 'var(--track)', b2: n >= 2 ? on : 'var(--track)', b3: n >= 3 ? on : 'var(--track)', b4: n >= 4 ? on : 'var(--track)' });
     const net = (name, level, tag, tagInk, opts = {}) => ({
@@ -112,15 +111,14 @@ class Component extends DCLogic {
       connects: [
         {
           rows: lined(raw), dim: '1', wifi: 'Office · 已连接', wifiInk: 'var(--agent)',
-          hint: '长按设备按键 3 秒，可重新进入配网页', hintInk: 'var(--muted)',
-          note: '① 连接与配对：Wi-Fi 那一行变成 56 px 高，右边多“更换”。点它进 Wi-Fi 列表。信号强度挪进列表里，这一页少一行。这一页只换 Wi-Fi；换电脑、换证书仍然要 USB 或热点配对。'
+          hint: '配对时设备打开热点，Wi-Fi 会暂时断开。', hintInk: 'var(--muted)',
+          note: '① 连接与配对：Wi-Fi 那一行变成 56 px 高，写 Wi-Fi 名称，右边多“更换”。配对那一行也是 56 px 高，右边写“开始配对”（已配对时写“重新配对”）。设备标识只在“设备信息”页。点它进 Wi-Fi 列表。信号强度挪进列表里，这一页少一行。这一页只换 Wi-Fi；换电脑、换证书仍然要 USB 或热点配对。'
         },
         {
           rows: lined([
             { k: 'IP 地址', v: '没有', c: 'var(--muted)' },
             { k: 'Agent', v: '未配对', c: 'var(--muted)' },
             { k: '配对', v: '热点已打开 · 4:12', c: 'var(--power)' },
-            { k: '设备标识', v: 'deskhub-44bd…c598', c: 'var(--ink)' }
           ]), dim: '0.4', wifi: '未连接', wifiInk: 'var(--muted)',
           hint: '配对热点打开时不能更换 Wi-Fi。关掉热点后再试。', hintInk: 'var(--power)',
           note: '② 配对热点开着（没有存 Wi-Fi 的设备开机会开，或人主动打开）：“更换”变暗，点了不动，下面一行写原因（电源色）。热点和试连抢同一个 Wi-Fi 驱动，所以不能同时进行（失败模式 W5）。'
