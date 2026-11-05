@@ -7,6 +7,7 @@
 #include "agent_client.hpp"
 #include "management.hpp"
 #include "pairing_device.hpp"
+#include "wifi_change.hpp"
 #include "json_util.hpp"
 #include "cJSON.h"
 #include "esp_log.h"
@@ -75,6 +76,13 @@ cJSON *handle(cJSON *request) {
             const auto pairing=dh::pairing_device::status();
             auto *pair=cJSON_AddObjectToObject(r,"pairing");
             cJSON_AddBoolToObject(pair,"open",pairing.open);cJSON_AddStringToObject(pair,"phase",pairing.phase);cJSON_AddStringToObject(pair,"why",pairing.why);
+            const auto change=dh::wifi_change::status();
+            auto *wc=cJSON_AddObjectToObject(r,"wifi_change");
+            cJSON_AddStringToObject(wc,"phase",dh::wifi_change::phase_name(change.phase));
+            cJSON_AddStringToObject(wc,"reason",dh::wifi_change::reason_name(change.reason));
+            cJSON_AddNumberToObject(wc,"result_ms",static_cast<double>(change.result_ms));
+            cJSON_AddNumberToObject(wc,"remaining_s",change.remaining_s);
+            cJSON_AddBoolToObject(wc,"busy",change.busy);cJSON_AddBoolToObject(wc,"restored",change.restored);
             const auto configuration=dh::config();
             cJSON_AddStringToObject(r,"theme",configuration.layout.theme.c_str());
             cJSON_AddNumberToObject(r,"rotation",configuration.rotation);
@@ -101,6 +109,7 @@ cJSON *handle(cJSON *request) {
         cJSON_AddNumberToObject(r,"config_revision",dh::config().revision);return o;
     }
     if(op=="provision") {
+        if(dh::network_owner()!=dh::NetworkOwner::None)return result(false,"BUSY","正在配对或更换 Wi-Fi");
         auto *c=cJSON_GetObjectItemCaseSensitive(request,"config"),*wifi=cJSON_GetObjectItemCaseSensitive(c,"wifi"),*agent=cJSON_GetObjectItemCaseSensitive(c,"agent"),*tm=cJSON_GetObjectItemCaseSensitive(c,"time");
         dh::Secrets secrets;secrets.ssid=field(wifi,"ssid");secrets.password=field(wifi,"password");secrets.url=field(agent,"url");secrets.agent_id=field(agent,"agent_id");secrets.token=field(agent,"token");secrets.ca_pem=field(agent,"ca_pem");
         secrets.update_public_key_pem=dh::secrets().update_public_key_pem;
@@ -163,5 +172,5 @@ extern "C" void app_main() {
     if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
     dh::audio::init();   // a task of its own: the codec is created there, so a missing speaker never delays the start
-    dh::network_start();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
+    dh::network_start();dh::wifi_change::init();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
 }

@@ -471,6 +471,27 @@ def safe_sound(value: Any) -> dict[str, Any] | None:
     return cleaned or None
 
 
+WIFI_CHANGE_PHASES = {"idle", "scanning", "typing", "testing", "checking_agent", "asking", "saved", "reverted"}
+WIFI_CHANGE_REASONS = {"NONE", "WRONG_PASSWORD", "NOT_FOUND", "TIMEOUT", "AGENT_UNREACHABLE", "USER_REVERTED", "HOTSPOT_OPEN", "BUSY", "INVALID_INPUT", "SCAN_FAILED", "SAVE_FAILED", "RESTORE_FAILED"}
+
+
+def safe_wifi_change(value: Any) -> dict[str, Any] | None:
+    """Only known phase/reason names and bounded diagnostics. Never echo credentials."""
+    if not isinstance(value, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    for key, allowed in (("phase", WIFI_CHANGE_PHASES), ("reason", WIFI_CHANGE_REASONS)):
+        if isinstance(value.get(key), str) and value[key] in allowed:
+            cleaned[key] = value[key]
+    for key, maximum in (("remaining_s", 180), ("result_ms", 2**53 - 1)):
+        if type(value.get(key)) is int and 0 <= value[key] <= maximum:
+            cleaned[key] = value[key]
+    for key in ("busy", "restored"):
+        if isinstance(value.get(key), bool):
+            cleaned[key] = value[key]
+    return cleaned or None
+
+
 def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     # Allowlist scalar diagnostics; no arbitrary echoed remote fields are printed.
     keys = {"device_id", "firmware_version", "protocol_version", "board_model", "configured", "wifi", "agent", "wifi_state", "agent_state", "time_quality", "config_revision", "provision_revision", "update_key_fingerprint", "applied_revision", "ui_alive", "theme", "rotation"}
@@ -499,6 +520,9 @@ def safe_status(result: dict[str, Any]) -> dict[str, Any]:
     pairing = safe_pairing(result.get("pairing"))
     if pairing is not None:
         cleaned["pairing"] = pairing
+    wifi_change = safe_wifi_change(result.get("wifi_change"))
+    if wifi_change is not None:
+        cleaned["wifi_change"] = wifi_change
     return cleaned
 
 
