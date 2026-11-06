@@ -265,6 +265,7 @@ openssl x509 -enddate -noout -in ~/.config/deskhub/tls/server.pem        # 看�
 | [刷机说明](docs/flashing.md) | 在另一台电脑上用 USB 刷机；刷旧固件前的注意事项 |
 | [Agent 说明](agent/README.md) | Agent 的命令、权限、显示器后端、自启动（里面的“网页管理台”一节写的是旧版，main 上没有） |
 | [充电保护设计](docs/charge-protection-design.md) | 充电保护的规则、失败模式和验证状态 |
+| [桌面 App 设计](docs/desktop-app-design.md) | macOS 菜单栏 App 和 DDC 切源的设计（设计中，有待你决定的问题） |
 | [配对接口设计](docs/pairing-design.md) | 无线配网（热点）的设计和进度 |
 | [设计稿](docs/design/README.md) | 设计稿源文件和设计变量 |
 | [开发笔记](docs/development.md) | 给改代码的人：分支、安全基线、构建、测试、改动记录 |

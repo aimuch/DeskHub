@@ -85,6 +85,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 - [设计稿](design/README.md)：设计稿源文件、画板清单和设计变量。
 - [配对接口设计](pairing-design.md)：热点配网（R7）的设计、实现和第 13 节的 K1 复审。
 - [管理员登录的设计](admin-login-design.md)、[网页管理台](web-console-design.md)。
+- [桌面 App 设计](desktop-app-design.md)：菜单栏 App 和 DDC 切源（N4，设计中）。
 
 ## 现状（开发记录）
 
