@@ -133,6 +133,8 @@ void probe_start(void) {
     start_ble();
 #endif
 #if CONFIG_DESKHUB_PROBE_HEAP || CONFIG_DESKHUB_PROBE_BLE
-    xTaskCreate(report, "dh_probe", 4096, NULL, 2, NULL);
+    // The stack in PSRAM: the probe must not take the internal memory it measures, nor fail to start when it is short.
+    if (xTaskCreateWithCaps(report, "dh_probe", 4096, NULL, 2, NULL, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS)
+        printf("DHPROBE_EVENT {\"probe\":\"task_failed\"}\n");
 #endif
 }

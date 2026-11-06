@@ -1,0 +1,3 @@
+# Test build only (docs/desktop-app-design.md section 12): variant F0, internal draw buffers, no BLE.
+CONFIG_DESKHUB_PROBE_HEAP=y
+CONFIG_DESKHUB_PROBE_DISPLAY_INTERNAL=y
