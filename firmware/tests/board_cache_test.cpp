@@ -188,6 +188,10 @@ lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg){
           cfg->tear_avoid_mode==ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE&&
           !cfg->touch_flags.swap_xy&&!cfg->touch_flags.mirror_x&&!cfg->touch_flags.mirror_y,
           "board startup changed the native touch coordinate system");
+    // The LVGL task: 8 KB overflowed with internal draw buffers (docs/evidence/ble-memory.json, F and G); 12 KB in PSRAM
+    // costs no internal memory. A smaller stack, or one taken from internal memory, is a failure.
+    check(cfg->lv_adapter_cfg.task_stack_size==12*1024&&cfg->lv_adapter_cfg.stack_in_psram,
+          "the LVGL task has a small stack, or one in internal memory");
     return &display;
 }
 lv_indev_t *bsp_display_get_input_dev(){return &input;}

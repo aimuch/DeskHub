@@ -156,9 +156,10 @@ int main(){
     check(startup.rotation==ESP_LV_ADAPTER_ROTATE_0&&startup.tear_avoid_mode==ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
           "adapter performs another pixel rotation");
     const auto &adapter=startup.lv_adapter_cfg;
-    check(adapter.task_stack_size==8192&&adapter.task_priority==6&&adapter.task_core_id==-1&&
+    // The LVGL stack is the one intended change: 12 KB in PSRAM since 0.3.16 (8 KB overflowed with internal draw buffers).
+    check(adapter.task_stack_size==12*1024&&adapter.task_priority==6&&adapter.task_core_id==-1&&
           adapter.tick_period_ms==1&&adapter.task_min_delay_ms==1&&adapter.task_max_delay_ms==15&&
-          !adapter.stack_in_psram&&!adapter.auto_sleep.enable&&
+          adapter.stack_in_psram&&!adapter.auto_sleep.enable&&
           adapter.auto_sleep.mode==ESP_LV_ADAPTER_AUTO_SLEEP_MODE_DISABLED&&adapter.auto_sleep.idle_timeout_ms==5000&&
           !adapter.auto_sleep.callbacks.on_enter_sleep&&!adapter.auto_sleep.callbacks.on_exit_sleep&&!adapter.auto_sleep.callbacks.user_ctx,
           "explicit startup changed unrelated adapter defaults");

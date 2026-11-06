@@ -137,7 +137,10 @@ esp_err_t board_display_init() {
     // Match the adapter defaults, keeping callback pointers zero-initialized.
     // Its C aggregate macro omits callbacks and triggers C++ -Werror.
     auto &adapter = cfg.lv_adapter_cfg;
-    adapter.task_stack_size = ESP_LV_ADAPTER_DEFAULT_STACK_SIZE;
+    // 8 KB overflowed once the draw buffers moved to internal memory (display_buffers.cpp); 12 KB in PSRAM costs no
+    // internal memory (docs/evidence/ble-memory.json, variants F to H).
+    adapter.task_stack_size = 12 * 1024;
+    adapter.stack_in_psram = true;
     adapter.task_priority = ESP_LV_ADAPTER_DEFAULT_TASK_PRIORITY;
     adapter.task_core_id = ESP_LV_ADAPTER_DEFAULT_TASK_CORE_ID;
     adapter.tick_period_ms = ESP_LV_ADAPTER_DEFAULT_TICK_PERIOD_MS;
