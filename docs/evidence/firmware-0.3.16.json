@@ -1,0 +1,34 @@
+{
+  "version": "0.3.16",
+  "built_from": "提交 372baba（升版）；构建时 firmware/ 目录与该提交一致（之后的提交只改文档）",
+  "build_dir": "firmware/build-0.3.16（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.15": [
+    "屏幕绘图缓冲开机预留在内部内存：拦截 esp_lv_adapter_register_display，把微雪 BSP 的 2 × 480 × 50 行 PSRAM 缓冲换成最多 20 行（偶数）的内部内存缓冲。SPI 发送时不再向内部内存临时申请中转缓冲，这是 0.3.9 到 0.3.12 横纹的根源（docs/evidence/display-corruption.md）",
+    "LVGL 任务栈从 8 KB 改成 12 KB，放 PSRAM（8 KB 在缓冲改到内部内存后会溢出）",
+    "蓝牙仍然关闭；内部内存余量照测试构建 F0 估计约 36 KB 空闲（没有在 0.3.16 上实测）"
+  ],
+  "app_image": {"file": "deskhub.bin", "size_bytes": 4528416, "sha256": "a619c26a7acd60492d02cf11e9df6952b95590b4a3e114e66db534fdf2706672",
+                "app_slot_bytes": 6291456, "slot_free_percent": 28},
+  "packages": {
+    "usb_bundle": {"file": "dist/deskhub-0.3.16-esp32s3.zip", "size_bytes": 2797859,
+                   "sha256": "f749d2ee942d4ba920a2686d6ddb595f146972de827632f6fb2d322713c418f3",
+                   "made_by": "scripts/package_firmware.py --build firmware/build-0.3.16",
+                   "images": ["0x0 bootloader.bin", "0x8000 partition-table.bin", "0xf000 ota_data_initial.bin", "0x20000 deskhub.bin"]},
+    "signed_ota": {"made": false, "note": "不生成 .dhfw：用户决定不需要"}
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，project_version 是 0.3.16，链接图里有 __wrap_esp_lv_adapter_register_display",
+    "包内 flash.py --check 通过；包内 deskhub.bin 与构建目录的 SHA-256 相同",
+    "主机测试 17 组（新增 display_internal_draw_buffers）、tools 116 条通过；界面流程 28 组和触摸方向回归通过（模拟数据）",
+    "测试先红：display_buffers_test 链接不到拦截函数，board_cache_test 报 LVGL 栈太小；实现后变绿",
+    "变异检查 display_buffers.py 12 处全部报红"
+  ],
+  "flashed": false,
+  "not_done": [
+    "没有刷到设备。设备上现在是 0.3.15",
+    "0.3.16 本身没有在真机上看过画面、没有读内存；依据是测试构建 F0（用户确认画面正常）和 H2（屏幕、Wi-Fi、蓝牙同时 0 条屏幕错误）",
+    "长时间运行、手指快速操作没有试"
+  ],
+  "hardware_verified": false
+}
