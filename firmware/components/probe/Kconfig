@@ -1,0 +1,26 @@
+menu "DeskHub probes (test builds only, docs/desktop-app-design.md section 12)"
+
+config DESKHUB_PROBE_HEAP
+    bool "Print the free memory every 5 s on the USB console"
+    default n
+    help
+        A line "DHPROBE {...}" every 5 s: internal, DMA-capable and PSRAM heap (free, largest block, lowest ever),
+        Wi-Fi link, BLE state. Off in every release build.
+
+config DESKHUB_PROBE_BLE
+    bool "Advertise a BLE GATT service named DeskHub-probe"
+    depends on BT_ENABLED && BT_NIMBLE_ENABLED
+    default n
+    help
+        Connectable advertising and one readable characteristic (the free internal heap as text). No pairing, no
+        write: it only measures what the BLE stack costs next to the display and Wi-Fi.
+
+config DESKHUB_PROBE_BLE_EARLY
+    bool "Start the BLE probe before the display and Wi-Fi"
+    depends on DESKHUB_PROBE_BLE
+    default n
+    help
+        Tells whether BLE fails for lack of memory in total, or only because the display and Wi-Fi have split the
+        internal memory first.
+
+endmenu

@@ -1,0 +1,2 @@
+# Test build only (docs/desktop-app-design.md section 12): heap probe, no BLE.
+CONFIG_DESKHUB_PROBE_HEAP=y
