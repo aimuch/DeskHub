@@ -23,18 +23,4 @@ config DESKHUB_PROBE_BLE_EARLY
         Tells whether BLE fails for lack of memory in total, or only because the display and Wi-Fi have split the
         internal memory first.
 
-config DESKHUB_PROBE_DISPLAY_INTERNAL
-    bool "Draw buffers in internal memory (2 x 480 x 20 lines), as SmartHub"
-    default n
-    help
-        Intercepts the BSP's display registration and moves its draw buffers from PSRAM to internal, DMA-capable
-        memory, taken once at boot; the SPI no longer asks for a bounce buffer on every transfer.
-
-config DESKHUB_PROBE_LVGL_STACK_PSRAM
-    bool "LVGL task: 12 KB of stack, in PSRAM"
-    depends on DESKHUB_PROBE_DISPLAY_INTERNAL
-    default n
-    help
-        Intercepts the adapter's start; 8 KB overflowed with internal draw buffers.
-
 endmenu
