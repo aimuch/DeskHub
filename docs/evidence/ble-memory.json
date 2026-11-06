@@ -36,6 +36,31 @@
       "sdkconfig": "firmware/sdkconfig.probe_ble_layout",
       "ble": "照 SmartHub（aimuch/SmartHub，同一块微雪 2.16）的内存布局：4 KB 以上的分配进 PSRAM（正式版 16 KB）；LVGL 对象全进 PSRAM（components/probe/lvgl_psram.c）；按体积优化（-Os）；Wi-Fi、lwIP、NimBLE 进 PSRAM；BLE 最后启动",
       "app_bytes": 4426384
+    },
+    "F0": {
+      "name": "0.3.15-probe-display",
+      "sdkconfig": "firmware/sdkconfig.probe_display",
+      "change": "屏幕绘图缓冲改成内部内存 2 × 480 × 20 行（拦截 esp_lv_adapter_register_display，components/probe/display_internal.c），没有 BLE"
+    },
+    "F": {
+      "name": "0.3.15-probe-display-ble",
+      "sdkconfig": "firmware/sdkconfig.probe_display_ble",
+      "change": "F0 + E 的内存配置 + BLE 最后启动"
+    },
+    "G": {
+      "name": "0.3.15-probe-g",
+      "sdkconfig": "firmware/sdkconfig.probe_display_ble_early",
+      "change": "F，但 BLE 最先启动"
+    },
+    "H1": {
+      "name": "0.3.15-probe-h1",
+      "sdkconfig": "firmware/sdkconfig.probe_h1",
+      "change": "F + LVGL 任务栈 12 KB 且放 PSRAM（拦截 esp_lv_adapter_init）+ main 任务栈 12 KB，BLE 最后启动"
+    },
+    "H2": {
+      "name": "0.3.15-probe-h2 / h2b",
+      "sdkconfig": "firmware/sdkconfig.probe_h2",
+      "change": "H1，但 BLE 最先启动；h2b 只是把探针任务的栈也放进 PSRAM，好读数"
     }
   },
   "results": {
@@ -78,20 +103,52 @@
       "ble": "启动失败：BLE_INIT: Malloc failed，随后蓝牙控制器初始化里中断看门狗超时（Guru Meditation，调用栈 btdm_controller_task → r_rwble_init → r_lld_core_init），设备反复重启",
       "display_errors": "有：spi transmit (queue) color failed、Draw bitmap failed: ESP_ERR_NO_MEM",
       "action": "立刻刷回 0.3.15，读到正常（固件 0.3.15、界面心跳正常、Wi-Fi 已连接、主题 ocean、充电保护 holding）"
+    },
+    "F0": {
+      "ble": "关",
+      "internal_free": "36 KB",
+      "internal_largest": "15.4 KB",
+      "internal_lowest_ever": "21.9 KB",
+      "display_errors": "120 秒内 0 条（换 4 次主题）",
+      "screen_seen_by_user": "正常（用户在设备旁确认）"
+    },
+    "F": {
+      "ble": "BLE_INIT: Malloc failed，esp_bt_controller_init -2；反复重启（main 和 lvgl 任务栈溢出）",
+      "display_errors": "没有屏幕驱动错误"
+    },
+    "G": {
+      "ble": "启动成功，随后 main 任务栈溢出，反复重启"
+    },
+    "H1": {
+      "ble": "蓝牙控制器分不到内存（esp_bt_controller_init -4），不再重启",
+      "internal_free": "17.8 KB",
+      "internal_lowest_ever": "2.5 KB"
+    },
+    "H2b": {
+      "ble": "启动成功并广播（ble=1），占内部内存 34 456 字节",
+      "internal_free": "16.6–16.8 KB",
+      "internal_largest": "9.7–11.3 KB",
+      "internal_lowest_ever": "4.3 KB",
+      "display_errors": "150 秒内 0 条（换 4 次主题），0 次重启；1 条无害的 Wi-Fi 警告（sta is connected, disconnect before connecting）",
+      "wifi": "已连接，网络校时成功（USB 状态 time_quality ntp），信号 -63 到 -75 dBm",
+      "screen_seen_by_user": "开机后用户看到正常界面；加压那 150 秒的画面没有确认（问题没有得到回答，App 当时退出）",
+      "audio": "声音芯片应答（USB 状态 audio ready），没有放音"
     }
   },
   "conclusion": [
     "按现在的内存布局，BLE 放不进去：默认配置会反复重启并让横纹回来；省内存的配置启动不了蓝牙控制器；只有让 BLE 最先启动才能广播，但内部内存最大连续块只剩 4 KB 左右，正好卡在屏幕 DMA 每块约 4 KB 的边上，开机以来最低只剩 1.85 KB。这不能当产品用",
     "D 只测了广播。真正连上手机或 Mac、传数据时还要更多内存，没有测",
     "带蓝牙的三个版本 Wi-Fi 信号读数都比对照版差（-62 到 -79 对 -35 到 -42）。原因没有确认：可能是共用射频，也可能是这次设备位置变了",
-    "2026-11-06 补测 E：只照搬 SmartHub 的配置不够；屏幕驱动路径（预留内部 DMA 缓冲、发送时不申请内存）是剩下最大的差别，没有测"
+    "2026-11-06 补测 E：只照搬 SmartHub 的配置不够；屏幕驱动路径（预留内部 DMA 缓冲、发送时不申请内存）是剩下最大的差别，没有测",
+    "2026-11-06 H2b：屏幕、Wi-Fi、BLE 第一次同时跑起来。需要同时做五件事：屏幕绘图缓冲开机预留在内部内存（不再每次中转）；LVGL 任务栈 12 KB 放 PSRAM；main 任务栈 12 KB；E 的内存配置（Wi-Fi、lwIP、NimBLE、LVGL 进 PSRAM，4 KB 门槛，-Os）；BLE 在屏幕和 Wi-Fi 之前启动。剩余内部内存 16.6 KB、开机以来最低 4.3 KB，余量很薄；但屏幕已经不在运行中申请内存，所以内存紧张不再直接变成横纹"
   ],
   "not_tested": [
     "BLE 已连接时的内存和稳定性：Mac 上的测试脚本一碰蓝牙就被 macOS 终止（Abort trap: 6，命令行程序没有蓝牙权限声明）；也没有用手机连",
     "长时间运行、用手指在键盘页快速操作",
-    "把屏幕或别的模块的内部内存挪走以后能不能腾出空间（要先查清内部内存被谁占着）"
+    "把屏幕或别的模块的内部内存挪走以后能不能腾出空间（要先查清内部内存被谁占着）",
+    "H2b：BLE 已连接、传数据；长时间运行；手指快速操作；按体积优化和 LVGL 进 PSRAM 后界面会不会变慢；放音；换 Wi-Fi 扫描、以后连公网 TLS 这类后来才申请的内存够不够"
   ],
-  "side_effects": "测试时换了 16 次主题，最后都改回 ocean；配置版本号从 37 变成 53，内容不变。刷回 0.3.15 后读到：固件 0.3.15，界面心跳正常，Wi-Fi 已连接，主题 ocean，旋转 180，热点关闭，充电保护 holding",
+  "side_effects": "测试时多次换主题，最后都改回 ocean；配置版本号最终是 61，内容不变。2026-11-06 最后一次刷回 0.3.15 后读到：固件 0.3.15，界面心跳正常，Wi-Fi 已连接，主题 ocean，旋转 180，热点关闭，充电保护 holding",
   "release_build": "正式版配置（firmware/sdkconfig.defaults）加上探针组件后仍是 BT 关闭、探针关闭；应用镜像 4 528 336 字节，比 0.3.15 多 32 字节，0 个警告",
   "smarthub_comparison": {
     "why_smarthub_can": "读 SmartHub 的 esp32-firmware/main/display.c 和 boards/ws-amoled-216.defaults 得出，没有在设备上跑过 SmartHub",
@@ -103,5 +160,6 @@
       "SmartHub 用 IDF 5.5，DeskHub 用 6.0.2"
     ],
     "E_tested": "E 照搬了后四项，没有改屏幕驱动，BLE 仍然起不来。剩下的屏幕驱动差别没有测"
-  }
+  },
+  "stack_overflows": "E、F、G 的重启主要是任务栈溢出：main（8 KB）和 lvgl（8 KB，adapter 默认）。H 把两者都加到 12 KB（LVGL 的放 PSRAM）后不再溢出。所以 E 的结论“只照搬配置不够”要打折：E 当时也有栈溢出"
 }
