@@ -57,7 +57,7 @@ DeskHub 是放在电脑桌上的触屏控制器。它只做三件事：
 | N1 | 充电保护：80% 或 90% 上限 | 标为“实验”。规则见 R2。 |
 | N2 | 声音 | **已实现**（0.3.7，2026-10-30）：2026-10-29 你确认板上有扬声器。提示音默认关；动作有结果、配对完成时响；夜间限亮时段不响；设置里有试听和音量三档（0.3.8，默认低），USB 有 `--sound-test`。设计 `Dev-Sound`，规则 `audio_policy`（主机测试和变异检查）。已刷到设备，声音芯片应答了；2026-10-31 你听到了试听音。0.3.8 也在设备上了（2026-11-02 核对），三档没有人听过。动作和配对触发的提示音还没有在真机上试。 |
 | N3 | 屏幕上更换 Wi-Fi（软键盘） | **已实现，0.3.13 已刷机；用户已确认显示正常**（2026-11-03）：只给已配对或已配置的设备换 Wi-Fi，不做首次配对。先试连，连上才保存，连不上改回原来的。设计和失败模式见 [wifi-change-design.md](wifi-change-design.md)，画板 `Dev-WifiList`、`Dev-Keyboard`、`Dev-WifiResult`。2026-11-03 三项决定已确认：允许“按住显示”密码（K4 已记录）；字母按 a 到 z 排列，每键至少 56×56 px；连不上电脑时，60 秒无人操作就改回原来的 Wi-Fi。完整构建和主机验证通过，见 [验证证据](evidence/wifi-change/README.md)。USB 已读回 Wi-Fi 已连接；失败回退和 Agent 连通尚未完整验证。 |
-| N4 | 桌面 App（macOS 菜单栏） | **设计中**（2026-11-06）：Agent 的图形外壳，看状态、一键切源、启停 Agent、开机自启、快捷键；可选第二阶段做设置向导。切源后端考虑用 DDC（AppleSiliconDDC，MIT）代替 BetterDisplay。设计见 [desktop-app-design.md](desktop-app-design.md)，第 11 节的问题要你决定。 |
+| N4 | 桌面 App（macOS 菜单栏） | **设计中**（2026-11-06）：Agent 的图形外壳，看状态、一键切源、启停 Agent、开机自启、快捷键；可选第二阶段做设置向导。切源后端考虑用 DDC（AppleSiliconDDC，MIT）代替 BetterDisplay。2026-11-06 实验：DDC 回程通过（E1）；屏幕、Wi-Fi、BLE 同时运行内存不够（E2 没有通过），建议触摸屏改走 Wi-Fi 直连 App，待你决定。设计见 [desktop-app-design.md](desktop-app-design.md)，第 11 节的问题要你决定。 |
 
 ### 后续
 

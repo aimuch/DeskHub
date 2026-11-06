@@ -72,6 +72,7 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/main/`、`tools/provision.py`、`tools/tests/test_provision_wifi_change.py` | USB 状态加只读的 `wifi_change`；无线被占用时 USB 配对回 BUSY |
 | `firmware/tests/`（`CMakeLists.txt`、`keyboard_test.cpp`、`wifi_change_test.cpp`、`ui_preview/`） | 键盘、换网状态机和触屏流程的测试 |
 | `firmware/components/core/`（`core.cpp`、`policy.cpp`、`policy.hpp`）、`firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/` | 时区：配置多一个 `tz_minutes`（只在设备上，不发给 Agent），开机、保存、恢复出厂时设置 TZ；T23、A29 |
+| `firmware/main/`（`app_main.cpp`、`CMakeLists.txt`） | 调用测试探针 `probe_start_early()`、`probe_start()`（`components/probe`）。正式版配置里探针关闭，什么也不做；只有 `sdkconfig.probe_*` 的测试构建打开（E2，`docs/evidence/ble-memory.json`） |
 | `firmware/tests/ui_preview/harness.cpp` | 恢复出厂的 F1 到 F4：声音和外观也被清掉，删不掉时要说 |
 | `scripts/ui_preview/touch_orientation_test.cpp` | 补上显示锁的替身：0.3.13 以后 `render.py` 整条命令链接失败，这个回归一直没有运行 |
 | `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.15，各两处 |
