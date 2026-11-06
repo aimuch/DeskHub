@@ -8,6 +8,7 @@
 #include "management.hpp"
 #include "pairing_device.hpp"
 #include "wifi_change.hpp"
+#include "probe.h"
 #include "json_util.hpp"
 #include "cJSON.h"
 #include "esp_log.h"
@@ -168,9 +169,11 @@ extern "C" void app_main() {
     // Never print frames, tokens, SSIDs, Authorization headers, or trust material.
     esp_log_level_set("esp-tls",ESP_LOG_NONE);esp_log_level_set("HTTP_CLIENT",ESP_LOG_NONE);
     dh::core_init();dh::board_init();dh::charge::init();
+    probe_start_early();   // test builds only (components/probe)
     usb_serial_jtag_driver_config_t usb_cfg{};usb_cfg.rx_buffer_size=2048;usb_cfg.tx_buffer_size=2048;
     if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
     dh::audio::init();   // a task of its own: the codec is created there, so a missing speaker never delays the start
     dh::network_start();dh::wifi_change::init();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
+    probe_start();   // measurement only in test builds (components/probe); does nothing in a release build
 }
