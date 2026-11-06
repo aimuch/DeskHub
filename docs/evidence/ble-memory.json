@@ -9,27 +9,82 @@
     "同时记录 ESP-IDF 的错误和警告行（屏幕横纹对应的是 spi_common 的 Failed to allocate priv TX buffer 和 lcd_panel 的 spi transmit (queue) color failed）"
   ],
   "builds": {
-    "A": {"name": "0.3.15-probe-heap", "ble": "关", "sdkconfig": "firmware/sdkconfig.probe_heap", "app_bytes": 4528752},
-    "B": {"name": "0.3.15-probe-ble", "ble": "NimBLE，默认配置，最后启动", "sdkconfig": "firmware/sdkconfig.probe_ble", "app_bytes": 4743024},
-    "C": {"name": "0.3.15-probe-blepsram", "ble": "NimBLE 协议栈内存放 PSRAM、1 个连接、只做外设、Wi-Fi 和 LWIP 尽量放 PSRAM、静态接收缓冲 6、接收窗口 4，最后启动", "sdkconfig": "firmware/sdkconfig.probe_ble_psram"},
-    "D": {"name": "0.3.15-probe-bleearly", "ble": "同 C 的 BLE 设置（Wi-Fi 设置不变），在屏幕和 Wi-Fi 之前启动", "sdkconfig": "firmware/sdkconfig.probe_ble_early"}
+    "A": {
+      "name": "0.3.15-probe-heap",
+      "ble": "关",
+      "sdkconfig": "firmware/sdkconfig.probe_heap",
+      "app_bytes": 4528752
+    },
+    "B": {
+      "name": "0.3.15-probe-ble",
+      "ble": "NimBLE，默认配置，最后启动",
+      "sdkconfig": "firmware/sdkconfig.probe_ble",
+      "app_bytes": 4743024
+    },
+    "C": {
+      "name": "0.3.15-probe-blepsram",
+      "ble": "NimBLE 协议栈内存放 PSRAM、1 个连接、只做外设、Wi-Fi 和 LWIP 尽量放 PSRAM、静态接收缓冲 6、接收窗口 4，最后启动",
+      "sdkconfig": "firmware/sdkconfig.probe_ble_psram"
+    },
+    "D": {
+      "name": "0.3.15-probe-bleearly",
+      "ble": "同 C 的 BLE 设置（Wi-Fi 设置不变），在屏幕和 Wi-Fi 之前启动",
+      "sdkconfig": "firmware/sdkconfig.probe_ble_early"
+    },
+    "E": {
+      "name": "0.3.15-probe-layout",
+      "sdkconfig": "firmware/sdkconfig.probe_ble_layout",
+      "ble": "照 SmartHub（aimuch/SmartHub，同一块微雪 2.16）的内存布局：4 KB 以上的分配进 PSRAM（正式版 16 KB）；LVGL 对象全进 PSRAM（components/probe/lvgl_psram.c）；按体积优化（-Os）；Wi-Fi、lwIP、NimBLE 进 PSRAM；BLE 最后启动",
+      "app_bytes": 4426384
+    }
   },
   "results": {
-    "A": {"internal_free": "74.1–74.2 KB", "internal_largest": "31.7 KB", "internal_lowest_ever": "50.9 KB", "dma_largest": "31.7 KB",
-          "display_errors": 0, "reboots": 0, "wifi_rssi_dbm": "-42 到 -35"},
-    "B": {"ble": "启动失败：BLE_INIT: Malloc failed。头 37 秒反复重启（启动日志重复出现，每次约 3 秒），之后初始化改为返回失败，设备不再重启，但蓝牙没开",
-          "internal_free": "29.8–48.0 KB", "internal_largest": "12.3–19.5 KB", "internal_lowest_ever": "3.4 KB",
-          "display_errors": "73 条，含 Failed to allocate priv TX buffer、spi transmit (queue) color failed、Draw bitmap failed: ESP_ERR_NO_MEM（和 0.3.9 到 0.3.11 的横纹是同一组错误）",
-          "wifi_rssi_dbm": "-46 到 -41"},
-    "C": {"ble": "启动失败：esp_bt_controller_init -4，controller init failed。控制器的内存只能在内部 RAM，挪到 PSRAM 的那几项省不到它",
-          "internal_free": "39.3–39.4 KB", "internal_largest": "8.7 KB", "internal_lowest_ever": "7.4 KB", "display_errors": 0, "reboots": 0, "wifi_rssi_dbm": "-71 到 -62"},
-    "D": {"ble": "启动成功并广播；BLE 占内部内存 34 456 字节", "internal_free": "10.3–18.8 KB", "internal_largest": "4.0–5.4 KB", "internal_lowest_ever": "1.85 KB",
-          "display_errors": "150 秒内 0 条（换了 4 次主题）", "reboots": 0, "wifi_rssi_dbm": "-79 到 -72"}
+    "A": {
+      "internal_free": "74.1–74.2 KB",
+      "internal_largest": "31.7 KB",
+      "internal_lowest_ever": "50.9 KB",
+      "dma_largest": "31.7 KB",
+      "display_errors": 0,
+      "reboots": 0,
+      "wifi_rssi_dbm": "-42 到 -35"
+    },
+    "B": {
+      "ble": "启动失败：BLE_INIT: Malloc failed。头 37 秒反复重启（启动日志重复出现，每次约 3 秒），之后初始化改为返回失败，设备不再重启，但蓝牙没开",
+      "internal_free": "29.8–48.0 KB",
+      "internal_largest": "12.3–19.5 KB",
+      "internal_lowest_ever": "3.4 KB",
+      "display_errors": "73 条，含 Failed to allocate priv TX buffer、spi transmit (queue) color failed、Draw bitmap failed: ESP_ERR_NO_MEM（和 0.3.9 到 0.3.11 的横纹是同一组错误）",
+      "wifi_rssi_dbm": "-46 到 -41"
+    },
+    "C": {
+      "ble": "启动失败：esp_bt_controller_init -4，controller init failed。控制器的内存只能在内部 RAM，挪到 PSRAM 的那几项省不到它",
+      "internal_free": "39.3–39.4 KB",
+      "internal_largest": "8.7 KB",
+      "internal_lowest_ever": "7.4 KB",
+      "display_errors": 0,
+      "reboots": 0,
+      "wifi_rssi_dbm": "-71 到 -62"
+    },
+    "D": {
+      "ble": "启动成功并广播；BLE 占内部内存 34 456 字节",
+      "internal_free": "10.3–18.8 KB",
+      "internal_largest": "4.0–5.4 KB",
+      "internal_lowest_ever": "1.85 KB",
+      "display_errors": "150 秒内 0 条（换了 4 次主题）",
+      "reboots": 0,
+      "wifi_rssi_dbm": "-79 到 -72"
+    },
+    "E": {
+      "ble": "启动失败：BLE_INIT: Malloc failed，随后蓝牙控制器初始化里中断看门狗超时（Guru Meditation，调用栈 btdm_controller_task → r_rwble_init → r_lld_core_init），设备反复重启",
+      "display_errors": "有：spi transmit (queue) color failed、Draw bitmap failed: ESP_ERR_NO_MEM",
+      "action": "立刻刷回 0.3.15，读到正常（固件 0.3.15、界面心跳正常、Wi-Fi 已连接、主题 ocean、充电保护 holding）"
+    }
   },
   "conclusion": [
     "按现在的内存布局，BLE 放不进去：默认配置会反复重启并让横纹回来；省内存的配置启动不了蓝牙控制器；只有让 BLE 最先启动才能广播，但内部内存最大连续块只剩 4 KB 左右，正好卡在屏幕 DMA 每块约 4 KB 的边上，开机以来最低只剩 1.85 KB。这不能当产品用",
     "D 只测了广播。真正连上手机或 Mac、传数据时还要更多内存，没有测",
-    "带蓝牙的三个版本 Wi-Fi 信号读数都比对照版差（-62 到 -79 对 -35 到 -42）。原因没有确认：可能是共用射频，也可能是这次设备位置变了"
+    "带蓝牙的三个版本 Wi-Fi 信号读数都比对照版差（-62 到 -79 对 -35 到 -42）。原因没有确认：可能是共用射频，也可能是这次设备位置变了",
+    "2026-11-06 补测 E：只照搬 SmartHub 的配置不够；屏幕驱动路径（预留内部 DMA 缓冲、发送时不申请内存）是剩下最大的差别，没有测"
   ],
   "not_tested": [
     "BLE 已连接时的内存和稳定性：Mac 上的测试脚本一碰蓝牙就被 macOS 终止（Abort trap: 6，命令行程序没有蓝牙权限声明）；也没有用手机连",
@@ -37,5 +92,16 @@
     "把屏幕或别的模块的内部内存挪走以后能不能腾出空间（要先查清内部内存被谁占着）"
   ],
   "side_effects": "测试时换了 16 次主题，最后都改回 ocean；配置版本号从 37 变成 53，内容不变。刷回 0.3.15 后读到：固件 0.3.15，界面心跳正常，Wi-Fi 已连接，主题 ocean，旋转 180，热点关闭，充电保护 holding",
-  "release_build": "正式版配置（firmware/sdkconfig.defaults）加上探针组件后仍是 BT 关闭、探针关闭；应用镜像 4 528 336 字节，比 0.3.15 多 32 字节，0 个警告"
+  "release_build": "正式版配置（firmware/sdkconfig.defaults）加上探针组件后仍是 BT 关闭、探针关闭；应用镜像 4 528 336 字节，比 0.3.15 多 32 字节，0 个警告",
+  "smarthub_comparison": {
+    "why_smarthub_can": "读 SmartHub 的 esp32-firmware/main/display.c 和 boards/ws-amoled-216.defaults 得出，没有在设备上跑过 SmartHub",
+    "differences": [
+      "屏幕：SmartHub 用 esp_lvgl_port，开机就在内部 DMA 内存里放两块 480×20 行的绘图缓冲（各 19.2 KB），SPI 最大事务等于缓冲大小，发送时不再申请内存。DeskHub 用微雪 BSP 加 esp_lvgl_adapter，缓冲在 PSRAM（各 48 KB），每次发送都要临时申请内部内存中转，这就是横纹的根源",
+      "LVGL：SmartHub 内部只留 8 KB，另加 256 KB PSRAM 池；DeskHub 用 C 库 malloc，16 KB 以下的分配都在内部内存",
+      "SmartHub 的 SPIRAM_MALLOC_ALWAYSINTERNAL 是 4096，DeskHub 是 16384",
+      "SmartHub 整体 -Os（LVGL -O2），DeskHub 整体 -O2（PERF）",
+      "SmartHub 用 IDF 5.5，DeskHub 用 6.0.2"
+    ],
+    "E_tested": "E 照搬了后四项，没有改屏幕驱动，BLE 仍然起不来。剩下的屏幕驱动差别没有测"
+  }
 }
