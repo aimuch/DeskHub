@@ -30,7 +30,96 @@ final class FirmwareModel: ObservableObject {
     @Published private(set) var ports: [String] = []
     @Published var port = ""
     @Published private(set) var phase: Phase = .idle
+    @Published private(set) var key: UpdateKey?
+    @Published private(set) var keyNote: String?
     private var folder: PackageFolder?
+
+    // ---- the Bluetooth update (docs/desktop-app-design.md 13.11) ----
+    func loadKey() { if key == nil { key = UpdateKey.load() } }
+    // K1: the public key goes to the device over USB only.
+    func writeKey() {
+        guard !port.isEmpty, !busy else { return }
+        do { key = try UpdateKey.loadOrCreate() } catch { keyNote = "这台 Mac 建不了钥匙（需要 Apple 芯片的安全隔区）。"; return }
+        guard let key else { return }
+        keyNote = "正在用 USB 写入公钥…"
+        let port = self.port, pem = key.publicKeyPEM, mine = key.fingerprint
+        Task.detached {
+            let r = USBStatus.writeUpdateKey(port: port, pem: pem)
+            await MainActor.run {
+                switch r {
+                case .success(let fp): self.keyNote = fp == mine ? "设备收下了这台 Mac 的公钥。重新连上蓝牙后就能用蓝牙升级。" : "设备存的指纹和这台 Mac 的不一样。"
+                case .failure(let e): self.keyNote = e.words
+                }
+            }
+        }
+    }
+    func keyOnDevice(_ link: TouchScreenLink) -> Bool {
+        guard let key, let fp = link.info?.updateKey, !fp.isEmpty else { return false }
+        return fp == key.fingerprint
+    }
+    func bluetoothBlocker(_ link: TouchScreenLink) -> String? {
+        guard case .connected = link.state else { return "触摸屏没用蓝牙连上。" }
+        guard link.hasUpdateCharacteristic else { return "触摸屏的固件还不支持蓝牙升级：先用 USB 刷 0.3.22 以后的版本。" }
+        guard key != nil else { return "这台 Mac 还没有签名钥匙：点“写入公钥（USB）”。" }
+        guard keyOnDevice(link) else { return "触摸屏上没有这台 Mac 的公钥：插上 USB，点“写入公钥（USB）”。" }
+        guard let package else { return "先选一个固件包。" }
+        if let running = link.info?.firmware, let c = FirmwareVersion.compare(package.version, running), c <= 0 {
+            return "固件包 \(package.version) 不比触摸屏上的 \(running) 新。蓝牙只能升级；降级请用 USB。"
+        }
+        return nil
+    }
+    func bluetoothUpdate(_ link: TouchScreenLink) {
+        guard bluetoothBlocker(link) == nil, let key, let package, let folder,
+              let app = package.images.first(where: { $0.offset == 0x20000 }) else { return }
+        // The bytes that are signed and sent are checked again now (P7): the folder could have changed since it was chosen.
+        guard case .success(let again) = folder.verify(), again == package, let image = try? Data(contentsOf: folder.url(of: app)),
+              FirmwareCheck.sha256HexForTests(image) == app.sha256 else { keyNote = PackageProblem.digestMismatch.words; return }
+        do { link.startUpdate(envelope: try key.envelope(for: package), image: image, version: package.version) }
+        catch { keyNote = "签名失败：\(error)" }
+    }
+
+    // The test hook (docs/desktop-app-design.md 13.11): `DeskHub --ble-update <package> [--log <file>]` runs the App's own
+    // Bluetooth update once the touch screen is connected, and writes what happened. Nothing else changes.
+    private var autoTimer: Timer?
+    private var autoLog: [[String: Any]] = []
+    private var autoStart = Date()
+    func autoRun(_ link: TouchScreenLink) {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--ble-update"), i + 1 < args.count else { return }
+        let path = args[i + 1]
+        let logPath = args.firstIndex(of: "--log").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        load(URL(fileURLWithPath: path))
+        loadKey()
+        autoStart = Date()
+        func note(_ s: String) {
+            autoLog.append(["t": (Date().timeIntervalSince(autoStart) * 10).rounded() / 10, "line": s])
+            if let logPath, let d = try? JSONSerialization.data(withJSONObject: ["tool": "DeskHub --ble-update", "package": URL(fileURLWithPath: path).lastPathComponent, "events": autoLog], options: [.prettyPrinted, .sortedKeys]) {
+                try? d.write(to: URL(fileURLWithPath: logPath))
+            }
+        }
+        link.onUpdateLog = { note($0) }
+        note("waiting for the touch screen")
+        var started = false
+        autoTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] t in
+            Task { @MainActor in
+                guard let self else { t.invalidate(); return }
+                if !started {
+                    if let why = self.bluetoothBlocker(link) {
+                        if case .connected = link.state { note("blocked: \(why)"); t.invalidate() }
+                        return
+                    }
+                    started = true
+                    note("info before: \(link.info.map { "\($0.device) \($0.firmware) key \($0.updateKey.prefix(12))" } ?? "none")")
+                    self.bluetoothUpdate(link)
+                } else {
+                    switch link.update {
+                    case .confirmed, .failed: note("done: \(link.update)"); t.invalidate()
+                    default: break
+                    }
+                }
+            }
+        }
+    }
 
     var busy: Bool {
         switch phase {
@@ -145,6 +234,7 @@ final class FirmwareModel: ObservableObject {
 
 struct FirmwarePage: View {
     @EnvironmentObject var fw: FirmwareModel
+    @EnvironmentObject var link: TouchScreenLink
     var body: some View {
         Text("固件").font(.title2.weight(.semibold))
         Text("用 USB 线给触摸屏刷固件。设置会保留。刷完从 USB 读回版本，一样才算刷好。").font(.caption).foregroundStyle(.secondary)
@@ -180,6 +270,40 @@ struct FirmwarePage: View {
                 .disabled(fw.package == nil || fw.port.isEmpty || fw.busy)
         }
         Text("刷机工具是 Espressif 的 esptool \(FirmwareRules.esptoolVersion)（GPL-2.0，单独的程序，许可证在 App 里）。").font(.caption2).foregroundStyle(.tertiary)
+        bluetooth
+    }
+
+    // 13.11: the update over Bluetooth, signed by this Mac's key in the Secure Enclave.
+    @ViewBuilder private var bluetooth: some View {
+        Divider().padding(.vertical, 4)
+        Text("蓝牙升级").font(.title3.weight(.semibold))
+        Text("不用插线：固件由这台 Mac 安全隔区里的钥匙签名，触摸屏核对签名后才写入，新版本起不来会自动回到旧版本。只能升级，降级请用上面的 USB。").font(.caption).foregroundStyle(.secondary)
+        row(title: fw.key.map { "签名钥匙：\($0.fingerprint.prefix(12))…" } ?? "签名钥匙：还没有",
+            sub: fw.keyNote ?? (fw.keyOnDevice(link) ? "触摸屏上是这台 Mac 的公钥" : "触摸屏上还没有这台 Mac 的公钥：插上 USB，写入一次"),
+            subColor: fw.keyOnDevice(link) ? okColor : .secondary) {
+            Button("写入公钥（USB）") { fw.writeKey() }.disabled(fw.port.isEmpty || fw.busy)
+        }
+        bluetoothProgress
+        HStack(alignment: .top) {
+            Text(fw.bluetoothBlocker(link) ?? "大约几分钟。升级时触摸屏要插着 USB 电源。").font(.caption).foregroundStyle(fw.bluetoothBlocker(link) == nil ? Color.secondary : warnColor)
+            Spacer()
+            if case .sending = link.update { Button("取消") { link.cancelUpdate() } }
+            Button(fw.package.map { "通过蓝牙升级到 \($0.version)" } ?? "通过蓝牙升级") { fw.bluetoothUpdate(link) }
+                .buttonStyle(.borderedProminent).tint(accent)
+                .disabled(fw.bluetoothBlocker(link) != nil || { switch link.update { case .manifest, .waitingReady, .sending, .finishing, .restarting: return true; default: return false } }())
+        }
+        .onAppear { fw.loadKey() }
+    }
+    @ViewBuilder private var bluetoothProgress: some View {
+        switch link.update {
+        case .idle: EmptyView()
+        case .manifest, .waitingReady: status("正在把签名清单发给触摸屏…", nil)
+        case .sending(let f): status("正在通过蓝牙写入", f)
+        case .finishing: status("触摸屏正在核对整个镜像…", nil)
+        case .restarting(let v): status("触摸屏正在重启到 \(v)，等它重新连上后读回版本…", nil)
+        case .confirmed(let v): note("已升级到 \(v)（读回确认）。新版本开机 1 分钟内自检，不过会自动回到旧版本。", okColor, "checkmark.circle.fill")
+        case .failed(let s): note(s, warnColor, "exclamationmark.triangle.fill")
+        }
     }
 
     @ViewBuilder private var progress: some View {

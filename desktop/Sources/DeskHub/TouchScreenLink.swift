@@ -18,10 +18,20 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     static let info = CBUUID(string: "7A5E0002-3C4B-4E0D-9B6A-44534B48ED01")
     static let control = CBUUID(string: "7A5E0003-3C4B-4E0D-9B6A-44534B48ED01")
     static let events = CBUUID(string: "7A5E0004-3C4B-4E0D-9B6A-44534B48ED01")
+    static let update = CBUUID(string: "7A5E0005-3C4B-4E0D-9B6A-44534B48ED01")   // 13.11, firmware 0.3.22 and later
     private static let rememberKey = "touchScreenPeripheral"
 
     @Published private(set) var state: State = .notPaired
     @Published private(set) var problem: String?
+    @Published private(set) var info: DeviceInfo?           // what the device said about itself at the last connection
+    // ---- the firmware update over Bluetooth (docs/desktop-app-design.md 13.11) ----
+    enum UpdatePhase: Equatable {
+        case idle, manifest, waitingReady, sending(Double), finishing, restarting(String)
+        case confirmed(String), failed(String)
+    }
+    @Published private(set) var update: UpdatePhase = .idle
+    var hasUpdateCharacteristic: Bool { updateChar != nil }
+    var onUpdateLog: ((String) -> Void)?                     // the record of a run (the test hook writes it)
     var onRequest: ((SwitchRequest) -> Void)?
     var sources: () -> [String] = { [] }   // the messages of the current source list (LinkProtocol.sourceMessages)
     var current: () -> String = { "" }     // the id of the input the monitor is on, "" when not known
@@ -29,6 +39,13 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var controlChar: CBCharacteristic?
+    private var updateChar: CBCharacteristic?
+    private var upManifest: [Data] = []
+    private var upImage = Data()
+    private var upTarget = ""
+    private var upSent = 0, upWritten = 0, upFrame = 180
+    private var upWaitingWrite = false
+    private var upTimer: Timer?
     private var queue: [Data] = []
     private var writing = false
     private var remembered: UUID? {
@@ -77,6 +94,92 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     }
     func sendResult(_ message: String) { enqueue(message) }
 
+    // Sends the signed envelope and the app image (13.11). The caller has checked the key and the version.
+    func startUpdate(envelope: Data, image: Data, version: String) {
+        guard case .connected = state, let p = peripheral, updateChar != nil else { update = .failed("触摸屏没连上，或者它的固件还不支持蓝牙升级（要 0.3.22 以后）"); return }
+        if case .sending = update { return }
+        upFrame = max(23, min(p.maximumWriteValueLength(for: .withoutResponse), 509))
+        upManifest = UpdateFrames.manifestFrames(envelope, maxFrame: upFrame)
+        guard !upManifest.isEmpty else { update = .failed("清单太大"); return }
+        upImage = image
+        upTarget = version
+        upSent = 0
+        upWritten = 0
+        update = .manifest
+        log("start \(version) \(image.count) bytes, frame \(upFrame)")
+        writeNextManifest()
+    }
+    func cancelUpdate() {
+        guard let p = peripheral, let c = updateChar else { return }
+        switch update {
+        case .manifest, .waitingReady, .sending, .finishing:
+            p.writeValue(UpdateFrames.abort, for: c, type: .withResponse)
+            finishUpdate(.failed("已取消。旧固件照常运行。"))
+        default: break
+        }
+    }
+    private func log(_ s: String) { onUpdateLog?(s) }
+    private func finishUpdate(_ end: UpdatePhase) {
+        upTimer?.invalidate()
+        upTimer = nil
+        upManifest = []
+        upImage = Data()
+        upWaitingWrite = false
+        update = end
+        log("end \(end)")
+    }
+    private func arm(_ seconds: TimeInterval, _ why: String) {
+        upTimer?.invalidate()
+        upTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in self?.finishUpdate(.failed(why)) }
+    }
+    private func writeNextManifest() {
+        guard let p = peripheral, let c = updateChar else { return }
+        upWaitingWrite = true
+        if !upManifest.isEmpty {
+            p.writeValue(upManifest.removeFirst(), for: c, type: .withResponse)
+        } else {
+            update = .waitingReady
+            arm(10, "设备 10 秒没有回答“准备好”。旧固件照常运行。")
+            p.writeValue(UpdateFrames.begin, for: c, type: .withResponse)
+        }
+    }
+    private func pump() {
+        guard case .sending = update, let p = peripheral, let c = updateChar else { return }
+        let per = UpdateFrames.dataPerFrame(maxFrame: upFrame)
+        while upSent < upImage.count {
+            let n = min(per, upImage.count - upSent)
+            guard UpdateFrames.maysend(sent: upSent, written: upWritten, next: n), p.canSendWriteWithoutResponse else { return }
+            let chunk = upImage.subdata(in: upSent..<(upSent + n))
+            p.writeValue(UpdateFrames.dataFrame(offset: UInt32(upSent), chunk), for: c, type: .withoutResponse)
+            upSent += n
+        }
+    }
+    private func handle(_ e: UpdateEvent) {
+        log("event \(e)")
+        switch (e, update) {
+        case (.ready, .waitingReady):
+            update = .sending(0)
+            arm(30, "设备 30 秒没有写入。旧固件照常运行。")
+            pump()
+        case (.writing(let n), .sending):
+            upWritten = n
+            update = .sending(Double(n) / Double(max(1, upImage.count)))
+            arm(30, "设备 30 秒没有写入。旧固件照常运行。")
+            if n >= upImage.count, let p = peripheral, let c = updateChar {
+                update = .finishing
+                arm(30, "设备 30 秒没有完成。")
+                p.writeValue(UpdateFrames.end, for: c, type: .withResponse)
+            } else { pump() }
+        case (.rebooting, _):
+            update = .restarting(upTarget)
+            arm(90, "设备重启后 90 秒内没读回版本：不算确认。")
+        case (.refused(let why), _), (.failed(let why), _):
+            if update != .idle { finishUpdate(.failed(UpdateEvent.reason(why))) }
+        default: break
+        }
+    }
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) { pump() }
+
     // ---- CoreBluetooth ----
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
         switch c.state {
@@ -109,19 +212,25 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     }
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
         controlChar = nil
+        updateChar = nil
         queue.removeAll()
         writing = false
         lastCurrent = nil
+        switch update {   // U10: the device drops the update; the old firmware runs on
+        case .manifest, .waitingReady, .sending, .finishing: finishUpdate(.failed("中途断开了。旧固件照常运行，可以再试一次。"))
+        default: break
+        }
         if remembered == p.identifier { connect(p) }   // reconnect by itself
         else if state != .searching { state = .notPaired }
     }
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         guard let s = p.services?.first(where: { $0.uuid == Self.service }) else { problem = "这个设备没有 DeskHub 的服务"; return }
-        p.discoverCharacteristics([Self.info, Self.control, Self.events], for: s)
+        p.discoverCharacteristics([Self.info, Self.control, Self.events, Self.update], for: s)
     }
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) {
         guard let chars = s.characteristics else { return }
         controlChar = chars.first { $0.uuid == Self.control }
+        updateChar = chars.first { $0.uuid == Self.update }
         if let info = chars.first(where: { $0.uuid == Self.info }) { p.readValue(for: info) }   // encrypted: pairs or uses the bond
     }
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
@@ -134,14 +243,25 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
             // The link is encrypted and authenticated: remember the device, listen, send the list.
             remembered = p.identifier
             problem = nil
+            info = ch.value.flatMap(DeviceInfo.parse)
+            if case .restarting(let target) = update {   // K3: the version read back after the restart
+                let got = info?.firmware ?? "?"
+                finishUpdate(got == target ? .confirmed(got) : .failed("读回的版本是 \(got)，不是 \(target)：没有生效（自检不过会回到旧版本）。"))
+            }
             state = .connected(p.name ?? "DeskHub")
             if let events = p.services?.first?.characteristics?.first(where: { $0.uuid == Self.events }) { p.setNotifyValue(true, for: events) }
             resendSources()
-        } else if ch.uuid == Self.events, let v = ch.value, let r = LinkProtocol.parseRequest(v) {
-            onRequest?(r)
+        } else if ch.uuid == Self.events, let v = ch.value {
+            if let e = UpdateEvent.parse(v) { handle(e) }
+            else if let r = LinkProtocol.parseRequest(v) { onRequest?(r) }
         }
     }
     func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {
+        if ch.uuid == Self.update {
+            if let error { finishUpdate(.failed("发给触摸屏失败：\(error.localizedDescription)")); return }
+            if upWaitingWrite, update == .manifest { writeNextManifest() }
+            return
+        }
         if let error { problem = "发给触摸屏失败：\(error.localizedDescription)" }
         writing = false
         flush()

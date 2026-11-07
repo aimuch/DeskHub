@@ -47,6 +47,11 @@
 //     version is "bad". Lines come out of the byte stream whole; a frame over 16 KB or more than 128 KB in all fails.
 // F18 esptool: the bundled one says 5.6.0; flash-id must show ESP32-S3 and 16 MB; the progress of the whole package is read
 //     from "Writing at 0x... a/b bytes" lines, image by image, and never goes past 1.
+// F19 Bluetooth update, the App's side (13.11): manifest frames are 'M' + offset (2 bytes, little endian) + bytes, in order,
+//     each within the frame size, together the whole envelope, at most 4 KB; data frames are 'D' + offset (4 bytes) + bytes;
+//     the window keeps at most 24 KB sent and not written. The payload has exactly the 8 fields the firmware wants, the
+//     envelope exactly 3. The fingerprint is the SHA-256 of the SPKI DER in hex. Update events and the device info are read
+//     strictly; anything else is not one.
 import DeskHubCore
 import Foundation
 
@@ -444,6 +449,61 @@ do {
         check(zip(read, read.dropFirst()).allSatisfy { $0 <= $1 + 1e-9 }, "the progress never goes back")
         check(read.last == 1 && (read.first ?? 1) < 0.01, "from the start to 1")
     } else { check(false, "the record of the run on the device is there") }
+}
+
+// ---- F19: the Bluetooth update ----
+do {
+    let env = Data((0..<1000).map { UInt8($0 % 251) })
+    let frames = UpdateFrames.manifestFrames(env, maxFrame: 185)
+    check(!frames.isEmpty && frames.allSatisfy { $0.count <= 185 && $0.first == 0x4D }, "manifest frames: 'M', within the size")
+    var joined = Data(), expected = 0
+    for f in frames {
+        let off = Int(f[f.startIndex + 1]) | Int(f[f.startIndex + 2]) << 8
+        check(off == expected, "manifest offset \(off), want \(expected)")
+        joined.append(f.dropFirst(3))
+        expected += f.count - 3
+    }
+    check(joined == env, "the frames carry the whole envelope")
+    check(UpdateFrames.manifestFrames(Data(repeating: 1, count: 4097), maxFrame: 185).isEmpty, "over 4 KB: nothing")
+    check(UpdateFrames.manifestFrames(Data(), maxFrame: 185).isEmpty && UpdateFrames.manifestFrames(env, maxFrame: 3).isEmpty, "empty, or no room")
+    let d = UpdateFrames.dataFrame(offset: 0x01020304, Data([9, 8, 7]))
+    check(d == Data([0x44, 0x04, 0x03, 0x02, 0x01, 9, 8, 7]), "data frame")
+    check(UpdateFrames.dataPerFrame(maxFrame: 244) == 239 && UpdateFrames.dataPerFrame(maxFrame: 5) == 0, "data per frame")
+    check(UpdateFrames.maysend(sent: 0, written: 0, next: 239), "start")
+    check(UpdateFrames.maysend(sent: 24 * 1024 - 239, written: 0, next: 239) && !UpdateFrames.maysend(sent: 24 * 1024 - 238, written: 0, next: 239), "the window")
+    check(UpdateFrames.maysend(sent: 40000, written: 20000, next: 239), "the device caught up")
+    check(UpdateFrames.begin == Data([0x42]) && UpdateFrames.end == Data([0x45]) && UpdateFrames.abort == Data([0x58]), "one-byte frames")
+
+    let sha = String(repeating: "ab", count: 32)
+    let payload = UpdateManifest.payload(version: "0.3.23", size: 4479088, sha256: sha)
+    if let o = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] {
+        check(Set(o.keys) == ["schema_version", "board_model", "chip", "version", "config_schema_min", "config_schema_max", "image_size", "image_sha256"], "the 8 fields")
+        check(o["schema_version"] as? Int == 1 && o["config_schema_min"] as? Int == 1 && o["config_schema_max"] as? Int == 1, "the schemas")
+        check(o["board_model"] as? String == "ESP32-S3-Touch-AMOLED-2.16" && o["chip"] as? String == "esp32s3", "board and chip")
+        check(o["version"] as? String == "0.3.23" && o["image_size"] as? Int == 4479088 && o["image_sha256"] as? String == sha, "version, size, hash")
+    } else { check(false, "the payload is JSON") }
+    let sig = Data(repeating: 0x30, count: 70)
+    let envelope = UpdateManifest.envelope(payload: payload, signatureDER: sig)
+    if let o = try? JSONSerialization.jsonObject(with: envelope) as? [String: Any] {
+        check(o.count == 3 && o["algorithm"] as? String == "ecdsa-p256-sha256", "the envelope's fields")
+        check((o["payload"] as? String).flatMap { Data(base64Encoded: $0) } == payload && (o["signature"] as? String).flatMap { Data(base64Encoded: $0) } == sig, "base64 both ways")
+    } else { check(false, "the envelope is JSON") }
+    check(envelope.count < UpdateFrames.maxManifest, "the envelope fits 4 KB")
+    check(UpdateManifest.fingerprint(spkiDER: Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "fingerprint is SHA-256 hex")
+
+    func ev(_ s: String) -> UpdateEvent? { UpdateEvent.parse(Data(s.utf8)) }
+    check(ev(#"{"op":"update","state":"ready"}"#) == .ready && ev(#"{"op":"update","state":"rebooting"}"#) == .rebooting, "ready, rebooting")
+    check(ev(#"{"op":"update","state":"writing","written":16384}"#) == .writing(16384), "writing")
+    check(ev(#"{"op":"update","state":"refused","error":"UPDATE_NOT_NEWER"}"#) == .refused("UPDATE_NOT_NEWER"), "refused")
+    check(ev(#"{"op":"update","state":"failed","error":"UPDATE_IDLE"}"#) == .failed("UPDATE_IDLE"), "failed")
+    check(ev(#"{"op":"switch","req":1,"id":"x"}"#) == nil && ev(#"{"op":"update","state":"dancing"}"#) == nil && ev("junk") == nil, "not update events")
+    check(ev(#"{"op":"update","state":"writing"}"#) == nil && ev(#"{"op":"update","state":"writing","written":-1}"#) == nil && ev(#"{"op":"update","state":"refused"}"#) == nil, "missing fields")
+    check(!UpdateEvent.failed("UPDATE_NOT_NEWER").words.isEmpty && UpdateEvent.reason("WHAT").contains("WHAT"), "the words")
+
+    let info = DeviceInfo.parse(Data(#"{"protocol":1,"device":"deskhub-44bd8d60c598","firmware":"0.3.22","update_key":"\#(sha)"}"#.utf8))
+    check(info == DeviceInfo(device: "deskhub-44bd8d60c598", firmware: "0.3.22", updateKey: sha), "the info")
+    check(DeviceInfo.parse(Data(#"{"protocol":1,"device":"deskhub-44bd8d60c598","firmware":"0.3.21"}"#.utf8))?.updateKey == "", "an older firmware: no key field")
+    check(DeviceInfo.parse(Data("[]".utf8)) == nil && DeviceInfo.parse(Data(#"{"protocol":1}"#.utf8)) == nil, "not an info")
 }
 
 if failures > 0 {

@@ -24,6 +24,20 @@ let port = take("--port")
 let logPath = take("--log")
 let statusOnly = flag("--status"), checkOnly = flag("--check"), toolOnly = flag("--tool")
 
+if flag("--key") {   // 13.11: this Mac's update key (made in the Secure Enclave on first use)
+    do { let k = try UpdateKey.loadOrCreate(); print(k.fingerprint); print(k.publicKeyPEM); exit(0) } catch { print("没有钥匙：\(error)"); exit(1) }
+}
+if flag("--write-key") {   // 13.11, K1: the public key goes to the device over USB only
+    guard let port else { print("--write-key 要和 --port 一起用"); exit(2) }
+    let k: UpdateKey
+    do { k = try UpdateKey.loadOrCreate() } catch { print("没有钥匙：\(error)"); exit(1) }
+    switch USBStatus.writeUpdateKey(port: port, pem: k.publicKeyPEM) {
+    case .success(let fp):
+        print(fp == k.fingerprint ? "设备收下了公钥，指纹 \(fp)（和这台 Mac 的一样）" : "设备存的指纹 \(fp) 和这台 Mac 的 \(k.fingerprint) 不一样")
+        exit(fp == k.fingerprint ? 0 : 1)
+    case .failure(let e): print(e.words); exit(1)
+    }
+}
 if toolOnly {   // T1: which esptool runs, and that it says the pinned version
     guard let tool = Esptool.find() else { print(FlashError.tool.words); exit(1) }
     print(tool.executable.path)

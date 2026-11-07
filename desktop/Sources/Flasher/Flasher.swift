@@ -18,6 +18,7 @@ public enum FlashError: Error, Equatable, Sendable {
     case otherVersion(String)        // R2: what was read
     case otherDevice(String)         // R3
     case cancelled
+    case keyRefused                  // U15
 
     public var words: String {
         switch self {
@@ -33,6 +34,7 @@ public enum FlashError: Error, Equatable, Sendable {
         case .otherVersion(let v): return "读回的版本是 \(v)，不是包里的：没有生效。"
         case .otherDevice(let id): return "读回的设备编号是 \(id)，和刷之前的不一样：是不是换了一台？"
         case .cancelled: return "已取消，没有写入。"
+        case .keyRefused: return "设备没有收下公钥（要 P-256 的 SPKI PEM），原来的公钥保留。"
         }
     }
 }
