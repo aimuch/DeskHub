@@ -8,7 +8,10 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 }
 
 // @State is a macro in the macOS 27 SDK and the command line tools have no macro plugin: small observable objects instead.
-final class PageChoice: ObservableObject { @Published var page: SettingsPage = .displays }
+final class PageChoice: ObservableObject {
+    @Published var page: SettingsPage
+    init(_ page: SettingsPage = .displays) { self.page = page }
+}
 final class RowForm: ObservableObject {
     @Published var name = ""
     @Published var value = ""
@@ -17,7 +20,8 @@ final class RowForm: ObservableObject {
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
-    @StateObject private var choice = PageChoice()
+    @StateObject private var choice: PageChoice
+    init(page: SettingsPage = .displays) { _choice = StateObject(wrappedValue: PageChoice(page)) }
 
     var body: some View {
         NavigationSplitView {

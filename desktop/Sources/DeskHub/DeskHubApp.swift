@@ -60,7 +60,7 @@ struct DeskHubApp: App {
             MenuView().environmentObject(model).environmentObject(model.link)
         } label: {
             Image(systemName: menuIcon)
-                .task { firmware.autoRun(model.link) }   // the label is there from the start; the menu is made only when opened
+                .task { firmware.autoRun(model.link); Screenshots.runIfAsked(model: model, firmware: firmware) }   // the label is there from the start; the menu is made only when opened
         }
         .menuBarExtraStyle(.window)
 
