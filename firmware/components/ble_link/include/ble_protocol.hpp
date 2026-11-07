@@ -87,7 +87,7 @@ bool accept_pairing(const PairingWindow &, int64_t now_ms, int64_t digits_shown_
 // The current input as the device shows it: `id` when it is in the list, else "" (not known).
 std::string current_in(const std::vector<Source> &, const std::string &id);
 std::string request_json(uint32_t req, const std::string &id);
-std::string info_json(const std::string &device_id, const std::string &firmware);
+std::string info_json(const std::string &device_id, const std::string &firmware, const std::string &update_key);   // update_key: fingerprint, "" when none
 // The line the device shows for a result: "已切到 MacBook M1，已确认" / "已发送到 …，未确认：…" / "没有切到 …：…".
 std::string result_text(const Result &, const std::string &name);
 }  // namespace dh::ble

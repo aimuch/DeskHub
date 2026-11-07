@@ -162,13 +162,24 @@ static void b5_out() {
         CHECK(std::string(cJSON_GetObjectItemCaseSensitive(j, "id")->valuestring) == "id\"with\\quote");
         cJSON_Delete(j);
     }
-    const std::string i = info_json("deskhub-44bd8d60c598", "0.3.18");
+    const std::string fp(64, 'c');
+    const std::string i = info_json("deskhub-44bd8d60c598", "0.3.18", fp);
     j = dh::parse_json_strict(i.c_str(), i.size());
     CHECK(j != nullptr);
     if (j) {
         CHECK(cJSON_GetObjectItemCaseSensitive(j, "protocol")->valuedouble == kProtocol);
         CHECK(std::string(cJSON_GetObjectItemCaseSensitive(j, "device")->valuestring) == "deskhub-44bd8d60c598");
+        CHECK(std::string(cJSON_GetObjectItemCaseSensitive(j, "firmware")->valuestring) == "0.3.18");
+        // 13.11: the fingerprint of the update key, so the App knows whether its own key is the one on the device
+        CHECK(cJSON_IsString(cJSON_GetObjectItemCaseSensitive(j, "update_key")) && std::string(cJSON_GetObjectItemCaseSensitive(j, "update_key")->valuestring) == fp);
+        CHECK(cJSON_GetArraySize(j) == 4);
         cJSON_Delete(j);
+    }
+    {   // no key on the device: an empty string, never a missing field
+        const std::string n = info_json("deskhub-44bd8d60c598", "0.3.18", "");
+        cJSON *k = dh::parse_json_strict(n.c_str(), n.size());
+        CHECK(k && cJSON_IsString(cJSON_GetObjectItemCaseSensitive(k, "update_key")) && std::string(cJSON_GetObjectItemCaseSensitive(k, "update_key")->valuestring).empty());
+        cJSON_Delete(k);
     }
     Result c; c.outcome = Outcome::Confirmed;
     CHECK(result_text(c, "MacBook M1") == "已切到 MacBook M1，已确认");

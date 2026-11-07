@@ -183,8 +183,9 @@ bool accept_pairing(const PairingWindow &w, int64_t now_ms, int64_t digits_shown
 std::string request_json(uint32_t req, const std::string &id) {
     return "{\"op\":\"switch\",\"req\":" + std::to_string(req) + ",\"id\":\"" + escaped(id) + "\"}";
 }
-std::string info_json(const std::string &device_id, const std::string &firmware) {
-    return "{\"protocol\":" + std::to_string(kProtocol) + ",\"device\":\"" + escaped(device_id) + "\",\"firmware\":\"" + escaped(firmware) + "\"}";
+std::string info_json(const std::string &device_id, const std::string &firmware, const std::string &update_key) {
+    return "{\"protocol\":" + std::to_string(kProtocol) + ",\"device\":\"" + escaped(device_id) + "\",\"firmware\":\"" + escaped(firmware) +
+           "\",\"update_key\":\"" + escaped(update_key) + "\"}";
 }
 std::string result_text(const Result &r, const std::string &name) {
     switch (r.outcome) {

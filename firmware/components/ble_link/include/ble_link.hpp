@@ -4,6 +4,7 @@
 // A new computer is accepted only while the pairing window is open and after the person confirmed the digits on the
 // screen. Without Bluetooth in the configuration every call is a harmless no-op.
 #include "ble_protocol.hpp"
+#include "ble_update.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -31,4 +32,14 @@ void open_pairing();
 void close_pairing();
 void answer_digits(bool same);                 // "the same, pair" or "not the same"
 bool forget_all();                             // every bond; the link drops. true when nothing is stored afterwards
+
+// The firmware update over Bluetooth (docs/desktop-app-design.md 13.11) asks management, through these (main wires them:
+// ble_link cannot depend on management, which depends on the UI, which depends on ble_link). Unset: every update is refused.
+struct UpdateHooks {
+    bool (*allowed)(std::string &why) = nullptr;                                  // no other update, no self-test, power steady
+    update::Checked (*verify)(const std::string &envelope, void *ctx) = nullptr;  // signature with update_key + the 8 fields
+    std::string (*key_fingerprint)() = nullptr;                                   // "" when the device has no update key
+    void (*active)(bool on) = nullptr;                                            // a Bluetooth update runs: the Agent's waits
+};
+void set_update_hooks(const UpdateHooks &);
 }  // namespace dh::ble
