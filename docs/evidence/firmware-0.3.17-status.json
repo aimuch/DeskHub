@@ -1,0 +1,81 @@
+{
+  "device_id": "deskhub-44bd8d60c598",
+  "firmware_version": "0.3.17",
+  "protocol_version": "1.0",
+  "board_model": "ESP32-S3-Touch-AMOLED-2.16",
+  "wifi": "已连接",
+  "agent": "未配对",
+  "time_quality": "ntp",
+  "config_revision": 62,
+  "provision_revision": 1,
+  "configured": false,
+  "ui_alive": true,
+  "theme": "ocean",
+  "rotation": 180,
+  "capabilities": {
+    "usb_provisioning": {
+      "support": "unverified",
+      "availability": "ready"
+    },
+    "charge_limit": {
+      "support": "unverified",
+      "availability": "ready"
+    },
+    "battery_soc": {
+      "support": "unverified",
+      "availability": "ready"
+    },
+    "audio": {
+      "support": "unverified",
+      "availability": "ready"
+    }
+  },
+  "power": {
+    "vbus": "present",
+    "battery": "present",
+    "charging": "idle",
+    "measurement": "ok",
+    "fault": false,
+    "soc_percent": 98,
+    "battery_mv": 4117,
+    "vbus_mv": 5176,
+    "chip_temp_c": 38.6
+  },
+  "charge": {
+    "enabled": true,
+    "faulted": false,
+    "limit": 90,
+    "resume": 85,
+    "stop_failures": 0,
+    "state": "holding",
+    "switch": "stopped",
+    "reason": "LEVEL_AT_LIMIT",
+    "events": [
+      {
+        "at_ms": 25,
+        "request": "charge",
+        "result": "ok",
+        "reason": "BOOT_FOUND_STOPPED"
+      },
+      {
+        "at_ms": 4120,
+        "request": "stop",
+        "result": "ok",
+        "reason": "LEVEL_AT_LIMIT"
+      }
+    ]
+  },
+  "pairing": {
+    "phase": "closed",
+    "why": "none",
+    "open": false
+  },
+  "wifi_change": {
+    "phase": "idle",
+    "reason": "NONE",
+    "remaining_s": 0,
+    "result_ms": 0,
+    "busy": false,
+    "restored": false
+  }
+}

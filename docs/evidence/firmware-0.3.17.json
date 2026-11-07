@@ -1,0 +1,65 @@
+{
+  "version": "0.3.17",
+  "built_from": "升版提交；构建时 firmware/ 目录与提交内容一致",
+  "build_dir": "firmware/build-0.3.17（独立目录，ESP-IDF v6.0.2）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.16": [
+    "设备界面 v2（docs/design/README.md 的“设备界面 v2”，画板在 docs/design/v2/）：去掉电脑 CPU、内存、网络页，设备不再向 Agent 要指标",
+    "页面和首页可调：切换、总览、时钟、电源四个页面可以开关、排序；第一个打开的页面是首页；开机显示首页，空闲进时钟页后醒来回首页；最后一个页面不能关",
+    "导航按钮就是打开的页面，最后是设置，最多五个",
+    "切换页：输入源列表或图标两种样式；接口（HDMI、DisplayPort、USB-C）从输入源编号里认",
+    "输入源的名字（软键盘，ASCII，1 到 32 字节）和图标（八个）可以在设备上改，存在 NVS dh_ui/sources；可以恢复 App 的名字和图标；恢复出厂一起删掉",
+    "夜航主题（纯黑）为默认；0.3.16 以前存的外观升级为夜航并保留原来的颜色作强调色；薄荷夜色、深海蓝、暖橙仍可选",
+    "时钟页：60 格刻度、分钟点、四个状态点；秒数单独显示",
+    "总览只有状态环，固定 252 px 放在中间"
+  ],
+  "app_image": {
+    "file": "deskhub.bin",
+    "size_bytes": 4554176,
+    "sha256": "d3940132c2ea5b043b11e83d855ebdb21d30305beece3bff4e3dd735d5b5b811",
+    "app_slot_bytes": 6291456,
+    "slot_free_percent": 27
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.17-esp32s3.zip",
+      "size_bytes": 2817740,
+      "sha256": "5a32d05b1dd095c8faf9c5811523b7b7549870b21035ab7f92bf4a4df619aebf",
+      "made_by": "scripts/package_firmware.py --build firmware/build-0.3.17",
+      "images": [
+        "0x0 bootloader.bin",
+        "0x8000 partition-table.bin",
+        "0xf000 ota_data_initial.bin",
+        "0x20000 deskhub.bin"
+      ]
+    },
+    "signed_ota": {
+      "made": false,
+      "note": "不生成 .dhfw：用户决定不需要"
+    }
+  },
+  "checks_done": [
+    "完整构建 0 个编译警告，project_version 是 0.3.17；0.3.16 的绘图缓冲拦截仍在链接图里",
+    "包内 flash.py --check 通过；包内 deskhub.bin 与构建目录的 SHA-256 相同",
+    "测试先红：ui_model_test 新增 T24 到 T27（页面、外观升级、夜航主题、输入源），先编译不过；界面流程新增 A28 到 A34，先编译不过；实现后全部通过",
+    "主机测试 17 组全部通过；界面流程 35 组和触摸方向回归通过（模拟数据）。布局矩阵：4 套主题 × 2 种语言 × 3 种字号 × 16 个页面，另加图标样式和五个导航按钮",
+    "变异检查：新的 pages_ui.py 53 处全部报红（规则 31、页面 22；一处等价变异删掉并写了原因）。改过的 factory_reset_ui.py 7/7、header_home_ui.py 18/18 报红；header_ui.py 44 处里 1 处没报红（电池数字按文字框居中），在上一个提交 a5eb499 上同样不报红，不是这次引入的：用现在的字体，两种居中差不到 1 px"
+  ],
+  "flashed": true,
+  "flash": {
+    "when": "2026-11-07 08:4x（本机时间），用户说“刷设备”之后",
+    "device_id": "deskhub-44bd8d60c598（刷前 --identify 读到 0.3.15）",
+    "port": "/dev/cu.usbmodem20101",
+    "how": "包内 flash.py --port；esptool 写入后 Hash of data verified",
+    "log": "docs/evidence/firmware-0.3.17-flash.txt（去掉了进度行）",
+    "status_after": "docs/evidence/firmware-0.3.17-status.json：firmware_version 0.3.17、ui_alive true、Wi-Fi 已连接、Agent 未配对、电源读数 ok。状态里的 theme 是管理台的显示配置，不是屏幕上的外观设置"
+  },
+  "not_done": [
+    "屏幕上没有人看过：新界面、夜航主题、旧外观升级、页面设置、改名键盘都只在模拟器里验证过",
+    "0.3.16 的绘图缓冲修复随这一版第一次上设备：长时间运行和横纹没有观察",
+    "设计稿 v2/Main 的“当前”标记没有做：设备不知道显示器实际在哪个输入源",
+    "设计稿 v2/HomePower 的 270 度电量表没有做：导航里的“电源”打开现有的电池与电源页",
+    "中文名字不能在设备上输入（字库没有输入法），要等 App"
+  ],
+  "hardware_verified": false
+}
