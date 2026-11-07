@@ -6,6 +6,7 @@
 #include "lvgl.h"
 #include "ui.hpp"
 #include "ui_model.hpp"
+#include "ble_link.hpp"
 #include <array>
 #include <cmath>
 #include <string>
@@ -65,6 +66,10 @@ struct Frame {
     bool confirm_reset = false;
     SourceNames sources;                  // the local names and icons of the input sources
     std::string edit_id;                  // the source the edit page is about
+    ble::Status ble;                      // the Bluetooth link to the App
+    size_t ble_sources = 0;
+    std::string current_id;               // the input the App read back from the monitor; "" when not known
+    bool confirm_forget = false;          // "forget computers" was tapped once
 };
 
 // ---- ui_kit.cpp: equality-guarded setters (LVGL 9.4 invalidates even when a style is set to its current value) ----
@@ -140,6 +145,13 @@ void rename_start(const std::string &current);
 bool rename_opened();
 void rename_tick(bool blocked, bool pairing);
 void rename_reset();
+// ---- the computer over Bluetooth (K1) ----
+void request_ble_pairing();          // opens the pairing window
+void request_ble_cancel();
+void request_ble_answer(bool same);
+void request_ble_forget();           // two taps
+lv_obj_t *build_ble_pairing(lv_obj_t *layer, const ble::Status &);   // the waiting page or the digits
+void refresh_ble_pairing(const ble::Status &);
 void wifi_close();
 bool wifi_opened();
 void wifi_tick(lv_obj_t *screen, int64_t now, bool blocked, bool pairing);
@@ -193,7 +205,9 @@ bool icon_choice_area(int icon, int unused, int *x1, int *y1, int *x2, int *y2);
 int switch_row_count();              // the switch page: rows in the list style, 0 otherwise
 int switch_tile_count();             // the switch page: tiles in the icon style, 0 otherwise
 int switch_icon(int index);          // the SourceIcon the switch page draws for a source; -1 when there is none
-bool clock_dot_lit(int index);       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
+bool clock_dot_lit(int index);
+int ble_overlay_mode();
+int switch_current_index();          // the switch page: the source marked current; -1 when none              // 0 none, 1 waiting for the computer, 2 the digits       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
 bool rename_open();
 void rename_back();
 void rename_erase();

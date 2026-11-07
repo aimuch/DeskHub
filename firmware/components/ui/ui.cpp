@@ -10,6 +10,8 @@
 #include "esp_system.h"
 #include "ui_internal.hpp"
 #include "ui_store.hpp"
+#include "ble_link.hpp"
+#include "flash_worker.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
@@ -23,6 +25,10 @@ Appearance appearance;
 SourceNames sources;          // the local names and icons of the input sources
 std::string edit_id;          // the source of the edit page
 bool clock_forced = false;    // idling put the clock page up: waking goes back to the home page
+bool confirm_forget = false;  // "forget computers" tapped once
+int ble_mode = 0;
+std::string built_current;   // the current input the switch page was drawn with             // the pairing page shown: 0 none, 1 waiting, 2 digits
+lv_obj_t *ble_view = nullptr;
 lv_obj_t *screen = nullptr, *body = nullptr, *shield = nullptr, *pairing_view = nullptr, *blank = nullptr;
 lv_timer_t *ui_timer = nullptr;
 DisplayPolicy policy;
@@ -70,6 +76,17 @@ void active_touch(lv_event_t *ev) {
     if (lv_event_get_code(ev) == LV_EVENT_PRESSED) policy.last_activity_ms = monotonic_ms();
 }
 
+// With a secure Bluetooth link the App is the computer: its sources are the actions of the switch page and the computer
+// counts as connected (the header, the ring). Without one nothing from Bluetooth is shown. A copy: the core is untouched.
+void overlay_ble(Snapshot &s) {
+    if (!ble::status().secure) return;
+    const auto list = ble::sources();
+    s.agent_ready = true;
+    s.agent = "已连接";
+    s.action_count = std::min(list.size(), s.actions.size());
+    for (size_t i = 0; i < s.action_count; ++i) s.actions[i] = Action{list[i].id, list[i].name, "app", list[i].port, 0};
+}
+
 // The pages that keep their own message (a save that failed there), cleared when the page changes.
 bool own_error(Page p) { return p == Page::Appearance || p == Page::Pages || p == Page::Sources || p == Page::SourceEdit; }
 Page home_page() { return page_of(home_view(appearance.pages)); }
@@ -94,6 +111,10 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.confirm_reset = confirm_reset;
     f.sources = sources;
     f.edit_id = edit_id;
+    f.ble = ble::status();
+    f.ble_sources = ble::sources().size();
+    f.confirm_forget = confirm_forget;
+    f.current_id = ble::current();
     return f;
 }
 
@@ -118,6 +139,7 @@ void rebuild_shell() {
 void update() {
     const int64_t now = monotonic_ms();
     auto s = snapshot();
+    overlay_ble(s);
     auto c = config();
     // Each requested angle is applied once. A failure stays visible until another angle is requested.
     if (attempted_rotation != c.rotation) {
@@ -142,7 +164,7 @@ void update() {
     if (config_due) {
         c = pending_config;
         if (now >= config_due) {
-            last_error = tr(look.lang, save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);
+            last_error = tr(look.lang, flashed(ESP_FAIL, [&] { return save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);
             config_due = 0;
         }
     }
@@ -205,7 +227,8 @@ void update() {
         actions_changed = a.id != b.id || a.target != b.target || a.input != b.input || a.label != b.label || a.generation != b.generation;
     }
     const bool need_build = page != desired || tab != desired_tab || rebuilding || rendered_revision != c.revision ||
-                            ((page == Page::Actions || page == Page::Sources || page == Page::SourceEdit) && actions_changed) || !built || built_agent != s.agent_ready;
+                            ((page == Page::Actions || page == Page::Sources || page == Page::SourceEdit) && actions_changed) ||
+                            (page == Page::Actions && ble::current() != built_current) || !built || built_agent != s.agent_ready;
     Frame f = make_frame(s, c, now, desired == Page::Connect);
     if (need_build) {
         const bool same = page == desired;
@@ -214,6 +237,7 @@ void update() {
         page = desired;
         tab = desired_tab;
         if (page != Page::Device) confirm_reset = false;
+        if (page != Page::Connect) confirm_forget = false;
         f.confirm_reset = confirm_reset;
         f.last_error = own_error(page) ? appearance_error : last_error;
         build_page(body, page, tab, f);
@@ -221,6 +245,7 @@ void update() {
         rebuilding = false;
         built = true;
         built_agent = s.agent_ready;
+        built_current = f.current_id;
         shown_actions = f.s.actions;
         shown_count = f.s.action_count;
         observed_actions = s.actions;
@@ -230,6 +255,16 @@ void update() {
     if (!pairing_now) refresh_page(page, tab, f);
     if (pairing_view) refresh_pairing(info, deadline, now);
     wifi_tick(screen, now, blocked, pairing_now);
+    {   // the pairing page of Bluetooth: while the window is open, or while digits wait for the person
+        const ble::Status b = ble::status();
+        const int mode = b.confirm_pending ? 2 : b.pairing_open ? 1 : 0;
+        if (mode != ble_mode) {
+            if (ble_view) { lv_obj_delete(ble_view); ble_view = nullptr; }
+            if (mode) ble_view = build_ble_pairing(lv_layer_top(), b);
+            ble_mode = mode;
+        }
+        if (ble_view) { refresh_ble_pairing(b); policy.last_activity_ms = now; }   // the person has to read it: keep it awake
+    }
     rename_tick(blocked, pairing_now);
     if (blocked && shield) lv_obj_move_foreground(shield);
 
@@ -281,7 +316,7 @@ void change_setting(int which) {
     if (which == 7) c.protection = !c.protection;
     if (which == 9) c.rotation = (c.rotation + 90) % 360;
     if (which == 10) c.off_s = c.off_s ? 0 : std::max<uint32_t>(300, c.dim_s);
-    last_error = tr(look.lang, save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);
+    last_error = tr(look.lang, flashed(ESP_FAIL, [&] { return save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);
     desired = Page::Display;
     rebuilding = true;
     note_activity();
@@ -289,7 +324,7 @@ void change_setting(int which) {
 }
 void apply_appearance(const Appearance &next) {
     note_activity();
-    if (!store_save(serialize(next))) {
+    if (!flashed(false, [&] { return store_save(serialize(next)); })) {
         appearance_error = tr(look.lang, Str::SaveFailed);  // the old look stays
         rebuilding = true;
         request_update();
@@ -308,7 +343,7 @@ void protect_confirm(int limit) {
     s.enabled = true;
     s.limit = limit;
     s.resume = limit - charge::kMinGap;
-    charge_error = charge::apply(s) ? std::string() : std::string(tr(look.lang, Str::ProtectNotSaved));
+    charge_error = flashed(false, [&] { return charge::apply(s); }) ? std::string() : std::string(tr(look.lang, Str::ProtectNotSaved));
     request_update();
 }
 void protect_cancel() { request_update(); }
@@ -318,14 +353,14 @@ void request_time_zone(int delta) {
     auto c = config_due ? pending_config : config();
     config_due = 0;
     c.tz_minutes = static_cast<int16_t>(tz_step(c.tz_minutes, delta));
-    last_error = tr(look.lang, save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);
+    last_error = tr(look.lang, flashed(ESP_FAIL, [&] { return save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);
     desired = Page::Time;
     rebuilding = true;
     request_update();
 }
 bool request_time_save(const std::string &utc) {
     note_activity();
-    const bool ok = !utc.empty() && set_time_utc(utc.c_str(), "manual");
+    const bool ok = !utc.empty() && flashed(false, [&] { return set_time_utc(utc.c_str(), "manual"); });
     if (ok) board_rtc_write(time(nullptr));
     last_error = tr(look.lang, ok ? Str::TimeSavedDone : Str::SoundNotSaved);
     rebuilding = true;
@@ -364,7 +399,7 @@ void request_switch_style(SwitchStyle style) {
 namespace {
 void store_sources(const SourceNames &next, bool valid) {
     note_activity();
-    if (!valid || !sources_save(serialize_sources(next))) appearance_error = tr(look.lang, Str::SaveFailed);
+    if (!valid || !flashed(false, [&] { return sources_save(serialize_sources(next)); })) appearance_error = tr(look.lang, Str::SaveFailed);
     else { sources = next; appearance_error.clear(); }
     rebuilding = true;
     request_update();
@@ -393,6 +428,17 @@ bool request_source_name(const std::string &name) {
     store_sources(next, ok);
     return ok && appearance_error.empty();
 }
+void request_ble_pairing() { note_activity(); ble::open_pairing(); request_update(); }
+void request_ble_cancel() { note_activity(); ble::close_pairing(); request_update(); }
+void request_ble_answer(bool same) { note_activity(); ble::answer_digits(same); request_update(); }
+void request_ble_forget() {
+    note_activity();
+    if (!confirm_forget) { confirm_forget = true; rebuilding = true; request_update(); return; }
+    confirm_forget = false;
+    flashed(false, [] { return ble::forget_all(); });
+    rebuilding = true;
+    request_update();
+}
 void request_pairing() {
     note_activity();
     if (pairing_request) pairing_request();
@@ -401,7 +447,7 @@ void request_pairing() {
 void request_sound_set(bool on) {
     note_activity();
     if (!audio::available()) return;
-    last_error = audio::set_enabled(on) ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));
+    last_error = flashed(false, [&] { return audio::set_enabled(on); }) ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));
     rebuilding = true;
     request_update();
 }
@@ -413,7 +459,7 @@ void request_sound_test() {
 void request_sound_volume(int level) {
     note_activity();
     if (!audio::available()) return;
-    const bool ok = audio::set_volume(level);
+    const bool ok = flashed(false, [&] { return audio::set_volume(level); });
     last_error = ok ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));
     if (ok) audio::test();
     rebuilding = true;
@@ -423,7 +469,9 @@ void request_sound_volume(int level) {
 void request_ring_info() {
     note_activity();
     if (ring_info_open()) return;
-    build_ring_info(screen, make_ring_info(look.lang, snapshot(), board_power(), monotonic_ms()), [] { request_update(); });
+    Snapshot s = snapshot();
+    overlay_ble(s);
+    build_ring_info(screen, make_ring_info(look.lang, s, board_power(), monotonic_ms()), [] { request_update(); });
 }
 void request_protect_toggle() {
     note_activity();
@@ -437,15 +485,15 @@ void request_protect_toggle() {
     off.enabled = false;
     off.limit = now.limit;
     off.resume = now.resume;
-    charge_error = charge::apply(off) ? std::string() : std::string(tr(look.lang, Str::ProtectOffNotSaved));
+    charge_error = flashed(false, [&] { return charge::apply(off); }) ? std::string() : std::string(tr(look.lang, Str::ProtectOffNotSaved));
     request_update();
 }
 void do_restart() { esp_restart(); }
 void do_factory_reset() {
     if (!confirm_reset) { confirm_reset = true; rebuilding = true; request_update(); return; }
-    if (reset_config() == ESP_OK) {
+    if (flashed(ESP_FAIL, [] { return reset_config(); }) == ESP_OK) {
         // The sound and the appearance live in namespaces of their own, apart from the configuration: forget them too.
-        const bool sound = audio::reset_settings(), shown = store_clear();
+        const bool sound = flashed(false, [] { return audio::reset_settings(); }), shown = flashed(false, [] { return store_clear() && ble::forget_all(); });
         if (shown) { appearance = Appearance{}; sources.clear(); look = make_look(appearance); look_dirty = true; }
         last_error = tr(look.lang, sound && shown ? Str::ResetDone : Str::ResetPartial);  // stay on the page, so the message is read
         confirm_reset = false;
@@ -455,7 +503,13 @@ void do_factory_reset() {
 }
 void submit_action(size_t index) {
     note_activity();
-    if (index >= shown_count || !snapshot().agent_ready) return;
+    if (index >= shown_count) return;
+    if (ble::status().secure) {   // the App on the Mac switches; the request carries the App's own id (K2 on both sides)
+        if (!ble::request(shown_actions[index].id)) mutate([](Snapshot &s, void *) { s.command = "电脑还在处理上一个请求，或者没有连上"; });
+        request_update();
+        return;
+    }
+    if (!snapshot().agent_ready) return;
     if (!agent_submit(shown_actions[index])) mutate([](Snapshot &s, void *) { s.command = "当前不可用或已有操作，请稍后点击"; });
     request_update();
 }
@@ -497,6 +551,9 @@ void reset_for_test() {
     sources.clear();
     edit_id.clear();
     clock_forced = false;
+    confirm_forget = false;
+    ble_mode = 0;
+    ble_view = nullptr;
     rename_reset();
     look = make_look(appearance);
     policy = DisplayPolicy{};

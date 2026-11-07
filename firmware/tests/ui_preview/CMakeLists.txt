@@ -21,7 +21,7 @@ add_executable(deskhub_ui_preview harness.cpp
   "${UI}/btr_ui_16.c" "${UI}/btr_ui_20.c" "${UI}/btr_ui_28.c" "${UI}/font_clock_72.c")
 target_include_directories(deskhub_ui_preview PRIVATE stubs
   "${FIRMWARE}/components/wifi_change/include" "${FIRMWARE}/components/core/include" "${FIRMWARE}/components/board_support/include"
-  "${FIRMWARE}/components/agent_client/include" "${FIRMWARE}/components/charge/include" "${FIRMWARE}/components/audio/include" "${UI}/include")
+  "${FIRMWARE}/components/agent_client/include" "${FIRMWARE}/components/charge/include" "${FIRMWARE}/components/audio/include" "${FIRMWARE}/components/ble_link/include" "${FIRMWARE}/components/flash_worker/include" "${UI}/include")
 target_compile_definitions(deskhub_ui_preview PRIVATE UI_CHARS_FILE="${FIRMWARE}/fonts/btr_ui.chars.txt")
 target_compile_options(deskhub_ui_preview PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Werror>)
 target_link_libraries(deskhub_ui_preview PRIVATE lvgl::lvgl)

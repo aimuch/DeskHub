@@ -1,0 +1,5 @@
+# The Bluetooth link to the DeskHub App (docs/desktop-app-design.md 13). ble_protocol.cpp is pure and tested on the host;
+# ble_link.cpp is the NimBLE side and does nothing when Bluetooth is off in the configuration.
+idf_component_register(SRCS "ble_protocol.cpp" "ble_link.cpp" INCLUDE_DIRS "include"
+                       REQUIRES core
+                       PRIV_REQUIRES bt esp_timer espressif__cjson)

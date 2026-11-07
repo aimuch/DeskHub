@@ -96,6 +96,30 @@
       "w": 880,
       "h": 560,
       "title": "设计语言：夜航仪表"
+    },
+    "ConnectComputer.dc.html": {
+      "x": 0,
+      "y": 2560,
+      "w": 480,
+      "h": 480,
+      "title": "设置 · 连接与配对（电脑一行）",
+      "radius": 72
+    },
+    "PairWaiting.dc.html": {
+      "x": 560,
+      "y": 2560,
+      "w": 480,
+      "h": 480,
+      "title": "配对电脑 · 等 Mac 来配对（2 分钟）",
+      "radius": 72
+    },
+    "PairConfirm.dc.html": {
+      "x": 1120,
+      "y": 2560,
+      "w": 480,
+      "h": 480,
+      "title": "配对电脑 · 核对 6 位数字（30 秒）",
+      "radius": 72
     }
   },
   "order": [
@@ -109,7 +133,10 @@
     "Sources.dc.html",
     "SourceEdit.dc.html",
     "Appearance.dc.html",
-    "Tokens.dc.html"
+    "Tokens.dc.html",
+    "ConnectComputer.dc.html",
+    "PairWaiting.dc.html",
+    "PairConfirm.dc.html"
   ],
   "notes": {
     "rowHome": {
@@ -148,6 +175,13 @@
       "size": "m",
       "fill": "yellow",
       "text": "“当前”标记：只有 App 回报过显示器真的切到了这个输入源，才标“当前”。不知道时不标，不猜。"
+    },
+    "rowPair": {
+      "x": 0,
+      "y": 2300,
+      "text": "蓝牙连电脑（K1：只在配对窗口里接受新电脑）",
+      "kind": "title1",
+      "maxW": 1600
     }
   },
   "designSystems": []

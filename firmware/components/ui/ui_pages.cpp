@@ -41,8 +41,10 @@ struct Widgets {
     lv_obj_t *brightness{}, *detail{}, *slider{};
     lv_obj_t *first_action{};
     std::vector<lv_obj_t *> switch_rows, switch_tiles, switch_icons;
+    int switch_current = -1;
     std::array<std::array<lv_obj_t *, 3>, 4> pages_ctrl{};
     std::array<lv_obj_t *, 9> icon_btn{};
+    lv_obj_t *ble_state{}, *ble_bonds{};
     std::vector<lv_obj_t *> connect_values;
     lv_obj_t *wifi_change_button{}, *wifi_change_note{};
     std::array<lv_obj_t *, 6> swatch{};
@@ -339,6 +341,13 @@ void refresh_clock(const Frame &f) {
 }
 
 // ---- the switch page (docs/design v2 Main, MainIcons) ----
+// The input the monitor is on, as the App read it back: a green edge and "current" (the user asked for green, 2026-11-07).
+void mark_current(lv_obj_t *b, int index) {
+    lv_obj_set_style_border_width(b, 2, 0);
+    lv_obj_set_style_border_color(b, hex(P().agent), 0);
+    lv_obj_set_style_bg_color(b, hex(blend(P().agent, P().card, 14)), 0);
+    w.switch_current = index;
+}
 void build_actions(lv_obj_t *body, const Frame &f) {
     w.switch_rows.clear(); w.switch_tiles.clear(); w.switch_icons.clear();
     heading(body, T(Str::SwitchTitle), P().accent);
@@ -357,14 +366,20 @@ void build_actions(lv_obj_t *body, const Frame &f) {
             auto *b = button(body, on_action, data(static_cast<int>(i)), kContentW, h);
             lv_obj_set_style_radius(b, 18, 0);
             if (!v.enabled) { lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0); lv_obj_add_state(b, LV_STATE_DISABLED); }
-            auto *icon = source_icon(b, v.icon, 34, v.enabled ? P().ink : P().muted, 2);
+            const bool now_on = v.enabled && !f.current_id.empty() && v.id == f.current_id;   // read back by the App (K3)
+            if (now_on) mark_current(b, static_cast<int>(i));
+            auto *icon = source_icon(b, v.icon, 34, now_on ? P().agent : v.enabled ? P().ink : P().muted, 2);
             lv_obj_set_pos(icon, 18, (h - 34) / 2);
             const int ty = (h - lh(look.body) - lh(look.caption)) / 2;
-            auto *name = label_at(b, v.name, 68, ty, kContentW - 68 - 24, look.body, v.enabled ? P().ink : P().muted);
+            auto *name = label_at(b, v.name, 68, ty, kContentW - 68 - 24 - (now_on ? 64 : 0), look.body, v.enabled ? P().ink : P().muted);
             single_line(name, lh(look.body));
             const std::string sub = v.enabled ? v.tag : v.sub;
             auto *tag = label_at(b, sub, 68, ty + lh(look.body), kContentW - 68 - 24, look.caption, P().muted);
             single_line(tag, lh(look.caption));
+            if (now_on) {
+                auto *tag = pill(b, T(Str::SourceCurrent), P().bg, P().agent, P().agent, look.caption);
+                lv_obj_align(tag, LV_ALIGN_RIGHT_MID, -14, 0);
+            }
             w.switch_rows.push_back(b);
             w.switch_icons.push_back(icon);
             if (i == 0) w.first_action = b;
@@ -384,7 +399,13 @@ void build_actions(lv_obj_t *body, const Frame &f) {
             // A tile is narrow: the name stops at 20 px, as the navigation does, so "MacBook M1" fits three in a row.
             const lv_font_t *nf = nav_font();
             const int ny = th - lh(nf) - lh(look.caption) - 12;
-            auto *icon = source_icon(b, v.icon, isz, v.enabled ? P().ink : P().muted, n <= 3 ? 3 : 2);
+            const bool now_on = v.enabled && !f.current_id.empty() && v.id == f.current_id;
+            if (now_on) {
+                mark_current(b, static_cast<int>(i));
+                auto *tag = pill(b, T(Str::SourceCurrent), P().bg, P().agent, P().agent, &btr_ui_16);
+                lv_obj_set_pos(tag, 8, 8);
+            }
+            auto *icon = source_icon(b, v.icon, isz, now_on ? P().agent : v.enabled ? P().ink : P().muted, n <= 3 ? 3 : 2);
             lv_obj_set_pos(icon, (tw - isz) / 2, std::max(8, (ny - isz) / 2 + 2));   // in the middle of the room over the name
             auto *name = label_at(b, v.name, 8, ny, tw - 16, nf, v.enabled ? P().ink : P().muted);
             centered(name);
@@ -665,6 +686,7 @@ void refresh_power(PowerTab tab, const Frame &f) {
 }
 
 // ---- Connect ----
+void refresh_ble_rows(const Frame &f);
 void build_connect(lv_obj_t *body, const Frame &f) {
     heading(body, T(Str::ConnectTitle), P().wifi);
     const auto rows = make_connect(look.lang, f.s, f.paired, f.wifi_name);
@@ -702,10 +724,39 @@ void build_connect(lv_obj_t *body, const Frame &f) {
         y += row_h;
     }
     w.wifi_change_note = caption(body, "", P().power);
+    // The computer over Bluetooth (docs/design v2 ConnectComputer): its state, "pair a computer", "forget computers".
+    section(body, T(Str::BleTitle));
+    auto *bc = card(body, row_h + 56 * 2 + 12);
+    label_at(bc, T(Str::BleComputer), 20, 6 + (row_h - lh(look.caption)) / 2, 150, look.caption, P().muted);
+    w.ble_state = label_at(bc, "", 120, 6 + (row_h - lh(&btr_ui_20)) / 2, 292, &btr_ui_20, P().ink);
+    single_line(w.ble_state, lh(&btr_ui_20));
+    auto *pair = button(bc, [](lv_event_t *) { request_ble_pairing(); }, nullptr, kContentW - 24, 56);
+    lv_obj_set_pos(pair, 12, 6 + row_h);
+    label_at(pair, T(Str::BlePair), 8, 16, 220, &btr_ui_20, P().ink);
+    auto *note = label_at(pair, T(Str::BlePairNote), 230, 18, 170, &btr_ui_16, P().accent);
+    lv_obj_set_style_text_align(note, LV_TEXT_ALIGN_RIGHT, 0);
+    auto *forget = button(bc, [](lv_event_t *) { request_ble_forget(); }, nullptr, kContentW - 24, 56);
+    lv_obj_set_pos(forget, 12, 6 + row_h + 56);
+    label_at(forget, T(Str::BleForget), 8, 16, 200, &btr_ui_20, P().ink);
+    w.ble_bonds = label_at(forget, "", 210, 18, 190, &btr_ui_16, P().muted);
+    lv_obj_set_style_text_align(w.ble_bonds, LV_TEXT_ALIGN_RIGHT, 0);
     caption(body, T(Str::ConnectHint), P().muted);
     w.error = caption(body, "", P().power);
+    refresh_ble_rows(f);
+}
+void refresh_ble_rows(const Frame &f) {
+    if (!w.ble_state) return;
+    char buf[64];
+    if (!f.ble.running) set_text(w.ble_state, T(Str::BleOff));
+    else if (f.ble.secure) { snprintf(buf, sizeof(buf), T(Str::BleConnected).c_str(), static_cast<int>(f.ble_sources)); set_text(w.ble_state, buf); }
+    else set_text(w.ble_state, T(Str::BleNotConnected));
+    set_ink(w.ble_state, f.ble.secure ? P().agent : P().ink);
+    if (f.confirm_forget) set_text(w.ble_bonds, T(Str::BleForgetConfirm));
+    else { snprintf(buf, sizeof(buf), T(Str::BleBonds).c_str(), f.ble.bonds); set_text(w.ble_bonds, buf); }
+    set_ink(w.ble_bonds, f.confirm_forget ? P().power : P().muted);
 }
 void refresh_connect(const Frame &f) {
+    refresh_ble_rows(f);
     const bool can_change = wifi_change::available();
     if (can_change) lv_obj_remove_state(w.wifi_change_button, LV_STATE_DISABLED);
     else lv_obj_add_state(w.wifi_change_button, LV_STATE_DISABLED);
@@ -1191,6 +1242,79 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
 }
 
 // ---------------------------------------------------------------- state pages
+// ---- pairing a computer over Bluetooth (docs/design v2 PairWaiting, PairConfirm; K1) ----
+struct BlePage { lv_obj_t *root{}, *countdown{}, *digits{}, *left{}; int mode = 0; } g_ble;
+lv_obj_t *build_ble_pairing(lv_obj_t *layer, const ble::Status &b) {
+    g_ble = BlePage{};
+    g_ble.mode = b.confirm_pending ? 2 : 1;
+    auto *root = panel(layer, kScreen, kScreen, P().bg, P().bg, 0);
+    lv_obj_set_pos(root, 0, 0);
+    lv_obj_add_flag(root, LV_OBJ_FLAG_CLICKABLE);   // nothing under it takes a touch
+    g_ble.root = root;
+    if (g_ble.mode == 1) {
+        auto *ring = holder(root, 150, 150);
+        lv_obj_set_pos(ring, (kScreen - 150) / 2, 70);
+        lv_obj_set_style_radius(ring, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_color(ring, hex(P().accent), 0);
+        lv_obj_set_style_border_width(ring, 2, 0);
+        auto *bt = label(ring, LV_SYMBOL_BLUETOOTH, 60, &lv_font_montserrat_48, P().accent);
+        lv_obj_center(bt);
+        auto *t = label_at(root, T(Str::BleWaitTitle), 40, 236, kScreen - 80, look.title, P().ink);
+        centered(t);
+        auto *h = label_at(root, T(Str::BleWaitHint), 50, 236 + lh(look.title) + 6, kScreen - 100, look.caption, P().muted);
+        centered(h);
+        g_ble.countdown = label_at(root, "", 40, 320, kScreen - 80, &lv_font_montserrat_24, P().accent);
+        centered(g_ble.countdown);
+        auto *cancel = button(root, [](lv_event_t *) { request_ble_cancel(); }, nullptr, 180, 56);
+        lv_obj_set_pos(cancel, (kScreen - 180) / 2, 368);
+        lv_obj_set_style_radius(cancel, 28, 0);
+        auto *cl = label(cancel, T(Str::BleCancel), 170, nav_font(), P().muted);
+        centered(cl);
+        lv_obj_center(cl);
+    } else {
+        auto *t = label_at(root, T(Str::BleConfirmTitle), 60, 56, kScreen - 120, look.title, P().ink);
+        centered(t);
+        auto *h = label_at(root, T(Str::BleConfirmHint), 50, 56 + lh(look.title) + 6, kScreen - 100, look.caption, P().muted);
+        centered(h);
+        g_ble.digits = label_at(root, "", 20, 150, kScreen - 40, &font_clock_72, P().accent);
+        centered(g_ble.digits);
+        g_ble.left = label_at(root, "", 40, 236, kScreen - 80, look.caption, P().muted);
+        centered(g_ble.left);
+        auto *no = button(root, [](lv_event_t *) { request_ble_answer(false); }, nullptr, 180, 60);
+        lv_obj_set_pos(no, 50, 280);
+        lv_obj_set_style_radius(no, 18, 0);
+        auto *nl = label(no, T(Str::BleNotSame), 170, nav_font(), P().muted);
+        centered(nl);
+        lv_obj_center(nl);
+        auto *yes = button(root, [](lv_event_t *) { request_ble_answer(true); }, nullptr, 180, 60);
+        lv_obj_set_pos(yes, 250, 280);
+        lv_obj_set_style_radius(yes, 18, 0);
+        lv_obj_set_style_bg_color(yes, hex(P().accent), 0);
+        auto *yl = label(yes, T(Str::BleSame), 170, nav_font(), P().bg);
+        centered(yl);
+        lv_obj_center(yl);
+        auto *n = label_at(root, T(Str::BleConfirmNote), 60, 352, kScreen - 120, look.caption, P().muted);
+        centered(n);
+    }
+    refresh_ble_pairing(b);
+    return root;
+}
+void refresh_ble_pairing(const ble::Status &b) {
+    char buf[48];
+    if (g_ble.countdown) {
+        const int s = static_cast<int>((b.pairing_left_ms + 999) / 1000);
+        snprintf(buf, sizeof(buf), "%d:%02d", s / 60, s % 60);
+        set_text(g_ble.countdown, buf);
+    }
+    if (g_ble.digits) {
+        snprintf(buf, sizeof(buf), "%03u %03u", static_cast<unsigned>(b.digits / 1000 % 1000), static_cast<unsigned>(b.digits % 1000));
+        set_text(g_ble.digits, buf);
+        snprintf(buf, sizeof(buf), T(Str::BleConfirmLeft).c_str(), static_cast<int>((b.confirm_left_ms + 999) / 1000));
+        set_text(g_ble.left, buf);
+    }
+}
+int ble_overlay_mode() { return g_ble.root && lv_obj_is_valid(g_ble.root) ? g_ble.mode : 0; }
+
 lv_obj_t *build_pairing(lv_obj_t *screen, const PairingInfo &info, int64_t, void (*on_cancel)()) {
     const Palette &p = P();
     auto *root = panel(screen, kScreen, kScreen, p.bg, p.bg, 0);
@@ -1485,6 +1609,7 @@ bool clock_dot_lit(int i) {
     if (current_page() != Page::Clock || i < 0 || i > 3 || !w.clock_dot[static_cast<size_t>(i)]) return false;
     return !lv_color_eq(lv_obj_get_style_bg_color(w.clock_dot[static_cast<size_t>(i)], LV_PART_MAIN), hex(P().edge));
 }
+int switch_current_index() { return current_page() == Page::Actions ? w.switch_current : -1; }
 int switch_row_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_rows.size()) : 0; }
 int switch_tile_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_tiles.size()) : 0; }
 int switch_icon(int i) {

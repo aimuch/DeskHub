@@ -67,6 +67,21 @@
 //  A33 No computer metrics anywhere: no CPU or memory on any page, and the Agent is never asked for them.
 //  A34 The clock page (docs/design v2 HomeClock): the four dots follow the ring (lit only for a healthy channel, dark when
 //      the channel is down or its data is stale); the time and the date are there; an unknown time lights no time dot.
+//  A35 Sources from the App over Bluetooth (docs/desktop-app-design.md 13.3): once the link is secure, the switch page lists
+//      exactly what the App sent (names; ports give the icons) and the computer icon of the header is not slashed. A tap
+//      sends ONE request with the App's id; while it waits, another tap sends nothing; the App's result is the notice. Without
+//      a secure link nothing from Bluetooth shows, and a tap sends nothing over Bluetooth.
+//  A36 Pairing a computer (K1): "pair a computer" on the Connect page opens the window, which shows its countdown and closes
+//      with "cancel". When the digits come they are shown large with "not the same" and "the same, pair"; the answer goes to
+//      the link; nothing is accepted without that tap. When the window or the digits run out, the page goes away.
+//  A37 "Forget computers" needs two taps; the first forgets nothing. The Connect page says how many computers may connect and
+//      whether one is connected. A factory reset forgets the computers too.
+//  A38 Every save of the screen goes through the flash worker (components/flash_worker): the LVGL task's stack is in PSRAM,
+//      and a flash write from it restarts the chip (0.3.18 on the device). Appearance, the switch style, the pages, source
+//      names and icons, sound, display settings, the time zone, charge protection, forgetting computers, factory reset.
+//  A39 The current input stands out (user, 2026-11-07): the input the App read back from the monitor is drawn in green with
+//      "current", in the list and in the tiles; no input is marked when the App does not know, or names an id that is not
+//      in its list (K3). A change of the current input is shown without a tap.
 //  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
@@ -78,6 +93,7 @@
 #include "lvgl.h"
 #include "ui_internal.hpp"
 #include "ui_store.hpp"
+#include "ble_link.hpp"
 #include "wifi_change.hpp"
 #include <algorithm>
 #include <array>
@@ -146,13 +162,23 @@ esp_err_t esp_lv_adapter_lock(int32_t) {
 void esp_lv_adapter_unlock() { ++unlock_calls; }
 lv_indev_t *bsp_display_get_input_dev() { return pointer_device; }
 
+// The flash worker (components/flash_worker): on the host it simply calls, and remembers that it is running, so the
+// simulated stores below can tell a write made outside it (A38: that restarts the device).
+namespace dh {
+int flash_calls = 0;
+bool in_flash = false;
+std::vector<std::string> outside_flash;
+bool flash_call(void (*fn)(void *), void *ctx) { ++flash_calls; const bool was = in_flash; in_flash = true; fn(ctx); in_flash = was; return true; }
+}  // namespace dh
+#define FLASH_WRITE(name) do { if (!dh::in_flash) dh::outside_flash.push_back(name); } while (0)
+
 namespace dh {
 const char *const VERSION = "0.3.0-preview";
 int64_t monotonic_ms() { return mock_ms; }
 Snapshot snapshot() { return mock_snapshot; }
 DisplayConfig config() { return mock_config; }
 void mutate(void (*fn)(Snapshot &, void *), void *ctx) { fn(mock_snapshot, ctx); }
-esp_err_t save_config(DisplayConfig value) {
+esp_err_t save_config(DisplayConfig value) { FLASH_WRITE("save_config");
     ++save_calls;
     if (mock_save_result != ESP_OK) return mock_save_result;
     if (!valid_config(value)) return ESP_FAIL;
@@ -160,8 +186,8 @@ esp_err_t save_config(DisplayConfig value) {
     mock_config = value;
     return ESP_OK;
 }
-esp_err_t reset_config() { ++reset_calls; if (mock_reset_result != ESP_OK) return mock_reset_result; mock_config = {}; return ESP_OK; }
-bool set_time_utc(const char *s, const char *quality) { if (!mock_time_ok || strcmp(quality, "manual")) return false; mock_time_set = s; return true; }
+esp_err_t reset_config() { FLASH_WRITE("reset_config"); ++reset_calls; if (mock_reset_result != ESP_OK) return mock_reset_result; mock_config = {}; return ESP_OK; }
+bool set_time_utc(const char *s, const char *quality) { FLASH_WRITE("set_time_utc"); if (!mock_time_ok || strcmp(quality, "manual")) return false; mock_time_set = s; return true; }
 bool board_rtc_write(time_t) { ++mock_rtc_writes; return true; }
 Secrets secrets() {
     Secrets s;
@@ -171,7 +197,7 @@ Secrets secrets() {
 PowerState board_power() { return mock_power; }
 namespace charge {
 Status status() { return mock_charge; }
-bool apply(const Settings &s) {
+bool apply(const Settings &s) { FLASH_WRITE("charge::apply");
     ++charge_applies;
     charge_last = s;
     if (!charge_apply_ok && s.enabled) return false;       // saving fails: nothing changes
@@ -185,14 +211,14 @@ bool apply(const Settings &s) {
 namespace audio {   // the speaker, simulated
 bool available() { return audio_available; }
 bool enabled() { return audio_enabled; }
-bool set_enabled(bool on) {
+bool set_enabled(bool on) { FLASH_WRITE("audio::set_enabled");
     if (!audio_store_ok) return false;
     audio_enabled = on;
     return true;
 }
 int volume() { return audio_volume; }
-bool reset_settings() { if (!audio_store_ok) return false; audio_enabled = false; audio_volume = 0; return true; }
-bool set_volume(int level) {
+bool reset_settings() { FLASH_WRITE("audio::reset_settings"); if (!audio_store_ok) return false; audio_enabled = false; audio_volume = 0; return true; }
+bool set_volume(int level) { FLASH_WRITE("audio::set_volume");
     if (!audio_store_ok || level < 0 || level >= kVolumeLevels) return false;
     audio_volume = level;
     return true;
@@ -220,15 +246,15 @@ bool agent_submit(const Action &a) {
 }
 namespace ui {
 std::string store_load() { return stored_text; }
-bool store_clear() { if (!store_ok) return false; stored_text.clear(); stored_sources.clear(); return true; }
+bool store_clear() { FLASH_WRITE("store_clear"); if (!store_ok) return false; stored_text.clear(); stored_sources.clear(); return true; }
 std::string sources_load() { return stored_sources; }
-bool sources_save(const std::string &text) {
+bool sources_save(const std::string &text) { FLASH_WRITE("sources_save");
     ++sources_saves;
     if (!sources_ok) return false;
     stored_sources = text;
     return true;
 }
-bool store_save(const std::string &text) {
+bool store_save(const std::string &text) { FLASH_WRITE("store_save");
     ++store_saves;
     if (!store_ok) return false;
     stored_text = text;
@@ -236,6 +262,46 @@ bool store_save(const std::string &text) {
 }
 }  // namespace ui
 }  // namespace dh
+
+// The flash worker: on the host there is no PSRAM stack, so it simply calls (components/flash_worker).
+
+
+// The Bluetooth link simulated at its public boundary (components/ble_link).
+namespace dh::ble {
+Status mock;
+std::vector<Source> mock_sources;
+std::string mock_current;
+std::vector<std::string> requests_sent;
+std::vector<bool> answers;
+int pairing_opens = 0, pairing_closes = 0, forgets = 0;
+void start() {}
+Status status() { return mock; }
+std::vector<Source> sources() { return mock.secure ? mock_sources : std::vector<Source>{}; }
+std::string current() {
+    if (!mock.secure) return "";
+    for (const auto &s : mock_sources) if (s.id == mock_current) return mock_current;
+    return "";
+}
+bool request(const std::string &id) {
+    if (!mock.secure || mock.waiting) return false;
+    requests_sent.push_back(id);
+    mock.waiting = true;
+    return true;
+}
+void open_pairing() { ++pairing_opens; mock.pairing_open = true; mock.pairing_left_ms = 120000; }
+void close_pairing() { ++pairing_closes; mock.pairing_open = false; mock.pairing_left_ms = 0; mock.confirm_pending = false; }
+void answer_digits(bool same) { answers.push_back(same); mock.confirm_pending = false; }
+bool forget_all() { FLASH_WRITE("ble::forget_all"); ++forgets; mock.bonds = 0; mock.connected = mock.secure = false; return true; }
+}  // namespace dh::ble
+static void reset_ble() {
+    dh::ble::mock = {};
+    dh::ble::mock.running = true;
+    dh::ble::mock_sources.clear();
+    dh::ble::mock_current.clear();
+    dh::ble::requests_sent.clear();
+    dh::ble::answers.clear();
+    dh::ble::pairing_opens = dh::ble::pairing_closes = dh::ble::forgets = 0;
+}
 
 // Radio service simulated at its public boundary; LVGL input and widgets are real.
 static dh::wifi_change::Status wifi_state;
@@ -415,6 +481,7 @@ static bool arc_filled(lv_obj_t *a) { return lv_obj_get_style_arc_opa(a, LV_PART
 
 // ---------------------------------------------------------------- mock world
 static void reset_world() {
+    reset_ble();
     wifi_state={}; wifi_allowed=true; wifi_begins=wifi_keeps=wifi_reverts=0; wifi_sent_ssid.clear(); wifi_sent_password.clear();
     mock_ms = 1000; pointer_pressed = false; power_auto = true; mock_paired = true;
     mock_snapshot = {};
@@ -621,7 +688,7 @@ static const char *view_name(size_t i) {
 static void case_pages_and_home() {
     fresh();
     EXPECT(detail::current_page() == Page::Actions);              // the home page by default is the switch page
-    EXPECT(nav_line() == "切换,总览,设置");
+    EXPECT(nav_line() == "切源,总览,设置");
     EXPECT(nav_index_of("电脑") < 0 && !has("电脑"));
     click_nav(1); EXPECT(detail::current_page() == Page::Home);
     click_nav(2); EXPECT(detail::current_page() == Page::Settings);
@@ -631,12 +698,12 @@ static void case_pages_and_home() {
     // show the clock: stored, and the navigation grows at once
     EXPECT(tap_area(detail::pages_control_area, 2, 0));
     EXPECT(stored_text.find("|S+O+C+P-|") != std::string::npos);
-    EXPECT(nav_line() == "切换,总览,时钟,设置");
+    EXPECT(nav_line() == "切源,总览,时钟,设置");
     EXPECT(detail::current_page() == Page::Pages);
     // move the overview up: it is the home page now
     EXPECT(tap_area(detail::pages_control_area, 1, 1));
     EXPECT(stored_text.find("|O+S+C+P-|") != std::string::npos);
-    EXPECT(nav_line() == "总览,切换,时钟,设置");
+    EXPECT(nav_line() == "总览,切源,时钟,设置");
     EXPECT(has("首页"));
     // hide down to one page; the last one cannot be hidden, and the page says so
     EXPECT(tap_area(detail::pages_control_area, 1, 0));            // hide Switch
@@ -659,7 +726,7 @@ static void case_pages_and_home() {
     EXPECT(detail::current_page() == Page::Home && nav_line() == "总览,设置");
     // with all four shown, the five buttons fit and every one reaches its page
     fresh("night|-|zh-CN|standard|pct|standard|P+C+O+S+|list");
-    EXPECT(detail::current_page() == Page::Power && nav_line() == "电源,时钟,总览,切换,设置");
+    EXPECT(detail::current_page() == Page::Power && nav_line() == "电源,时钟,总览,切源,设置");
     const Page pages[5] = {Page::Power, Page::Clock, Page::Home, Page::Actions, Page::Settings};
     for (int i = 0; i < 5; ++i) { click_nav(i); NOTE(detail::current_page() == pages[i], "button " << i); }
     check_layout("nav-five"); check_targets("nav-five");
@@ -815,6 +882,126 @@ static void case_no_metrics() {
         NOTE(!mock_snapshot.metrics_visible, view_name(i));
     }
 }
+static void link_up() {   // a paired Mac, connected, with three inputs
+    dh::ble::mock.connected = dh::ble::mock.secure = true;
+    dh::ble::mock.bonds = 1;
+    dh::ble::mock_sources = {{"id-mini", "Mac mini", "dp1"}, {"id-m1", "MacBook M1", "hdmi1"}, {"id-m4", "MacBook M4", "usbc"}};
+}
+static void case_ble_sources() {   // A35
+    fresh();
+    mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; mock_snapshot.action_count = 0; step(); step();
+    EXPECT(has("还没有输入源") && detail::header_slashed(1));
+    link_up(); step(); step();
+    EXPECT(detail::switch_row_count() == 3 && has("MacBook M1") && has("USB-C") && !detail::header_slashed(1));
+    EXPECT(detail::switch_icon(1) == static_cast<int>(ui::SourceIcon::Hdmi));
+    EXPECT(click_text("MacBook M1"));
+    EXPECT(dh::ble::requests_sent == std::vector<std::string>{"id-m1"} && submit_calls == 0);
+    EXPECT(click_text("MacBook M4"));
+    EXPECT(dh::ble::requests_sent.size() == 1);                 // one waits: nothing more goes out
+    dh::ble::mock.waiting = false;
+    mock_snapshot.command = "已切到 MacBook M1，已确认"; step();
+    EXPECT(has("已切到 MacBook M1，已确认"));
+    check_layout("ble-sources"); check_targets("ble-sources");
+    // the link drops: the list goes with it, nothing goes out over Bluetooth
+    dh::ble::mock.secure = dh::ble::mock.connected = false; step(); step();
+    EXPECT(detail::switch_row_count() == 0 && has("还没有输入源"));
+    // connected but not secure (not paired): nothing from Bluetooth
+    dh::ble::mock.connected = true; step(); step();
+    EXPECT(detail::switch_row_count() == 0);
+}
+static void case_ble_pairing() {   // A36
+    fresh();
+    goto_view(Page::Connect);
+    EXPECT(has("电脑（蓝牙）") && has("配对电脑") && has("没有连接"));
+    EXPECT(click_text("配对电脑")); step(); step();
+    EXPECT(dh::ble::pairing_opens == 1 && detail::ble_overlay_mode() == 1);
+    EXPECT(has("等电脑来配对") && has("2:00"));
+    check_layout("ble-wait"); check_targets("ble-wait");
+    dh::ble::mock.pairing_left_ms = 61000; step();
+    EXPECT(has("1:01"));
+    EXPECT(click_text("取消")); step(); step();
+    EXPECT(dh::ble::pairing_closes == 1 && detail::ble_overlay_mode() == 0);
+    // the digits
+    EXPECT(click_text("配对电脑")); step(); step();
+    dh::ble::mock.confirm_pending = true; dh::ble::mock.digits = 520617; dh::ble::mock.confirm_left_ms = 24000; step(); step();
+    EXPECT(detail::ble_overlay_mode() == 2 && has("520 617") && has("一样，配对") && has("不一样") && contains("剩 24 秒"));
+    EXPECT(dh::ble::answers.empty());                          // nothing without the tap
+    check_layout("ble-confirm"); check_targets("ble-confirm");
+    EXPECT(click_text("一样，配对")); step(); step();
+    EXPECT(dh::ble::answers == std::vector<bool>{true});
+    // paired and connected: the window closes, the page goes, the Connect page says so
+    dh::ble::mock.pairing_open = false; link_up(); step(); step();
+    EXPECT(detail::ble_overlay_mode() == 0 && contains("已连接") && contains("3 个输入源") && has("1 台电脑"));
+    // "not the same"
+    EXPECT(click_text("配对电脑")); step();
+    dh::ble::mock.confirm_pending = true; dh::ble::mock.digits = 7; dh::ble::mock.confirm_left_ms = 30000; step(); step();
+    EXPECT(has("000 007"));
+    EXPECT(click_text("不一样")); step();
+    EXPECT(dh::ble::answers.size() == 2 && dh::ble::answers[1] == false);
+    // the window runs out: the page goes by itself
+    dh::ble::mock.pairing_open = false; dh::ble::mock.confirm_pending = false; step(); step();
+    EXPECT(detail::ble_overlay_mode() == 0);
+}
+static void case_ble_forget() {   // A37
+    fresh();
+    link_up(); step();
+    goto_view(Page::Connect);
+    EXPECT(has("1 台电脑"));
+    EXPECT(click_text("删除配对")); step();
+    EXPECT(dh::ble::forgets == 0 && has("再点一次删除"));
+    EXPECT(click_text("再点一次删除")); step(); step();
+    EXPECT(dh::ble::forgets == 1 && has("0 台电脑") && has("没有连接"));
+    // a factory reset forgets the computers too
+    fresh(); link_up(); step();
+    goto_view(Page::Device);
+    EXPECT(click_text("恢复出厂设置")); step(); EXPECT(click_text("再次点击确认删除")); step();
+    EXPECT(dh::ble::forgets == 1);
+}
+static void case_flash_worker() {   // A38
+    auto through = [](const char *what, const std::function<void()> &act) {
+        dh::outside_flash.clear();
+        const int before = dh::flash_calls;
+        act();
+        step(); step();
+        std::string names;
+        for (const auto &n : dh::outside_flash) names += n + " ";
+        NOTE(dh::outside_flash.empty(), what << ": written outside the flash worker: " << names);
+        NOTE(dh::flash_calls > before, what << " did not go through the flash worker");
+    };
+    fresh(); with_ports();
+    through("the switch style", [] { goto_view(Page::Sources); click_text("图标"); });
+    through("the pages", [] { goto_view(Page::Pages); tap_area(detail::pages_control_area, 2, 0); });
+    through("the theme", [] { goto_view(Page::Appearance); click_text("薄荷夜色"); });
+    through("an icon", [] { goto_view(Page::SourceEdit); tap_area(detail::icon_choice_area, static_cast<int>(ui::SourceIcon::Tv), 0); });
+    through("restore", [] { click_text("恢复 App 的名字和图标"); });
+    through("the sound", [] { goto_view(Page::Sound); detail::request_sound_set(true); });
+    through("the volume", [] { detail::request_sound_volume(2); });
+    through("a display setting", [] { detail::change_setting(0); });
+    through("the time zone", [] { detail::request_time_zone(1); });
+    through("the time", [] { goto_view(Page::Time); detail::request_time_save("2026-11-07T06:00:00Z"); });
+    through("charge protection off", [] { mock_charge.enabled = true; detail::request_protect_toggle(); });
+    through("forget computers", [] { link_up(); goto_view(Page::Connect); click_text("删除配对"); step(); click_text("再点一次删除"); });
+    through("factory reset", [] { goto_view(Page::Device); click_text("恢复出厂设置"); step(); click_text("再次点击确认删除"); });
+}
+static void case_ble_current() {   // A39
+    fresh();
+    mock_snapshot.action_count = 0;
+    link_up(); step(); step();
+    EXPECT(detail::switch_current_index() == -1 && !has("当前"));          // not known: no mark
+    dh::ble::mock_current = "id-m1"; step(); step();
+    EXPECT(detail::switch_current_index() == 1 && has("当前"));            // shown without a tap
+    check_layout("current-list"); check_targets("current-list");
+    dh::ble::mock_current = "nope"; step(); step();
+    EXPECT(detail::switch_current_index() == -1);                         // not in the list: not known
+    dh::ble::mock_current = "id-m4"; step(); step();
+    EXPECT(detail::switch_current_index() == 2);
+    detail::request_switch_style(ui::SwitchStyle::Icons); step(); step();
+    goto_view(Page::Actions);
+    EXPECT(detail::switch_current_index() == 2 && has("当前"));
+    check_layout("current-icons"); check_targets("current-icons");
+    dh::ble::mock.secure = false; step(); step();
+    EXPECT(detail::switch_current_index() == -1);
+}
 static void case_init_lock() {
     for (esp_err_t bad : {ESP_ERR_TIMEOUT, ESP_ERR_INVALID_STATE}) {
         reset_world();
@@ -878,6 +1065,20 @@ static void case_matrix() {
                         check_layout(where + "/nav-five");
                         check_targets(where + "/nav-five");
                     }
+                }
+                {   // the Bluetooth pairing pages and the computer rows (A36, A37)
+                    const std::string where = std::string(theme) + "/" + lang + "/" + size + "/ble";
+                    link_up(); goto_view(Page::Connect);
+                    check_layout(where + "-connect"); check_targets(where + "-connect");
+                    dh::ble::mock_current = "id-m1"; goto_view(Page::Actions);   // A39: the current input, in the style of this run
+                    check_layout(where + "-current"); check_targets(where + "-current");
+                    goto_view(Page::Connect);
+                    dh::ble::open_pairing(); step(); step();
+                    check_layout(where + "-wait"); check_targets(where + "-wait");
+                    dh::ble::mock.confirm_pending = true; dh::ble::mock.digits = 520617; dh::ble::mock.confirm_left_ms = 24000; step(); step();
+                    check_layout(where + "-confirm"); check_targets(where + "-confirm");
+                    dh::ble::close_pairing(); step(); step();
+                    reset_ble(); step(); step();
                 }
                 {   // the pairing page, with the longest strings it can get
                     dh::PairingInfo info; info.code = "ZZZZZZZZ"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "ABCDEFGHJKMN"; info.remaining_s = 299;
@@ -1211,7 +1412,7 @@ static void case_pairing() {
     step();
     EXPECT(has("624819") && has("04:32") && contains("DeskHub-C598") && has("取消配对"));
     EXPECT(has("热点密码") && has("K7M2QX9TWD4P"));
-    EXPECT(!has("总览") && !has("切换"));           // the shell is hidden
+    EXPECT(!has("总览") && !has("切源"));           // the shell is hidden
     EXPECT(detail::pairing_bar_percent() == 90);
     step(2000);
     EXPECT(has("04:30"));
@@ -1915,6 +2116,7 @@ int main(int argc, char **argv) {
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
         {"pages_and_home", case_pages_and_home}, {"wake_goes_home", case_wake_goes_home}, {"switch_styles", case_switch_styles},
         {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page},
+        {"ble_sources", case_ble_sources}, {"ble_pairing", case_ble_pairing}, {"ble_forget", case_ble_forget}, {"flash_worker", case_flash_worker}, {"ble_current", case_ble_current},
         {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
