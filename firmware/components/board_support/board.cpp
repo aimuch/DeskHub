@@ -283,7 +283,7 @@ bool board_rtc_read(time_t &result) {
     if (!ok || (v[0]&0x80) || (control&0xa2)) return false;
     int sec=bcd(v[0]&0x7f),min=bcd(v[1]&0x7f),hour=bcd(v[2]&0x3f),day=bcd(v[3]&0x3f),month=bcd(v[5]&0x1f),year=bcd(v[6]);
     if (sec<0||min<0||hour<0||day<1||month<1||year<24) return false;
-    char iso[32]; snprintf(iso,sizeof(iso),"20%02d-%02d-%02dT%02d:%02d:%02dZ",year,month,day,hour,min,sec);
+    char iso[96]; snprintf(iso,sizeof(iso),"20%02d-%02d-%02dT%02d:%02d:%02dZ",year,month,day,hour,min,sec);
     return parse_utc(iso,result);
 }
 bool board_rtc_write(time_t t) {
