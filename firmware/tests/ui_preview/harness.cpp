@@ -874,6 +874,130 @@ static void case_clock_page() {
     goto_view(Page::Home);
     EXPECT(!detail::clock_dot_lit(0));                       // no dots on another page
 }
+// ---- A40: seconds and clock hands are choices (docs/design v2 OverviewSeconds, ClockHands, AppearanceTime) ----
+static lv_obj_t *find_after(const std::string &head, const std::string &t) {   // the first label t after the label head, in the order drawn
+    bool seen = false;
+    for (auto *l : labels()) {
+        if (!seen) { seen = head == lv_label_get_text(l); continue; }
+        if (t == lv_label_get_text(l)) return l;
+    }
+    return nullptr;
+}
+static bool click_after(const std::string &head, const std::string &t) {
+    auto *target = clickable_ancestor(find_after(head, t));
+    if (!target) return false;
+    lv_obj_scroll_to_view_recursive(target, LV_ANIM_OFF);
+    lv_obj_update_layout(detail::screen_object());
+    lv_area_t a;
+    lv_obj_get_coords(target, &a);
+    tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
+    return true;
+}
+static bool chosen_after(const std::string &head, const std::string &t) {
+    auto *b = clickable_ancestor(find_after(head, t));
+    return b && lv_obj_get_style_border_width(b, LV_PART_MAIN) == 2;
+}
+static bool chosen(const std::string &label);   // below, with A19
+struct Hands { int hour, minute, second; std::string ss; };
+static Hands hands_now() {   // where the hands must point now, in whole degrees clockwise from 12
+    const time_t now = time(nullptr);
+    struct tm t{};
+    localtime_r(&now, &t);
+    char ss[4];
+    snprintf(ss, sizeof(ss), "%02d", t.tm_sec);
+    return {(t.tm_hour % 12) * 30 + t.tm_min / 2, t.tm_min * 6 + t.tm_sec / 10, t.tm_sec * 6, ss};
+}
+static void case_time_options() {   // A40
+    fresh();
+    // the defaults: no seconds anywhere, hands on the clock page
+    goto_view(Page::Home);
+    EXPECT(detail::home_seconds_text().empty() && has("11:00"));
+    goto_view(Page::Clock);
+    Hands h = hands_now();
+    NOTE(detail::clock_hand_deg(0) == h.hour, "hour " << detail::clock_hand_deg(0) << " want " << h.hour);
+    NOTE(detail::clock_hand_deg(1) == h.minute, "minute " << detail::clock_hand_deg(1) << " want " << h.minute);
+    EXPECT(detail::clock_hand_deg(2) == -1 && detail::clock_seconds_text().empty() && !detail::clock_big_digits() && has("11:00"));
+    check_layout("clock-hands"); check_targets("clock-hands");
+    // the Appearance page has both choices, as stored
+    goto_view(Page::Appearance);
+    EXPECT(has("时间显示秒") && has("时钟表针"));
+    EXPECT(chosen_after("时间显示秒", "隐藏") && !chosen_after("时间显示秒", "显示"));
+    EXPECT(chosen_after("时钟表针", "显示") && !chosen_after("时钟表针", "隐藏"));
+    EXPECT(chosen("显示") && !chosen("隐藏"));                     // the battery percent above is still its own choice
+    // seconds on: the device setting that the App can also set (layout.show_seconds), saved at once
+    dh::outside_flash.clear();
+    const auto saves = save_calls;
+    EXPECT(click_after("时间显示秒", "显示")); step(); step();
+    EXPECT(save_calls == saves + 1 && mock_config.layout.show_seconds && has("已保存"));
+    EXPECT(dh::outside_flash.empty());                               // the save went through the flash worker (A38)
+    EXPECT(stored_text.empty());                                     // the look is not touched
+    EXPECT(chosen_after("时间显示秒", "显示") && !chosen_after("时间显示秒", "隐藏"));
+    goto_view(Page::Home);
+    h = hands_now();
+    NOTE(detail::home_seconds_text() == h.ss, "home seconds [" << detail::home_seconds_text() << "] want " << h.ss);
+    check_layout("home-seconds");
+    goto_view(Page::Clock);
+    h = hands_now();
+    NOTE(detail::clock_hand_deg(2) == h.second, "second " << detail::clock_hand_deg(2) << " want " << h.second);
+    NOTE(detail::clock_seconds_text() == h.ss, "clock seconds [" << detail::clock_seconds_text() << "]");
+    check_layout("clock-hands-seconds");
+    // hands off: the large digits again, with the seconds after them
+    goto_view(Page::Appearance);
+    EXPECT(click_after("时钟表针", "隐藏")); step(); step();
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands" && !detail::current_appearance().clock_hands);
+    EXPECT(chosen_after("时钟表针", "隐藏"));
+    goto_view(Page::Clock);
+    h = hands_now();
+    EXPECT(detail::clock_big_digits() && detail::clock_hand_deg(0) == -1 && detail::clock_hand_deg(1) == -1 && detail::clock_hand_deg(2) == -1);
+    NOTE(detail::clock_seconds_text() == h.ss, "big seconds [" << detail::clock_seconds_text() << "]");
+    // seconds off again: gone from both pages
+    goto_view(Page::Appearance);
+    EXPECT(click_after("时间显示秒", "隐藏")); step(); step();
+    EXPECT(!mock_config.layout.show_seconds);
+    goto_view(Page::Clock);
+    EXPECT(detail::clock_seconds_text().empty());
+    goto_view(Page::Home);
+    EXPECT(detail::home_seconds_text().empty());
+    // a restart reads both back
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands");
+    mock_config.layout.show_seconds = true; mock_config.revision++; step(); step();
+    goto_view(Page::Clock);
+    EXPECT(detail::clock_big_digits() && detail::clock_hand_deg(0) == -1 && !detail::clock_seconds_text().empty());
+    // another hour, with minutes and seconds: 14:31:25 puts the hour hand past 2, the minute hand past 31
+    fresh();
+    mock_config.layout.show_seconds = true; mock_config.revision++;
+    mock_ms = 1000 + (3 * 3600 + 31 * 60 + 25) * 1000LL;
+    goto_view(Page::Clock);
+    h = hands_now();
+    NOTE(h.hour == 75 && h.minute == 188 && h.second == 150, "the test clock is at " << h.hour << " " << h.minute << " " << h.second);
+    NOTE(detail::clock_hand_deg(0) == 75 && detail::clock_hand_deg(1) == 188 && detail::clock_hand_deg(2) == 150,
+         "hands " << detail::clock_hand_deg(0) << " " << detail::clock_hand_deg(1) << " " << detail::clock_hand_deg(2));
+    EXPECT(has("14:31") && detail::clock_seconds_text() == "25");
+    // no time: no hands and no seconds, the dashes and the hint as before
+    fresh();
+    mock_config.layout.show_seconds = true; mock_config.revision++;
+    mock_snapshot.time_valid = false; step(); step();
+    goto_view(Page::Clock);
+    EXPECT(detail::clock_hand_deg(0) == -1 && detail::clock_hand_deg(1) == -1 && detail::clock_hand_deg(2) == -1);
+    EXPECT(detail::clock_big_digits() && has("--:--") && detail::clock_seconds_text().empty());
+    goto_view(Page::Home);
+    EXPECT(!detail::home_seconds_shown() && has("--:--"));
+    // saving fails: the setting stays off and the page says so
+    fresh();
+    mock_save_result = ESP_FAIL;
+    goto_view(Page::Appearance);
+    EXPECT(click_after("时间显示秒", "显示")); step(); step();
+    EXPECT(!mock_config.layout.show_seconds && has("保存失败") && chosen_after("时间显示秒", "隐藏"));
+    // what was stored before 0.3.19 gets the hands
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-|icons");
+    goto_view(Page::Clock);
+    EXPECT(!detail::clock_big_digits() && detail::clock_hand_deg(0) >= 0);
+    // in English the two choices fit too
+    fresh("night|-|en-US|large|pct|standard|S+O+C-P-|list|hands");
+    goto_view(Page::Appearance);
+    EXPECT(has("Show seconds") && has("Clock hands"));
+    check_layout("appearance-time-en");
+}
 static void case_no_metrics() {
     fresh();
     for (size_t i = 0; i < kViews.size(); ++i) {
@@ -1247,14 +1371,14 @@ static void case_appearance() {
     fresh();
     goto_view(Page::Appearance);
     EXPECT(click_text("深海蓝"));
-    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-|list");
+    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands");
     EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Ocean);
     EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03131c)));
     EXPECT(click_text("English"));
-    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-|list");
+    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-|list|hands");
     EXPECT(has("Appearance") && has("Switch") && has("Status") && has("Settings") && !contains("外观"));
     EXPECT(click_text("Large"));
-    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-|list");
+    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-|list|hands");
     EXPECT(detail::current_page() == Page::Appearance);  // the page stays
     // a restart restores it
     const std::string saved = stored_text;
@@ -1287,7 +1411,7 @@ static void case_appearance() {
         EXPECT(swatch != nullptr);
         if (swatch) { lv_obj_scroll_to_view_recursive(swatch, LV_ANIM_OFF); lv_obj_update_layout(detail::screen_object()); lv_area_t a; lv_obj_get_coords(swatch, &a); tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2); }
     }
-    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-|list" && detail::look.palette.accent == 0x4fc3f7);
+    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-|list|hands" && detail::look.palette.accent == 0x4fc3f7);
     // the page of every tier still draws its own choices selected
     fresh("amber|-|zh-CN|small");
     goto_view(Page::Appearance);
@@ -1547,13 +1671,13 @@ static void case_appearance_options() {   // A19
     EXPECT(click_text("隐藏"));
     step(); step();
     EXPECT(chosen("隐藏") && !chosen("显示"));
-    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-|list" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
+    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-|list|hands" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
     EXPECT(click_text("显示"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list" && detail::header_battery_text() == "67");
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands" && detail::header_battery_text() == "67");
     EXPECT(click_text("粗"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-|list" && chosen("粗") && !chosen("细"));
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-|list|hands" && chosen("粗") && !chosen("细"));
     fresh("mint|-|zh-CN|standard|nopct|thin");      // what is stored is what the page shows as chosen
     goto_view(Page::Appearance);
     EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
@@ -1900,7 +2024,8 @@ static void case_time() {
     goto_view(Page::Settings); step(); EXPECT(detail::time_field_selected() == -1);
     goto_view(Page::Time); step(); EXPECT(detail::time_draft_text() == "2026-01-01 00:00" && detail::time_field_selected() == 4);
     // The source of the time says what it is; the hints do not send the person to USB only.
-    fresh(); mock_snapshot.time_valid = true; mock_snapshot.time_quality = "manual"; goto_view(Page::Clock); step(); EXPECT(has("手动校时"));
+    // (with the large digits: the hands leave the dial to the hands and the time only, docs/design v2 ClockHands)
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands"); mock_snapshot.time_valid = true; mock_snapshot.time_quality = "manual"; goto_view(Page::Clock); step(); EXPECT(has("手动校时"));
     fresh(); mock_snapshot.time_valid = false; goto_view(Page::Clock); step(); EXPECT(has("时间无效，请到设置里校时"));
     // English.
     fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Time); step();
@@ -2090,6 +2215,19 @@ static void case_screenshots() {
     goto_view(Page::Power, PowerTab::Protect);
     detail::build_protect_dialog(lv_layer_top(), [](int) {}, [] {}); step();
     save_png_source("state-protect");
+    // seconds and hands (docs/design v2 OverviewSeconds, ClockHands, AppearanceTime)
+    fresh();
+    mock_config.layout.show_seconds = true; mock_config.revision++; step(17000);
+    goto_view(Page::Home); save_png_source("state-home-seconds");
+    goto_view(Page::Clock); save_png_source("state-clock-hands-seconds");
+    mock_config.layout.show_seconds = false; mock_config.revision++; step();
+    goto_view(Page::Clock); save_png_source("state-clock-hands");
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands");
+    mock_config.layout.show_seconds = true; mock_config.revision++; step(17000);
+    goto_view(Page::Clock); save_png_source("state-clock-digits-seconds");
+    goto_view(Page::Appearance);
+    if (auto *b = clickable_ancestor(find_after("时钟表针", "显示"))) { lv_obj_scroll_to_view_recursive(b, LV_ANIM_OFF); step(); }
+    save_png_source("state-appearance-time");
 }
 
 int main(int argc, char **argv) {
@@ -2115,7 +2253,7 @@ int main(int argc, char **argv) {
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
         {"pages_and_home", case_pages_and_home}, {"wake_goes_home", case_wake_goes_home}, {"switch_styles", case_switch_styles},
-        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page},
+        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page}, {"time_options", case_time_options},
         {"ble_sources", case_ble_sources}, {"ble_pairing", case_ble_pairing}, {"ble_forget", case_ble_forget}, {"flash_worker", case_flash_worker}, {"ble_current", case_ble_current},
         {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;

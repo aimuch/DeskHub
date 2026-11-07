@@ -274,22 +274,25 @@ static void t5_appearance() {
                 for (SizeTier z : {SizeTier::Small, SizeTier::Standard, SizeTier::Large})
                     for (bool percent : {true, false})
                         for (RingTier r : {RingTier::Thin, RingTier::Standard, RingTier::Thick})
-                            for (SwitchStyle st : {SwitchStyle::List, SwitchStyle::Icons}) {
-                                Appearance a;
-                                a.theme = t; a.accent = accent; a.lang = l; a.size = z; a.show_percent = percent; a.ring = r; a.style = st;
-                                const Appearance b = parse_appearance(serialize(a));
-                                CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z && b.show_percent == percent && b.ring == r && b.style == st);
-                                ++combos;
-                            }
-    CHECK_EQ(combos, 4 * 3 * 2 * 3 * 2 * 3 * 2);
+                            for (SwitchStyle st : {SwitchStyle::List, SwitchStyle::Icons})
+                                for (bool hands : {true, false}) {
+                                    Appearance a;
+                                    a.theme = t; a.accent = accent; a.lang = l; a.size = z; a.show_percent = percent; a.ring = r; a.style = st; a.clock_hands = hands;
+                                    const Appearance b = parse_appearance(serialize(a));
+                                    CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z && b.show_percent == percent && b.ring == r && b.style == st &&
+                                          b.clock_hands == hands);
+                                    ++combos;
+                                }
+    CHECK_EQ(combos, 4 * 3 * 2 * 3 * 2 * 3 * 2 * 2);
     Appearance d;
-    CHECK(d.show_percent && d.ring == RingTier::Standard && d.theme == ThemeId::Night && d.style == SwitchStyle::List);
-    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list"));
+    CHECK(d.show_percent && d.ring == RingTier::Standard && d.theme == ThemeId::Night && d.style == SwitchStyle::List && d.clock_hands);
+    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands"));
     Appearance a;
     a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large; a.show_percent = false; a.ring = RingTier::Thick;
     a.style = SwitchStyle::Icons;
     a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}}};
-    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons"));
+    a.clock_hands = false;
+    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons|nohands"));
     const Appearance back = parse_appearance(serialize(a));
     CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+"));
     const std::vector<std::string> bad = {
@@ -302,12 +305,18 @@ static void t5_appearance() {
         "night|-|zh-CN|standard|pct|standard|S+O+C-P-", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|grid",
         "night|-|zh-CN|standard|pct|standard|S+S+C-P-|list", "night|-|zh-CN|standard|pct|standard|S-O-C-P-|list", "night|-|zh-CN|standard|pct|standard||list",
         "night|-|zh-CN|standard|pct|standard|S+O+C-P-|LIST", "dusk|-|zh-CN|standard|pct|standard|S+O+C-P-|list", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|x",
+        // the 0.3.19 format: 9 fields exactly, the hands named exactly
+        "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands|", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|HANDS",
+        "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|no", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|grid|nohands", "night|-|zh-CN|standard|pct|standard|S+S+C-P-|list|nohands",
+        "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands|nohands", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list| nohands",
+        // a bad hands word throws away the whole text, not only the hands (the other fields here are not the defaults)
+        "ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons|HANDS", "ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons|no",
         // 0.3.x never stored the night theme: a short text that names it is damaged
         "night|-|zh-CN|standard", "night|-|zh-CN|standard|pct|standard"};
     for (const auto &s : bad) {
         const Appearance p = parse_appearance(s);
         const bool same = p.theme == d.theme && p.accent == d.accent && p.lang == d.lang && p.size == d.size && p.show_percent == d.show_percent && p.ring == d.ring &&
-                          p.style == d.style && serialize_pages(p.pages) == serialize_pages(d.pages);
+                          p.style == d.style && p.clock_hands == d.clock_hands && serialize_pages(p.pages) == serialize_pages(d.pages);
         if (!same) std::fprintf(stderr, "appearance text half-read: [%s]\n", s.c_str());
         CHECK(same);
     }
@@ -333,6 +342,11 @@ static void t25_appearance_upgrade() {
     CHECK(six.lang == Lang::EnUS && six.size == SizeTier::Large && !six.show_percent && six.ring == RingTier::Thick);
     // The 0.3.17 format is taken as it is: a classic theme chosen there stays.
     CHECK(parse_appearance("mint|-|zh-CN|standard|pct|standard|S+O+C-P-|list").theme == ThemeId::Mint);
+    // Before 0.3.19 there were no hands: what was stored gets them, as a new device does.
+    for (const char *s : {"mint|-|zh-CN|standard", "mint|-|en-US|large|nopct|thick", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|icons"}) CHECK(parse_appearance(s).clock_hands);
+    const Appearance nine = parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|nohands");
+    CHECK(!nine.clock_hands && nine.style == SwitchStyle::Icons && nine.lang == Lang::EnUS && serialize_pages(nine.pages) == "C+S-O+P-");
+    CHECK(parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|hands").clock_hands);
 }
 static void t6_font_tiers() {
     const std::set<int> allowed = {16, 20, 28};

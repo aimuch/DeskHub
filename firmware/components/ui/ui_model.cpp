@@ -161,7 +161,7 @@ std::string serialize(const Appearance &a) {
     return std::string(theme_name(a.theme)) + "|" + (a.accent ? fmt("%06x", static_cast<unsigned>(a.accent & 0xffffff)) : std::string("-")) + "|" +
            lang_name(a.lang) + "|" + size_name(a.size) + "|" + (a.show_percent ? "pct" : "nopct") + "|" +
            (a.ring == RingTier::Thin ? "thin" : a.ring == RingTier::Thick ? "thick" : "standard") + "|" + serialize_pages(a.pages) + "|" +
-           (a.style == SwitchStyle::Icons ? "icons" : "list");
+           (a.style == SwitchStyle::Icons ? "icons" : "list") + "|" + (a.clock_hands ? "hands" : "nohands");
 }
 Appearance parse_appearance(const std::string &text) {
     Appearance out;
@@ -174,8 +174,8 @@ Appearance parse_appearance(const std::string &text) {
         if (bar == std::string::npos) break;
         from = bar + 1;
     }
-    if (field.size() != 4 && field.size() != 6 && field.size() != 8) return Appearance{};
-    const bool old = field.size() != 8;   // 0.3.x: the classic themes were the only ones
+    if (field.size() != 4 && field.size() != 6 && field.size() != 8 && field.size() != 9) return Appearance{};
+    const bool old = field.size() < 8;   // 0.3.x: the classic themes were the only ones
     Appearance a;
     if (field[0] == "mint") a.theme = ThemeId::Mint;
     else if (field[0] == "ocean") a.theme = ThemeId::Ocean;
@@ -201,10 +201,15 @@ Appearance parse_appearance(const std::string &text) {
         else if (field[5] == "thick") a.ring = RingTier::Thick;
         else return Appearance{};
     }
-    if (field.size() == 8) {
+    if (field.size() >= 8) {
         if (!parse_pages(field[6], a.pages)) return Appearance{};
         if (field[7] == "list") a.style = SwitchStyle::List;
         else if (field[7] == "icons") a.style = SwitchStyle::Icons;
+        else return Appearance{};
+    }
+    if (field.size() == 9) {
+        if (field[8] == "hands") a.clock_hands = true;
+        else if (field[8] == "nohands") a.clock_hands = false;
         else return Appearance{};
     }
     if (old) {   // the new look, with the colour the person had: ocean's blue is close to night's own

@@ -136,6 +136,8 @@ void request_pairing();              // "pair" on the Connect page: asks the bac
 void request_pages_toggle(int slot);  // the switch of a row of the Pages page: stored at once; the last shown page stays and the page says so
 void request_pages_move(int slot, int delta);
 void request_switch_style(SwitchStyle);
+void request_show_seconds(bool on);  // the Appearance page: the device setting layout.show_seconds, saved at once
+void request_clock_hands(bool on);   // the Appearance page: part of the look
 void request_source_edit(size_t index);   // the edit page of the source shown at this index of the switch actions
 void request_source_icon(SourceIcon);     // for the source of the edit page; Auto restores the App's
 void request_source_restore();
@@ -205,9 +207,14 @@ bool icon_choice_area(int icon, int unused, int *x1, int *y1, int *x2, int *y2);
 int switch_row_count();              // the switch page: rows in the list style, 0 otherwise
 int switch_tile_count();             // the switch page: tiles in the icon style, 0 otherwise
 int switch_icon(int index);          // the SourceIcon the switch page draws for a source; -1 when there is none
-bool clock_dot_lit(int index);
-int ble_overlay_mode();
-int switch_current_index();          // the switch page: the source marked current; -1 when none              // 0 none, 1 waiting for the computer, 2 the digits       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
+bool clock_dot_lit(int index);       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
+int clock_hand_deg(int which);       // the clock page: 0 hour, 1 minute, 2 second, in whole degrees clockwise from 12; -1 when not drawn
+std::string clock_seconds_text();    // the clock page: the seconds shown, "" when none
+bool clock_big_digits();             // the clock page: the large digits (no hands) are shown
+std::string home_seconds_text();     // the overview: the seconds after the time, "" when none
+bool home_seconds_shown();           // the overview: the label of the seconds is shown (even when it is empty)
+int ble_overlay_mode();              // 0 none, 1 waiting for the computer, 2 the digits
+int switch_current_index();          // the switch page: the source marked current; -1 when none
 bool rename_open();
 void rename_back();
 void rename_erase();

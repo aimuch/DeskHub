@@ -120,6 +120,30 @@
       "h": 480,
       "title": "配对电脑 · 核对 6 位数字（30 秒）",
       "radius": 72
+    },
+    "OverviewSeconds.dc.html": {
+      "x": 0,
+      "y": 3380,
+      "w": 480,
+      "h": 480,
+      "title": "总览 · 显示秒（可选）",
+      "radius": 72
+    },
+    "ClockHands.dc.html": {
+      "x": 560,
+      "y": 3380,
+      "w": 480,
+      "h": 480,
+      "title": "时钟 · 表针（可选）",
+      "radius": 72
+    },
+    "AppearanceTime.dc.html": {
+      "x": 1120,
+      "y": 3380,
+      "w": 480,
+      "h": 480,
+      "title": "设置 · 外观里的两个开关",
+      "radius": 72
     }
   },
   "order": [
@@ -136,7 +160,10 @@
     "Tokens.dc.html",
     "ConnectComputer.dc.html",
     "PairWaiting.dc.html",
-    "PairConfirm.dc.html"
+    "PairConfirm.dc.html",
+    "OverviewSeconds.dc.html",
+    "ClockHands.dc.html",
+    "AppearanceTime.dc.html"
   ],
   "notes": {
     "rowHome": {
@@ -180,6 +207,13 @@
       "x": 0,
       "y": 2300,
       "text": "蓝牙连电脑（K1：只在配对窗口里接受新电脑）",
+      "kind": "title1",
+      "maxW": 1600
+    },
+    "rowTime": {
+      "x": 0,
+      "y": 3120,
+      "text": "时间的显示方式（用户 2026-11-07：秒和表针都可选）",
       "kind": "title1",
       "maxW": 1600
     }

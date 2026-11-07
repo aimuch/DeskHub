@@ -395,6 +395,21 @@ void request_switch_style(SwitchStyle style) {
     next.style = style;
     apply_appearance(next);
 }
+// Seconds are a setting of the device (the App can set them too, layout.show_seconds), not a part of the look: one place for one fact.
+void request_show_seconds(bool on) {
+    note_activity();
+    auto c = config_due ? pending_config : config();
+    config_due = 0;
+    c.layout.show_seconds = on;
+    appearance_error = tr(look.lang, flashed(ESP_FAIL, [&] { return save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);
+    rebuilding = true;
+    request_update();
+}
+void request_clock_hands(bool on) {
+    Appearance next = appearance;
+    next.clock_hands = on;
+    apply_appearance(next);
+}
 // The names and icons of the sources. A change that cannot be stored leaves the old one and says so on the page.
 namespace {
 void store_sources(const SourceNames &next, bool valid) {

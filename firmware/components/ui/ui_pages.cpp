@@ -34,6 +34,8 @@ struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring
 int notice_y = 226;   // where the line under the ring of the home page is in the body
 struct Widgets {
     lv_obj_t *clock{}, *seconds{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{}, *minute_dot{}, *error{};
+    lv_obj_t *digits_group{}, *hands_group{}, *small_clock{}, *small_seconds{};   // the clock page: large digits, or hands with small digits
+    std::array<lv_obj_t *, 3> hand{};                                              // hour, minute, second
     std::array<lv_obj_t *, 4> clock_dot{};
     lv_obj_t *soc_gauge{}, *soc_value{}, *soc_title{}, *soc_charge{}, *soc_note{}, *strip{};
     lv_obj_t *protect_head{}, *protect_note{}, *protect_button{}, *protect_label{}, *protect_error{};
@@ -208,6 +210,10 @@ void build_home(lv_obj_t *body, const Frame &f) {
     lv_obj_set_pos(hit, (kContentW - 176) / 2, y + d / 2 - 68);   // 68: the clock and the date are centred in the ring
     w.clock = label_at(hit, "--:--", 0, 22, 176, &lv_font_montserrat_48, P().ink);
     centered(w.clock);
+    // the seconds after the time, in the accent, on the same baseline (docs/design v2 OverviewSeconds); only when chosen
+    w.seconds = label_at(hit, "", 0, 22 + lv_font_get_line_height(&lv_font_montserrat_48) - lv_font_get_line_height(&lv_font_montserrat_24) - 3, 40,
+                         &lv_font_montserrat_24, P().accent);
+    lv_obj_add_flag(w.seconds, LV_OBJ_FLAG_HIDDEN);
     w.date = label_at(hit, "", 0, 22 + 54 + 6, 176, look.caption, P().muted);
     centered(w.date);
     single_line(w.date, lh(look.caption));
@@ -236,9 +242,26 @@ std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
     ring_line = true;   // nothing else to say: name the first dark segment, or say where to tap (docs/design Dev-RingInfo)
     return ring_note(look.lang, make_ring_info(look.lang, f.s, f.power, f.now_ms));
 }
+// The time and, when chosen, its seconds after it. The pair stays centred as one line: the centred label of the time gets
+// narrower on its right by what the seconds take, so it never leaves its place. `clock` is `width` wide without seconds.
+void place_seconds(lv_obj_t *clock, lv_obj_t *secs, const ClockView &c, bool shown, const lv_font_t *big, const lv_font_t *small, int width) {
+    set_text(clock, c.hhmm);
+    set_hidden(secs, !shown);
+    int narrow = width;
+    if (shown) {
+        set_text(secs, c.seconds);
+        lv_point_t t{}, s{};
+        lv_text_get_size(&t, c.hhmm.c_str(), big, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_text_get_size(&s, c.seconds.c_str(), small, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        narrow = width - (4 + s.x);
+        const int sx = lv_obj_get_x(clock) + (narrow + t.x) / 2 + 4;
+        if (lv_obj_get_x(secs) != sx) lv_obj_set_x(secs, sx);
+    }
+    if (lv_obj_get_width(clock) != narrow) lv_obj_set_width(clock, narrow);
+}
 void refresh_home(const Frame &f) {
     const ClockView c = make_clock(look.lang, f.s.time_valid, f.wall);
-    set_text(w.clock, c.hhmm);
+    place_seconds(w.clock, w.seconds, c, f.c.layout.show_seconds && c.valid, &lv_font_montserrat_48, &lv_font_montserrat_24, 176);
     set_text(w.date, c.date);
     Tone tone;
     bool ring_line = false;
@@ -268,10 +291,41 @@ void refresh_home(const Frame &f) {
 
 // ---- Clock (docs/design v2 HomeClock) ----
 constexpr int kDial = 300;   // the tick ring
+// The hands (docs/design v2 ClockHands): length ahead of the centre, length behind it, width. The second hand only with seconds.
+struct HandShape { int ahead, behind, width; };
+constexpr HandShape kHands[3] = {{67, 0, 8}, {106, 0, 5}, {116, 22, 2}};
+std::array<std::array<lv_point_precise_t, 2>, 3> g_hand_points{};
+std::array<int, 3> g_hand_deg{-1, -1, -1};   // what is drawn, for the tests
 void build_clock(lv_obj_t *body) {
     const int x = (kContentW - kDial) / 2, y = (kBodyH - kDial) / 2, cx = kContentW / 2, cy = y + kDial / 2;
     auto *ticks = tick_ring(body, kDial, P().edge, P().muted);
     lv_obj_set_pos(ticks, x, y);
+    g_hand_deg = {-1, -1, -1};
+    // The hands, with the digits small under the centre. Shown only when chosen and while the time is known.
+    w.hands_group = holder(body, kContentW, kBodyH);
+    for (size_t i = 0; i < 3; ++i) {
+        auto *h = lv_line_create(w.hands_group);
+        g_hand_points[i] = {lv_point_precise_t{cx, cy}, lv_point_precise_t{cx, cy}};
+        lv_line_set_points(h, g_hand_points[i].data(), 2);
+        lv_obj_set_style_line_width(h, kHands[i].width, 0);
+        lv_obj_set_style_line_color(h, hex(i == 2 ? P().accent : P().ink), 0);
+        lv_obj_set_style_line_rounded(h, true, 0);
+        w.hand[i] = h;
+    }
+    auto *hub = holder(w.hands_group, 14, 14);
+    lv_obj_set_pos(hub, cx - 7, cy - 7);
+    lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(hub, hex(P().accent), 0);
+    lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, 0);
+    w.small_clock = label_at(w.hands_group, "--:--", 0, cy + 62, kContentW, &lv_font_montserrat_24, P().ink);
+    centered(w.small_clock);
+    w.small_seconds = label_at(w.hands_group, "", 0, cy + 62 + lv_font_get_line_height(&lv_font_montserrat_24) - lv_font_get_line_height(&btr_ui_16) - 1, 30,
+                               &btr_ui_16, P().accent);
+    lv_obj_add_flag(w.small_seconds, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(w.hands_group, LV_OBJ_FLAG_HIDDEN);
+    // The large digits with the date, the four dots and where the time comes from (docs/design v2 HomeClock).
+    w.digits_group = holder(body, kContentW, kBodyH);
+    body = w.digits_group;
     w.minute_dot = holder(body, 10, 10);   // where the minute hand would be, in the accent
     lv_obj_set_style_radius(w.minute_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(w.minute_dot, hex(P().accent), 0);
@@ -309,16 +363,28 @@ void build_clock(lv_obj_t *body) {
 }
 void refresh_clock(const Frame &f) {
     ClockView c = make_clock(look.lang, f.s.time_valid, f.wall);
-    set_text(w.clock, c.hhmm);
-    const bool secs = f.c.layout.show_seconds && c.valid;
-    set_hidden(w.seconds, !secs);
-    if (secs) {
-        set_text(w.seconds, c.seconds);
-        lv_point_t size{};
-        lv_text_get_size(&size, c.hhmm.c_str(), &font_clock_72, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        const int sx = (kContentW + size.x) / 2 + 4;
-        if (lv_obj_get_x(w.seconds) != sx) lv_obj_set_x(w.seconds, sx);
+    const bool secs = f.c.layout.show_seconds && c.valid, hands = look.appearance.clock_hands && c.valid;
+    set_hidden(w.hands_group, !hands);
+    set_hidden(w.digits_group, hands);
+    if (hands) {
+        place_seconds(w.small_clock, w.small_seconds, c, secs, &lv_font_montserrat_24, &btr_ui_16, kContentW);
+        struct tm t{};
+        localtime_r(&f.wall, &t);
+        const int deg[3] = {(t.tm_hour % 12) * 30 + t.tm_min / 2, t.tm_min * 6 + t.tm_sec / 10, secs ? t.tm_sec * 6 : -1};
+        const int cx = kContentW / 2, cy = kBodyH / 2;
+        for (size_t i = 0; i < 3; ++i) {
+            set_hidden(w.hand[i], deg[i] < 0);
+            if (deg[i] < 0 || deg[i] == g_hand_deg[i]) { g_hand_deg[i] = deg[i]; continue; }
+            const float a = static_cast<float>(deg[i]) * 3.14159265f / 180.0f, dx = std::sin(a), dy = -std::cos(a);
+            g_hand_points[i][0] = {static_cast<lv_value_precise_t>(cx - std::lround(dx * kHands[i].behind)), static_cast<lv_value_precise_t>(cy - std::lround(dy * kHands[i].behind))};
+            g_hand_points[i][1] = {static_cast<lv_value_precise_t>(cx + std::lround(dx * kHands[i].ahead)), static_cast<lv_value_precise_t>(cy + std::lround(dy * kHands[i].ahead))};
+            lv_line_set_points(w.hand[i], g_hand_points[i].data(), 2);
+            g_hand_deg[i] = deg[i];
+        }
+    } else {
+        g_hand_deg = {-1, -1, -1};
     }
+    place_seconds(w.clock, w.seconds, c, secs && !hands, &font_clock_72, &lv_font_montserrat_24, kContentW);
     set_text(w.date, c.date);
     if (c.valid) {
         struct tm t{};
@@ -818,6 +884,13 @@ void build_appearance(lv_obj_t *body, const Frame &f) {
     section(body, T(Str::KeyRingThickness));
     segmented(body, {T(Str::RingThin), T(Str::SizeStandard), T(Str::RingThick)}, static_cast<int>(a.ring), on_ring,
               {static_cast<int>(RingTier::Thin), static_cast<int>(RingTier::Standard), static_cast<int>(RingTier::Thick)}, {look.body, look.body, look.body});
+    // docs/design v2 AppearanceTime: the seconds are a setting of the device (config), the hands a part of the look
+    section(body, T(Str::KeyShowSeconds));
+    segmented(body, {T(Str::PercentShow), T(Str::PercentHide)}, f.c.layout.show_seconds ? 0 : 1, [](lv_event_t *e) { request_show_seconds(data_of(e) == 0); }, {0, 1},
+              {look.body, look.body});
+    section(body, T(Str::KeyClockHands));
+    segmented(body, {T(Str::PercentShow), T(Str::PercentHide)}, a.clock_hands ? 0 : 1, [](lv_event_t *e) { request_clock_hands(data_of(e) == 0); }, {0, 1},
+              {look.body, look.body});
     w.error = caption(body, "", P().power);
     set_optional_text(w.error, f.last_error);
 }
@@ -1571,6 +1644,22 @@ bool notice_dot_shown() { return visible(w.notice_dot); }
 bool header_usb_shown() { return visible(sh.usb); }
 bool header_slashed(int which) { return visible(which == 0 ? sh.wifi_cut[1] : which == 1 ? sh.pc_cut[1] : which == 2 ? sh.bat_cut[1] : nullptr); }
 int header_icon_opa(int which) { return which == 0 && sh.wifi ? lv_obj_get_style_text_opa(sh.wifi, LV_PART_MAIN) : 255; }
+int clock_hand_deg(int which) {
+    if (current_page() != Page::Clock || which < 0 || which > 2 || !w.hands_group || lv_obj_has_flag(w.hands_group, LV_OBJ_FLAG_HIDDEN)) return -1;
+    return lv_obj_has_flag(w.hand[static_cast<size_t>(which)], LV_OBJ_FLAG_HIDDEN) ? -1 : g_hand_deg[static_cast<size_t>(which)];
+}
+std::string clock_seconds_text() {
+    if (current_page() != Page::Clock || !w.digits_group) return "";
+    const bool hands = !lv_obj_has_flag(w.hands_group, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *s = hands ? w.small_seconds : w.seconds;
+    return lv_obj_has_flag(s, LV_OBJ_FLAG_HIDDEN) ? std::string() : std::string(lv_label_get_text(s));
+}
+bool clock_big_digits() { return current_page() == Page::Clock && w.digits_group && !lv_obj_has_flag(w.digits_group, LV_OBJ_FLAG_HIDDEN); }
+bool home_seconds_shown() { return current_page() == Page::Home && w.seconds && !lv_obj_has_flag(w.seconds, LV_OBJ_FLAG_HIDDEN); }
+std::string home_seconds_text() {
+    if (current_page() != Page::Home || !w.seconds || lv_obj_has_flag(w.seconds, LV_OBJ_FLAG_HIDDEN)) return "";
+    return lv_label_get_text(w.seconds);
+}
 int home_ring_width() { return ring.track ? lv_obj_get_style_arc_width(ring.track, LV_PART_INDICATOR) : 0; }
 int power_gauge_width() { return w.soc_gauge ? lv_obj_get_style_arc_width(w.soc_gauge, LV_PART_MAIN) : 0; }
 bool ring_lit(int index) {

@@ -46,10 +46,12 @@ struct Appearance {
     RingTier ring = RingTier::Standard;
     PageOrder pages = default_pages();
     SwitchStyle style = SwitchStyle::List;
+    bool clock_hands = true;   // the clock page draws hands on its dial, with small digits under them
 };
-std::string serialize(const Appearance &);            // "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list"
+std::string serialize(const Appearance &);            // "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands"
 // What 0.3.x stored (4 or 6 fields) is still understood: the theme becomes night and keeps its own colour as the accent,
-// unless an accent was chosen. Anything else that is malformed is the default appearance.
+// unless an accent was chosen. 0.3.17 stored 8 fields (no hands field: the hands are on). Anything else that is malformed
+// is the default appearance.
 Appearance parse_appearance(const std::string &);
 
 // ---- input sources: the App's switch actions, with a name and an icon the person may set on the device ----
