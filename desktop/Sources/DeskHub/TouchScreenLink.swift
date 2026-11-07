@@ -223,6 +223,13 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         if remembered == p.identifier { connect(p) }   // reconnect by itself
         else if state != .searching { state = .notPaired }
     }
+    // The touch screen said its table changed (every secure connection since 0.3.23): look again, so a characteristic a
+    // newer firmware added (the update one) is found. The cached table hid it before (2026-11-07).
+    func peripheral(_ p: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+        controlChar = nil
+        updateChar = nil
+        p.discoverServices([Self.service])
+    }
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         guard let s = p.services?.first(where: { $0.uuid == Self.service }) else { problem = "这个设备没有 DeskHub 的服务"; return }
         p.discoverCharacteristics([Self.info, Self.control, Self.events, Self.update], for: s)

@@ -377,6 +377,9 @@ int gap_event(ble_gap_event *e, void *) {
         if (e->enc_change.status == 0 && ble_gap_conn_find(e->enc_change.conn_handle, &d) == 0) {
             secure = d.sec_state.encrypted && d.sec_state.authenticated && d.sec_state.bonded;
             if (secure && window.is_open(now_ms())) window.close();   // the computer is paired: the window has done its job
+            // A bonded Mac keeps the table of characteristics it found once; a new firmware may have more (0.3.22 added the
+            // update characteristic, and the Mac did not see it: 2026-11-07). "Service changed" makes it look again.
+            if (secure) ble_svc_gatt_changed(0x0001, 0xFFFF);
         } else secure = false;
         return 0;
     }
