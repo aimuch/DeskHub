@@ -175,3 +175,9 @@ cd firmware && idf.py -B build-0.3.4 build
 
 `.state/` 存放签名私钥、管理员凭据、CA 与 TLS 私钥、Agent 数据库和原厂 Flash 备份。它被 `.gitignore` 排除，**不要提交，也不要复制进任何分支**。
 `dist/`、固件构建目录、`firmware/managed_components/` 同样被忽略。
+
+## README 的截图
+
+- **触摸屏**：`firmware/tests/ui_preview` 的界面测试程序加一个输出目录参数，就把各个画面存成 PPM（`<build>/deskhub_ui_preview <目录>`，见 `case_screenshots`）。README 用的是其中挑出的十几张，转成 PNG 并按屏幕圆角裁好，放在 `docs/images/device/`。它们是真实界面代码的渲染，不是照片。
+- **桌面 App**：`open -W -a desktop/build/DeskHub.app --args --screenshots docs/images/app --package <固件包>`。App 用真实数据把菜单和各个设置页渲染成 PNG，然后退出（`desktop/Sources/DeskHub/Screenshots.swift`）。它只读不写；不读 USB 状态（打开串口可能让触摸屏重启）。公开前把“显示器”页的 UUID、序列号和 IO 位置涂掉。
+- **图**：README 里的架构图、流程图、时序图和状态图是 Mermaid，GitHub 直接渲染。改完先在浏览器里用 mermaid 11 渲染一遍，确认没有语法错误。
