@@ -31,9 +31,8 @@ struct Shell {
     int nav_count = 0;
 } sh;
 struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring;
-int notice_y = 226;   // where the line under the ring of the home page is in the body
 struct Widgets {
-    lv_obj_t *clock{}, *seconds{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{}, *minute_dot{}, *error{};
+    lv_obj_t *clock{}, *seconds{}, *date{}, *notice{}, *meta{}, *clock_hit{}, *minute_dot{}, *error{};
     lv_obj_t *digits_group{}, *hands_group{}, *small_clock{}, *small_seconds{};   // the clock page: large digits, or hands with small digits
     std::array<lv_obj_t *, 3> hand{};                                              // hour, minute, second
     std::array<lv_obj_t *, 4> clock_dot{};
@@ -171,14 +170,13 @@ lv_obj_t *setting_row(lv_obj_t *parent, const std::string &name, const std::stri
 }
 
 // ---- Home ----
+constexpr int kHomeTextW = 236;   // the time with its seconds after it is about 215 px
 void build_home(lv_obj_t *body, const Frame &f) {
-    // With no actions nothing is drawn under the ring (docs/design Dev-HomeEmpty): the ring is larger, and the ring with the line
-    // under it sits in the middle of the body, so that no blank band is left.
-    // The overview has the ring only (docs/design v2 HomeRing): the input sources have a page of their own. The ring and the line
-    // under it sit in the middle of the body (as Dev-HomeEmpty did), so that no blank band is left.
+    // The overview is the ring only (docs/design v2 OverviewLarge): as large as the body allows, in its middle, nothing under it
+    // (user 2026-11-07). A message (an error, an update, the result of a switch) takes the place of the date inside the ring.
     (void)f;
-    const int d = 252, x = (kContentW - d) / 2, g = 4, width = (ring_px(look.appearance.ring).home * d + 108) / 216;
-    const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;   // top of the ring in the body; 10: the gap to the line
+    const int d = 316, x = (kContentW - d) / 2, g = 4, width = (ring_px(look.appearance.ring).home * d + 108) / 216;
+    const int y = (kBodyH - d) / 2;   // top of the ring in the body
     auto *track = arc_segment(body, d, 0, 360, P().track, width, LV_OPA_COVER);
     ring.track = track;
     lv_obj_set_pos(track, x, y);
@@ -205,29 +203,28 @@ void build_home(lv_obj_t *body, const Frame &f) {
     flat(ring_hit);
     lv_obj_set_style_radius(ring_hit, LV_RADIUS_CIRCLE, 0);
     lv_obj_add_flag(ring_hit, LV_OBJ_FLAG_ADV_HITTEST);
-    auto *hit = holder(body, 176, 124);   // the place of the clock and the date; it takes no touch of its own
+    // The place of the time and the date, centred in the ring; it takes no touch of its own. Its corners stay in the hole of the
+    // ring for the standard and the thin ring.
+    const int time_h = lv_font_get_line_height(&font_clock_72), block_h = time_h + 4 + lh(look.body);
+    auto *hit = holder(body, kHomeTextW, block_h);
     w.clock_hit = hit;
-    lv_obj_set_pos(hit, (kContentW - 176) / 2, y + d / 2 - 68);   // 68: the clock and the date are centred in the ring
-    w.clock = label_at(hit, "--:--", 0, 22, 176, &lv_font_montserrat_48, P().ink);
+    lv_obj_set_pos(hit, (kContentW - kHomeTextW) / 2, y + d / 2 - block_h / 2);
+    w.clock = label_at(hit, "--:--", 0, 0, kHomeTextW, &font_clock_72, P().ink);
     centered(w.clock);
-    // the seconds after the time, in the accent, on the same baseline (docs/design v2 OverviewSeconds); only when chosen
-    w.seconds = label_at(hit, "", 0, 22 + lv_font_get_line_height(&lv_font_montserrat_48) - lv_font_get_line_height(&lv_font_montserrat_24) - 3, 40,
-                         &lv_font_montserrat_24, P().accent);
+    // the seconds after the time, in the accent, near its baseline (docs/design v2 OverviewSeconds); only when chosen
+    w.seconds = label_at(hit, "", 0, time_h - lv_font_get_line_height(&lv_font_montserrat_24) - 6, 40, &lv_font_montserrat_24, P().accent);
     lv_obj_add_flag(w.seconds, LV_OBJ_FLAG_HIDDEN);
-    w.date = label_at(hit, "", 0, 22 + 54 + 6, 176, look.caption, P().muted);
+    w.date = label_at(hit, "", 0, time_h + 4, kHomeTextW, look.body, P().muted);
     centered(w.date);
-    single_line(w.date, lh(look.caption));
-    notice_y = y + d + 10;
-    w.notice = label_at(body, "", 0, notice_y, kContentW, look.caption, P().muted);
+    single_line(w.date, lh(look.body));
+    // a message, in the place of the date (docs/design v2 OverviewLargeNote)
+    w.notice = label_at(hit, "", 0, time_h + 4 + (lh(look.body) - lh(look.caption)) / 2, kHomeTextW, look.caption, P().muted);
     centered(w.notice);
     single_line(w.notice, lh(look.caption));
-    w.notice_dot = holder(body, 10, 10);   // in the colour of the dark segment that the line names
-    lv_obj_set_style_radius(w.notice_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_opa(w.notice_dot, LV_OPA_COVER, 0);
-    lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(w.notice, LV_OBJ_FLAG_HIDDEN);
 }
-std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
-    ring_line = false;
+// What the overview and the switch page have to say: an error, an update, the result of a switch; "" when nothing.
+std::string notice_for(const Frame &f, Tone &tone) {
     tone = Tone::Warn;
     if (!f.s.error.empty()) return dynamic_text(look.lang, f.s.error);
     const std::string &u = f.s.update_state;
@@ -237,10 +234,7 @@ std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
         return buf;
     }
     tone = Tone::Off;
-    const std::string n = notice_text(look.lang, f.s.command, f.now_ms, f.command_changed_ms);
-    if (!n.empty()) return n;
-    ring_line = true;   // nothing else to say: name the first dark segment, or say where to tap (docs/design Dev-RingInfo)
-    return ring_note(look.lang, make_ring_info(look.lang, f.s, f.power, f.now_ms));
+    return notice_text(look.lang, f.s.command, f.now_ms, f.command_changed_ms);
 }
 // The time and, when chosen, its seconds after it. The pair stays centred as one line: the centred label of the time gets
 // narrower on its right by what the seconds take, so it never leaves its place. `clock` is `width` wide without seconds.
@@ -261,24 +255,15 @@ void place_seconds(lv_obj_t *clock, lv_obj_t *secs, const ClockView &c, bool sho
 }
 void refresh_home(const Frame &f) {
     const ClockView c = make_clock(look.lang, f.s.time_valid, f.wall);
-    place_seconds(w.clock, w.seconds, c, f.c.layout.show_seconds && c.valid, &lv_font_montserrat_48, &lv_font_montserrat_24, 176);
-    set_text(w.date, c.date);
+    place_seconds(w.clock, w.seconds, c, f.c.layout.show_seconds && c.valid, &font_clock_72, &lv_font_montserrat_24, kHomeTextW);
     Tone tone;
-    bool ring_line = false;
-    const std::string n = notice_for(f, tone, ring_line);
-    set_optional_text(w.notice, n);
-    set_ink(w.notice, tone_color(tone));
-    const RingInfoView info = make_ring_info(look.lang, f.s, f.power, f.now_ms);
-    if (w.notice_dot) {
-        const bool dot = ring_line && info.first_problem >= 0 && !n.empty();
-        if (dot) {   // a dot before the words, in the colour of the segment: it is the dark one on the ring
-            const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
-            lv_point_t size{};
-            lv_text_get_size(&size, n.c_str(), look.caption, 0, 0, kContentW, LV_TEXT_FLAG_NONE);
-            lv_obj_set_pos(w.notice_dot, std::max<int>(0, static_cast<int>((kContentW - size.x) / 2 - 18)), notice_y + (lh(look.caption) - 10) / 2);
-            lv_obj_set_style_bg_color(w.notice_dot, hex(colors[info.first_problem]), 0);
-        }
-        if (lv_obj_has_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN) == dot) { if (dot) lv_obj_remove_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN); }
+    const std::string n = notice_for(f, tone);
+    set_hidden(w.date, !n.empty());
+    set_hidden(w.notice, n.empty());
+    set_text(w.date, c.date);
+    if (!n.empty()) {
+        set_text(w.notice, n);
+        set_ink(w.notice, tone_color(tone));
     }
     const RingView r = make_ring(f.s, f.power, f.now_ms);
     const bool lit[4] = {r.wifi, r.agent, r.power, r.time};
@@ -453,9 +438,16 @@ void build_actions(lv_obj_t *body, const Frame &f) {
     } else {
         // Up to three sources side by side, more in two columns that scroll.
         const int cols = n <= 3 ? static_cast<int>(n) : 2, gap = 10, tw = (kContentW - (cols - 1) * gap) / cols;
-        const int th = n <= 3 ? 196 : 140, isz = n <= 3 ? 72 : 52;
+        const int isz = n <= 3 ? 72 : 52;
         const int rows = static_cast<int>((n + static_cast<size_t>(cols) - 1) / static_cast<size_t>(cols));
-        auto *grid = holder(body, kContentW, rows * th + (rows - 1) * gap);
+        int th = 140;
+        auto *grid = holder(body, kContentW, th);
+        if (n <= 3) {   // one row: the tiles reach down to the line for the result, no blank band under them (user 2026-11-07)
+            lv_obj_update_layout(body);
+            const int below = lv_obj_get_style_pad_row(body, LV_PART_MAIN) + lh(look.caption) + lv_obj_get_style_pad_bottom(body, LV_PART_MAIN);
+            th = std::max(196, kBodyH - static_cast<int>(lv_obj_get_y(grid)) - below);
+        }
+        lv_obj_set_height(grid, rows * th + (rows - 1) * gap);
         for (size_t i = 0; i < n; ++i) {
             const SourceView &v = sources[i];
             auto *b = button(grid, on_action, data(static_cast<int>(i)), tw, th);
@@ -489,9 +481,7 @@ void build_actions(lv_obj_t *body, const Frame &f) {
 void refresh_actions(const Frame &f) {
     if (!w.notice) return;
     Tone tone;
-    bool ring_line = false;
-    std::string n = notice_for(f, tone, ring_line);
-    if (ring_line) n.clear();   // the ring is not on this page: only a command result or an error is said here
+    std::string n = notice_for(f, tone);
     set_optional_text(w.notice, n);
     set_ink(w.notice, tone_color(tone));
 }
@@ -1639,9 +1629,9 @@ std::string time_draft_text() {
     snprintf(text, sizeof(text), "%04d-%02d-%02d %02d:%02d", g_time_draft.year, g_time_draft.month, g_time_draft.day, g_time_draft.hour, g_time_draft.minute);
     return text;
 }
-bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2) { return area_of(w.notice_dot, x1, y1, x2, y2); }
+bool home_time_area(int *x1, int *y1, int *x2, int *y2) { return current_page() == Page::Home && area_of(w.clock, x1, y1, x2, y2); }
+bool home_date_area(int *x1, int *y1, int *x2, int *y2) { return current_page() == Page::Home && area_of(w.date, x1, y1, x2, y2); }
 bool ring_info_dot_filled(int i) { return ring_info_open() && i >= 0 && i < 4 && g_ring_dots[i] && lv_obj_get_style_bg_opa(g_ring_dots[i], LV_PART_MAIN) == LV_OPA_COVER; }
-bool notice_dot_shown() { return visible(w.notice_dot); }
 bool header_usb_shown() { return visible(sh.usb); }
 bool header_slashed(int which) { return visible(which == 0 ? sh.wifi_cut[1] : which == 1 ? sh.pc_cut[1] : which == 2 ? sh.bat_cut[1] : nullptr); }
 int header_icon_opa(int which) { return which == 0 && sh.wifi ? lv_obj_get_style_text_opa(sh.wifi, LV_PART_MAIN) : 255; }
@@ -1701,6 +1691,10 @@ bool clock_dot_lit(int i) {
 }
 int switch_current_index() { return current_page() == Page::Actions ? w.switch_current : -1; }
 int switch_row_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_rows.size()) : 0; }
+bool switch_tile_area(int i, int *x1, int *y1, int *x2, int *y2) {
+    if (current_page() != Page::Actions || i < 0 || static_cast<size_t>(i) >= w.switch_tiles.size()) return false;
+    return area_of(w.switch_tiles[static_cast<size_t>(i)], x1, y1, x2, y2);
+}
 int switch_tile_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_tiles.size()) : 0; }
 int switch_icon(int i) {
     if (current_page() != Page::Actions || i < 0 || static_cast<size_t>(i) >= w.switch_icons.size()) return -1;

@@ -115,7 +115,6 @@ lv_obj_t *build_protect_dialog(lv_obj_t *layer, void (*on_confirm)(int limit), v
 lv_obj_t *build_ring_info(lv_obj_t *layer, const RingInfoView &, void (*on_close)());
 bool ring_info_open();
 bool ring_info_dot_filled(int row);   // the dot of a row of the open sheet is filled (the segment is lit)
-bool notice_dot_shown();             // the dot before the line under the ring
 int body_scroll_y();     // -1 when there is no body (deleted with the screen, not built yet)
 void remember_scroll(int y);
 
@@ -189,7 +188,8 @@ int sound_selected();                // 0 off, 1 on: which half of the switch of
 int time_field_selected();           // the chosen number on the Date and time page; -1 when that page is not shown
 std::string time_draft_text();       // "2026-01-01 00:00": what the numbers on that page say
 int sound_volume_selected();         // the selected level of the volume on the sound page; -1 when that page is not shown
-bool home_notice_dot_area(int *x1, int *y1, int *x2, int *y2);   // the dot before the line (false when it is not shown)
+bool home_time_area(int *x1, int *y1, int *x2, int *y2);   // the overview: the time
+bool home_date_area(int *x1, int *y1, int *x2, int *y2);   // the overview: the date (false while a message takes its place)
 bool header_slashed(int which);     // 0 Wi-Fi, 1 computer, 2 battery: the slash is drawn
 bool header_battery_body(int *x1, int *y1, int *x2, int *y2);   // where the battery outline is on the screen
 int header_icon_opa(int which);     // 0 Wi-Fi: how strong the icon is drawn now, 255 steady, low in the dim half of a blink
@@ -206,6 +206,7 @@ bool pages_control_area(int slot, int which, int *x1, int *y1, int *x2, int *y2)
 bool icon_choice_area(int icon, int unused, int *x1, int *y1, int *x2, int *y2);   // the edit page: the button of a SourceIcon
 int switch_row_count();              // the switch page: rows in the list style, 0 otherwise
 int switch_tile_count();             // the switch page: tiles in the icon style, 0 otherwise
+bool switch_tile_area(int index, int *x1, int *y1, int *x2, int *y2);   // the switch page: where a tile is
 int switch_icon(int index);          // the SourceIcon the switch page draws for a source; -1 when there is none
 bool clock_dot_lit(int index);       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
 int clock_hand_deg(int which);       // the clock page: 0 hour, 1 minute, 2 second, in whole degrees clockwise from 12; -1 when not drawn

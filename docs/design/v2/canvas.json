@@ -144,6 +144,22 @@
       "h": 480,
       "title": "设置 · 外观里的两个开关",
       "radius": 72
+    },
+    "OverviewLarge.dc.html": {
+      "x": 0,
+      "y": 4140,
+      "w": 480,
+      "h": 480,
+      "title": "总览 · 大圆环，下面没有提示",
+      "radius": 72
+    },
+    "OverviewLargeNote.dc.html": {
+      "x": 560,
+      "y": 4140,
+      "w": 480,
+      "h": 480,
+      "title": "总览 · 有消息时代替日期",
+      "radius": 72
     }
   },
   "order": [
@@ -163,7 +179,9 @@
     "PairConfirm.dc.html",
     "OverviewSeconds.dc.html",
     "ClockHands.dc.html",
-    "AppearanceTime.dc.html"
+    "AppearanceTime.dc.html",
+    "OverviewLarge.dc.html",
+    "OverviewLargeNote.dc.html"
   ],
   "notes": {
     "rowHome": {
@@ -214,6 +232,13 @@
       "x": 0,
       "y": 3120,
       "text": "时间的显示方式（用户 2026-11-07：秒和表针都可选）",
+      "kind": "title1",
+      "maxW": 1600
+    },
+    "rowRingBig": {
+      "x": 0,
+      "y": 3940,
+      "text": "总览：圆环和时间、日期放大，去掉圆环下的提示（用户 2026-11-07）。错误、升级进度、切源结果显示在圆环里，代替日期",
       "kind": "title1",
       "maxW": 1600
     }

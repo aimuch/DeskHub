@@ -772,6 +772,19 @@ static void case_switch_styles() {
     EXPECT(click_text("MacBook M4"));
     EXPECT(submit_calls == 2 && dh::last_submit_id == "to-m4");
     check_layout("switch-icons"); check_targets("switch-icons");
+    {   // one row of tiles fills the page down to the line for the result: no large blank band under it (user 2026-11-07)
+        int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        EXPECT(detail::switch_tile_area(0, &x1, &y1, &x2, &y2));
+        const int body_end = detail::kBodyTop + detail::kBodyH, room = body_end - y2 - 1;
+        NOTE(room <= lv_font_get_line_height(detail::look.caption) + 1 + 16, "a band of " << room << " px is left under the tiles");
+        NOTE(room >= lv_font_get_line_height(detail::look.caption) + 1, "no room is left for the line of the result: " << room << " px");
+        int x1b = 0, y1b = 0, x2b = 0, y2b = 0;
+        EXPECT(detail::switch_tile_area(2, &x1b, &y1b, &x2b, &y2b) && y1b == y1 && y2b == y2);   // one row, all the same height
+        mock_snapshot.command = "已切到 MacBook M4，已确认"; step();
+        EXPECT(has("已切到 MacBook M4，已确认"));
+        check_layout("switch-icons-result");
+        mock_snapshot.command.clear(); step();
+    }
     // offline: nothing runs
     mock_snapshot.agent_ready = false; step(); step();
     click_text("Mac mini");
@@ -1685,7 +1698,7 @@ static void case_appearance_options() {   // A19
     EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
     // the rings follow the tier, on the Home page and on the power page; a restart reads the stored tier back
     struct Tier { const char *name; int home, gauge; };
-    for (const Tier &t : {Tier{"thin", 14, 7}, Tier{"standard", 23, 11}, Tier{"thick", 33, 15}}) {
+    for (const Tier &t : {Tier{"thin", 18, 7}, Tier{"standard", 29, 11}, Tier{"thick", 41, 15}}) {
         fresh(std::string("mint|-|zh-CN|standard|pct|") + t.name);
         goto_view(Page::Home);
         EXPECT(detail::home_ring_width() == t.home);
@@ -1694,7 +1707,7 @@ static void case_appearance_options() {   // A19
     }
     fresh("mint|-|zh-CN|standard");                 // what 0.3.x stored
     goto_view(Page::Home);
-    EXPECT(detail::home_ring_width() == 23 && detail::header_battery_text() == "67");
+    EXPECT(detail::home_ring_width() == 29 && detail::header_battery_text() == "67");
     fresh();                                        // saving fails: the old look stays and the page says so
     store_ok = false;
     goto_view(Page::Appearance);
@@ -1793,30 +1806,52 @@ static void case_bolt_in_battery() {   // A26
     mock_power.vbus = "absent"; mock_power.charging = "idle"; step();
     EXPECT(!detail::header_bolt_shown());
 }
-static void case_home_without_actions() {   // A27
+static void case_home_without_actions() {   // A27, A41 (docs/design v2 OverviewLarge, OverviewLargeNote)
     for (const size_t count : {size_t{2}, size_t{0}}) {
         fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
-        int rx1 = 0, ry1 = 0, rx2 = 0, ry2 = 0, nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
-        EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && detail::home_notice_area(&nx1, &ny1, &nx2, &ny2));
-        const int d = rx2 - rx1 + 1, body_end = detail::kBodyTop + detail::kBodyH;
-        NOTE(d == 252, "the ring is " << d << " px wide, not 252");
+        int rx1 = 0, ry1 = 0, rx2 = 0, ry2 = 0, tx1 = 0, ty1 = 0, tx2 = 0, ty2 = 0, dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+        EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2));
+        const int d = rx2 - rx1 + 1, body_end = detail::kBodyTop + detail::kBodyH, wd = detail::home_ring_width();
+        NOTE(d == 316, "the ring is " << d << " px wide, not 316");
         EXPECT(std::abs((rx1 + rx2) / 2 - 240) <= 1);
-        const int top = ry1 - detail::kBodyTop, bottom = body_end - ny2;
-        NOTE(ny1 >= ry2 + 4 && ny2 <= body_end, "the line is not under the ring and inside the body: ring ends " << ry2 << ", line [" << ny1 << "," << ny2 << "]");
-        NOTE(top >= 8 && bottom >= 8 && std::abs(top - bottom) <= 6, "a blank band is left: " << top << " px over the ring and " << bottom << " px under the line");
+        const int top = ry1 - detail::kBodyTop, bottom = body_end - ry2 - 1;
+        NOTE(top >= 4 && std::abs(top - bottom) <= 2, "the ring is not in the middle of the body: " << top << " px over it, " << bottom << " px under it");
+        EXPECT(wd == 29);                                                          // the thickness grows with the ring: 20 of 216 is 29 of 316
+        EXPECT(!has("点圆环看说明") && !has("全部正常"));                            // no line under the ring
         EXPECT(detail::home_first_action_label().empty());                        // no cards on the overview
-        EXPECT(detail::home_ring_width() == 23);                                  // the thickness grows with the ring: 20 of 216 is 23 of 252
+        // the time in the large digits, the date in the body size, both inside the ring
+        EXPECT(detail::home_time_area(&tx1, &ty1, &tx2, &ty2) && detail::home_date_area(&dx1, &dy1, &dx2, &dy2));
+        NOTE(ty2 - ty1 + 1 > lv_font_get_line_height(&lv_font_montserrat_48), "the time is " << (ty2 - ty1 + 1) << " px high: not larger than before");
+        NOTE(dy2 - dy1 + 1 == lv_font_get_line_height(detail::look.body) + 1, "the date is not in the body size");
+        EXPECT(has("10月28日 星期三"));
+        auto inside = [&](int x1, int y1, int x2, int y2) {   // the box is in the hole of the ring
+            const int cx = (rx1 + rx2) / 2, cy = (ry1 + ry2) / 2, r = d / 2 - wd;
+            for (int x : {x1, x2})
+                for (int y : {y1, y2})
+                    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r) return false;
+            return true;
+        };
+        NOTE(dy1 > ty2 && inside(tx1 + 10, ty1, tx2 - 10, ty2), "the time leaves the ring");
         check_layout("overview"); save_png_source(count ? "state-overview" : "state-overview-no-actions");
         const int cy = (ry1 + ry2) / 2;
         tap(240, cy - 10); step();                                                // the clock in the middle
         EXPECT(detail::current_page() == Page::Clock);
         fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
-        tap(240, cy + 50); step();                                                // the lower end of the place of the date
+        tap(240, (dy1 + dy2) / 2); step();                                        // the date
         EXPECT(detail::current_page() == Page::Clock);
+        // a dark segment is not named under the ring any more: the sheet says it
         fresh(); mock_snapshot.action_count = count; mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; goto_view(Page::Home); step();
-        int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
-        EXPECT(detail::home_notice_area(&nx1, &ny1, &nx2, &ny2) && detail::home_notice_dot_area(&dx1, &dy1, &dx2, &dy2));
-        NOTE(dy1 >= ny1 && dy2 <= ny2 + 1, "the dot [" << dy1 << "," << dy2 << "] is not on the line [" << ny1 << "," << ny2 << "]");
+        EXPECT(!has("电脑没连上") && has("10月28日 星期三"));
+        // a message takes the place of the date, inside the ring
+        mock_snapshot.command = "已接收，等待执行"; step();
+        int nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
+        EXPECT(has("已接收，等待执行") && !has("10月28日 星期三") && detail::home_notice_area(&nx1, &ny1, &nx2, &ny2));
+        NOTE(inside(nx1, ny1, nx2, ny2) && ny1 > ty2, "the message [" << nx1 << "," << ny1 << "," << nx2 << "," << ny2 << "] is not in the ring under the time");
+        check_layout("overview-note"); save_png_source(count ? "state-overview-note" : "state-overview-note-no-actions");
+        mock_snapshot.error = "USB 请求失败"; step();
+        EXPECT(contains("USB") && !has("10月28日 星期三"));                       // an error too
+        mock_snapshot.error.clear(); mock_snapshot.command.clear(); step();
+        EXPECT(has("10月28日 星期三"));                                            // nothing to say: the date again
         fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
         tap(rx1 + 10, cy); step();                                                // on the ring itself
         EXPECT(detail::ring_info_open());
@@ -1853,24 +1888,23 @@ static void case_no_setup_card() {   // A23
 }
 static void case_ring_info() {   // A24
     fresh(); goto_view(Page::Home); step();
-    EXPECT(has("点圆环看说明") && !detail::ring_info_open());
+    EXPECT(!has("点圆环看说明") && !detail::ring_info_open());                    // no hint under the ring (user 2026-11-07)
     tap(240, 210); EXPECT(detail::current_page() == Page::Clock);              // the clock in the middle is unchanged
     fresh(); goto_view(Page::Home); step();
-    EXPECT(!detail::notice_dot_shown());                                         // the hint has no dot
-    tap(142, 170); step();                                                       // on the ring, outside the clock
+    tap(100, 232); step();                                                       // on the ring, outside the clock
     EXPECT(detail::ring_info_open() && detail::ring_info_dot_filled(0) && detail::ring_info_dot_filled(1) && detail::ring_info_dot_filled(2) && detail::ring_info_dot_filled(3));
     EXPECT(has("状态环") && has("网络") && has("电脑") && has("电源") && has("时间") && has("关闭"));
     EXPECT(has("设备连上了 Wi-Fi") && has("设备能和电脑上的 Agent 通话") && has("读数是新的，没有故障") && has("时间已校准"));
     check_layout("ring-info"); save_png_source("state-ring-info");
     EXPECT(click_text("关闭")); step();
     EXPECT(!detail::ring_info_open() && !has("状态环"));
-    tap(142, 170); step(); EXPECT(detail::ring_info_open());
+    tap(100, 232); step(); EXPECT(detail::ring_info_open());
     tap(240, 90); step(); EXPECT(detail::ring_info_open());                      // a tap on the sheet itself does not close it
     tap(240, 470); step(); EXPECT(!detail::ring_info_open());                    // a tap outside the sheet closes it
-    // A dark segment is named under the ring and explained in the sheet.
+    // A dark segment is explained in the sheet (it is no longer named under the ring).
     fresh(); mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; goto_view(Page::Home); step();
-    EXPECT(has("电脑没连上") && !has("点圆环看说明") && detail::notice_dot_shown());   // the dot is the colour of the dark segment
-    tap(142, 170); step();
+    EXPECT(!has("电脑没连上") && !has("点圆环看说明"));
+    tap(100, 232); step();
     EXPECT(detail::ring_info_open() && has("没连上") && has("未配对") && has("已连接"));
     {   // the rows are in the order of the ring, each with its own state, and its dot is filled only when its segment is lit
         auto y = [](const std::string &t) {   // the highest label with this text: the navigation bar has a "电脑" of its own, lower down
@@ -1889,19 +1923,19 @@ static void case_ring_info() {   // A24
     }
     check_layout("ring-info-problem"); save_png_source("state-ring-info-problem");
     EXPECT(click_text("关闭")); step();
-    // Another note has priority over the line under the ring.
+    // A message is shown in the ring, in place of the date.
     mock_snapshot.command = "已接收，等待执行"; step();
-    EXPECT(has("已接收，等待执行") && !has("电脑没连上") && !detail::notice_dot_shown());   // another note has no dot
+    EXPECT(has("已接收，等待执行") && !has("电脑没连上"));
     // Wi-Fi down names the network, and the computer row says it needs Wi-Fi first.
     fresh(); mock_snapshot.wifi_ready = false; mock_snapshot.agent_ready = false; mock_snapshot.wifi = "未配置"; goto_view(Page::Home); step();
-    EXPECT(has("网络没连上"));
-    tap(142, 170); step();
+    EXPECT(!has("网络没连上"));
+    tap(100, 232); step();
     EXPECT(has("未配置网络") && has("要先连上 Wi-Fi"));
     EXPECT(click_text("关闭")); step();
     // English.
     fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Home); step();
-    EXPECT(has("Tap the ring for details"));
-    tap(142, 170); step();
+    EXPECT(!has("Tap the ring for details"));
+    tap(100, 232); step();
     EXPECT(has("Status ring") && has("Network") && has("Computer") && has("Close"));
     EXPECT(click_text("Close")); step();
     EXPECT(!detail::ring_info_open());
