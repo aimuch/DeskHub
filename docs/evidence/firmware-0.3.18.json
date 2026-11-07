@@ -1,0 +1,48 @@
+{
+  "version": "0.3.18",
+  "date": "2026-11-07",
+  "device": "deskhub-44bd8d60c598",
+  "build_dir": "firmware/build-0.3.18（ESP-IDF v6.0.2），测量版 firmware/build-0.3.18-heap（加 sdkconfig.probe_heap）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.17": [
+    "蓝牙连桌面 App（docs/desktop-app-design.md 13）：新组件 ble_link。LE Secure Connections 数字比较，所有特征要求加密并认证；只在“配对电脑”的 2 分钟窗口里、并在屏幕上点“一样，配对”后接受新电脑；最多 2 台；可在设备上删除，恢复出厂也删除（K1）",
+    "设备只接受 App 发来的输入源编号（设备这边的白名单，K2）；一次一个请求，12 秒没回音作废；结果文字照 App 的读回写（K3）",
+    "切换页显示 App 发来的输入源；App 读回的当前输入用绿色和“当前”标出（用户要求）；底部按钮“切换”改名“切源”",
+    "H2 的内存布局写进正式配置（基线文件 sdkconfig.defaults，K7）：Wi-Fi 和 lwIP 进 PSRAM、4 KB 以上进 PSRAM、LVGL 进 PSRAM（board_support/lvgl_psram.c）、按体积优化、main 栈 12 KB、NimBLE 只做外设",
+    "蓝牙最先启动（基线文件 main/app_main.cpp，K7）",
+    "修复：写闪存的任务栈不能在 PSRAM。新组件 flash_worker（内部内存栈）代写闪存；界面的每次保存、USB 的每个请求都经过它。USB 任务和电源任务的栈放 PSRAM；任务起不来时设备状态里写明"
+  ],
+  "problems_found_on_the_device": [
+    "测量版第一次上机：在设备上切到“图标”样式就重启。串口：assert failed: spi_flash_disable_interrupts_caches_and_other_cpu … esp_task_stack_is_sane_cache_disabled()。原因：界面任务的栈在 PSRAM（0.3.16 起），写闪存时缓存关闭。0.3.16、0.3.17 在设备上保存任何设置都会这样，只是那时没有在设备上改过设置（ble-e2e/crash-flash-from-psram-stack.log）",
+    "电池不显示、USB 状态没回应：蓝牙先启动后，最后创建的电源任务（6 KB 内部栈）没建起来，失败也没报。改成 PSRAM 栈后电量 100%、读数 ok",
+    "测量版的 USB 状态“超时”：每 5 秒的内存打印和 USB 回答挤在同一行，provision.py 解析不了；设备其实回答了。正式版没有这个打印"
+  ],
+  "end_to_end": {
+    "who": "用户在设备和 Mac 旁边操作；记录来自 App 的切换日志（ble-e2e/app-switch-log.jsonl）",
+    "pairing": "在设备上打开“配对电脑”，在 App 里点“配对…”，两边核对 6 位数字后配对成功",
+    "touch_switches": "从触摸屏发起 10 次切源（USB-C、HDMI、这台 Mac 来回），10 次都读回确认",
+    "user_confirmed": "点“图标”不再重启；电池有数字；当前源是绿色；点当前源不闪；点别的能切（2026-11-07 用户说“都正常”）",
+    "memory_measuring_build": "运行 11 分钟、App 连着：内部内存空闲 16.8 KB，最大块 6.6 KB，开机以来最低 9.7 KB（修复前 3.9 KB）"
+  },
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.18-esp32s3.zip",
+      "size_bytes": 2750053,
+      "sha256": "ffd317cb882afbc387539a046123a2f136acabff63619f1e67a34394a97b5f31",
+      "app_image_bytes": 4466752,
+      "app_image_sha256": "b38c4f6b75f61f5557b9bbc60811e58401e0a3adf419d9ada6dee1c0cf399083"
+    }
+  },
+  "checks_done": [
+    "主机测试 18 组（新增 bluetooth_link_protocol）全部通过；界面流程全部通过（新增 A35 到 A39：蓝牙输入源、配对、删除配对、闪存都经过工人、当前源）",
+    "变异检查：ble_protocol.py 24/24、flash_worker_ui.py 7/7",
+    "正式版刷入后读回：0.3.18、ui_alive true、Wi-Fi 已连接、电量 100%（firmware-0.3.18-status.json）"
+  ],
+  "flashed": true,
+  "not_tested": [
+    "长时间运行（几小时）",
+    "设备重启后用旧配对自动重连（App 侧做了；没有专门测）",
+    "删除配对后再配对、第二台 Mac",
+    "正式版上没有测量内存（测量版的内存数字见上）"
+  ]
+}
