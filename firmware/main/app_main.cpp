@@ -139,7 +139,8 @@ cJSON *handle(cJSON *request) {
         if(!dh::update_public_key_valid(pem))return result(false,"INVALID_ARGUMENT","更新公钥必须为 P-256 SPKI PEM");
         if(dh::save_update_key(pem)!=ESP_OK)return result(false,"CONFIG_COMMIT_FAILED","公钥未保存，原有公钥已保留");
         auto *o=result(true),*r=cJSON_AddObjectToObject(o,"result");cJSON_AddBoolToObject(r,"saved",true);
-        cJSON_AddStringToObject(r,"fingerprint",dh::update_key_fingerprint(pem).c_str());return o;
+        const auto fingerprint=dh::update_key_fingerprint(pem);dh::ble::set_update_key(fingerprint);
+        cJSON_AddStringToObject(r,"fingerprint",fingerprint.c_str());return o;
     }
     if(op=="sound_test") {
         // Plays the test tone once and says what the call did. A program cannot hear it: the person listens.
@@ -207,9 +208,9 @@ extern "C" void app_main() {
         h.verify=[](const std::string &envelope,void *){dh::ble::update::Checked c;dh::UpdateManifest m;
             if(dh::verify_update_envelope(envelope,m,c.why)){c.ok=true;c.version=m.version;c.sha256=m.hash;c.size=m.size;c.why.clear();}
             return c;};
-        h.key_fingerprint=[](){return dh::update_key_fingerprint(dh::secrets().update_public_key_pem);};
         h.active=[](bool on){dh::external_update(on);};
         dh::ble::set_update_hooks(h);
+        dh::ble::set_update_key(dh::update_key_fingerprint(dh::secrets().update_public_key_pem));   // here, not in the NimBLE task
     }
     probe_start();   // measurement only in test builds (components/probe); does nothing in a release build
 }
