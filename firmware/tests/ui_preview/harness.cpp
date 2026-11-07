@@ -1065,7 +1065,7 @@ static void case_ble_pairing() {   // A36
     dh::ble::mock.confirm_pending = true; dh::ble::mock.digits = 520617; dh::ble::mock.confirm_left_ms = 24000; step(); step();
     EXPECT(detail::ble_overlay_mode() == 2 && has("520 617") && has("一样，配对") && has("不一样") && contains("剩 24 秒"));
     EXPECT(dh::ble::answers.empty());                          // nothing without the tap
-    check_layout("ble-confirm"); check_targets("ble-confirm");
+    check_layout("ble-confirm"); check_targets("ble-confirm"); save_png_source("state-ble-confirm");
     EXPECT(click_text("一样，配对")); step(); step();
     EXPECT(dh::ble::answers == std::vector<bool>{true});
     // paired and connected: the window closes, the page goes, the Connect page says so
