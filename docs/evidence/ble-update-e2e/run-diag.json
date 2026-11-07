@@ -1,0 +1,22 @@
+{
+  "events" : [
+    {
+      "line" : "waiting for the touch screen",
+      "t" : 0
+    },
+    {
+      "line" : "waiting: link connected(\"DeskHub-c598\") | poweredOn remembered=05274B5E-AF58-5204-C4F8-69DBC49FECA6 retrieved=[\"05274B5E-AF58-5204-C4F8-69DBC49FECA6\"] connected=[]",
+      "t" : 10
+    },
+    {
+      "line" : "waiting: link connected(\"DeskHub-c598\") | poweredOn remembered=05274B5E-AF58-5204-C4F8-69DBC49FECA6 retrieved=[\"05274B5E-AF58-5204-C4F8-69DBC49FECA6\"] connected=[]",
+      "t" : 20
+    },
+    {
+      "line" : "blocked: 触摸屏上没有这台 Mac 的公钥：插上 USB，点“写入公钥（USB）”。 | info deskhub-44bd8d60c598 0.3.24 key [] | mine [db16904af6aeaf2edbf484bd93602c9b8e964ad65632ace616198b0134bb856d] | update characteristic true",
+      "t" : 23
+    }
+  ],
+  "package" : "deskhub-0.3.25-esp32s3.zip",
+  "tool" : "DeskHub --ble-update"
+}

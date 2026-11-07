@@ -1,0 +1,408 @@
+{
+  "esptool" : "5.6.0",
+  "events" : [
+    {
+      "event" : "checking",
+      "t" : 0
+    },
+    {
+      "bytes" : 4512960,
+      "event" : "package_ok",
+      "t" : 0,
+      "version" : "0.3.22"
+    },
+    {
+      "device_id" : "deskhub-44bd8d60c598",
+      "event" : "before",
+      "t" : 7.9000000000000004,
+      "version" : "0.3.21"
+    },
+    {
+      "event" : "probing",
+      "t" : 7.9000000000000004
+    },
+    {
+      "event" : "esptool",
+      "line" : "esptool v5.6.0",
+      "t" : 11.199999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Serial port /dev/cu.usbmodem20101:",
+      "t" : 11.199999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Connecting...",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Connected to ESP32-S3 on /dev/cu.usbmodem20101:",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Chip type:          ESP32-S3 (QFN56) (revision v0.2)",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded PSRAM 8MB (AP_3v3)",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Crystal frequency:  40MHz",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "USB mode:           USB-Serial/JTAG",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "MAC:                44:bd:8d:60:c5:98",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Enabling default SPI flash mode...",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash Memory Information:",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "=========================",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Manufacturer: 20",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Device: 4018",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Detected flash size: 16MB",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash type set in eFuse: quad (4 data lines)",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash voltage set by eFuse: 3.3V",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hard resetting via RTS pin...",
+      "t" : 11.5
+    },
+    {
+      "event" : "esptool",
+      "line" : "esptool v5.6.0",
+      "t" : 15
+    },
+    {
+      "event" : "esptool",
+      "line" : "Serial port /dev/cu.usbmodem20101:",
+      "t" : 15
+    },
+    {
+      "event" : "esptool",
+      "line" : "Connecting...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Connected to ESP32-S3 on /dev/cu.usbmodem20101:",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Chip type:          ESP32-S3 (QFN56) (revision v0.2)",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded PSRAM 8MB (AP_3v3)",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Crystal frequency:  40MHz",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "USB mode:           USB-Serial/JTAG",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "MAC:                44:bd:8d:60:c5:98",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Enabling default SPI flash mode...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Configuring flash size...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Writing '/var/folders/fr/snqcksnj2dgfs2svp0l3kk400000gn/T/deskhub-package-206D4174-74D8-40B9-9F43-49717FC0CB87/bootloader/bootloader.bin' at 0x00000000...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "SHA digest in image updated.",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash will be erased from 0x00000000 to 0x00005fff...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Erasing flash...",
+      "t" : 15.300000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Took 0.11s to erase flash block.",
+      "t" : 15.4
+    },
+    {
+      "event" : "esptool",
+      "line" : "Wrote 22608 bytes at 0x00000000 in 0.2 seconds (741.5 kbit/s).",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Verifying written data...",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hash of data verified.",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Writing '/var/folders/fr/snqcksnj2dgfs2svp0l3kk400000gn/T/deskhub-package-206D4174-74D8-40B9-9F43-49717FC0CB87/partition_table/partition-table.bin' at 0x00008000...",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash will be erased from 0x00008000 to 0x00008fff...",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Erasing flash...",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Took 0.02s to erase flash block.",
+      "t" : 15.699999999999999
+    },
+    {
+      "event" : "esptool",
+      "line" : "Wrote 3072 bytes at 0x00008000 in 0.0 seconds (791.7 kbit/s).",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Verifying written data...",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hash of data verified.",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Writing '/var/folders/fr/snqcksnj2dgfs2svp0l3kk400000gn/T/deskhub-package-206D4174-74D8-40B9-9F43-49717FC0CB87/ota_data_initial.bin' at 0x0000f000...",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash will be erased from 0x0000f000 to 0x00010fff...",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Erasing flash...",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Took 0.02s to erase flash block.",
+      "t" : 15.800000000000001
+    },
+    {
+      "event" : "esptool",
+      "line" : "Wrote 8192 bytes at 0x0000f000 in 0.1 seconds (796.6 kbit/s).",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Verifying written data...",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hash of data verified.",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Writing '/var/folders/fr/snqcksnj2dgfs2svp0l3kk400000gn/T/deskhub-package-206D4174-74D8-40B9-9F43-49717FC0CB87/deskhub.bin' at 0x00020000...",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Flash will be erased from 0x00020000 to 0x00465fff...",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Erasing flash...",
+      "t" : 15.9
+    },
+    {
+      "event" : "esptool",
+      "line" : "Took 6.71s to erase flash block.",
+      "t" : 22.600000000000001
+    },
+    {
+      "event" : "writing",
+      "percent" : 10,
+      "t" : 26.899999999999999
+    },
+    {
+      "event" : "writing",
+      "percent" : 20,
+      "t" : 31.5
+    },
+    {
+      "event" : "writing",
+      "percent" : 30,
+      "t" : 36.100000000000001
+    },
+    {
+      "event" : "writing",
+      "percent" : 40,
+      "t" : 41
+    },
+    {
+      "event" : "writing",
+      "percent" : 50,
+      "t" : 45.899999999999999
+    },
+    {
+      "event" : "writing",
+      "percent" : 60,
+      "t" : 50.5
+    },
+    {
+      "event" : "writing",
+      "percent" : 70,
+      "t" : 55.100000000000001
+    },
+    {
+      "event" : "writing",
+      "percent" : 80,
+      "t" : 59.399999999999999
+    },
+    {
+      "event" : "writing",
+      "percent" : 90,
+      "t" : 63.600000000000001
+    },
+    {
+      "event" : "writing",
+      "percent" : 100,
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "writing",
+      "percent" : 100,
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "writing",
+      "percent" : 100,
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "writing",
+      "percent" : 100,
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "esptool",
+      "line" : "Wrote 4479088 bytes at 0x00020000 in 45.2 seconds (792.3 kbit/s).",
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "esptool",
+      "line" : "Verifying written data...",
+      "t" : 67.799999999999997
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hash of data verified.",
+      "t" : 75.599999999999994
+    },
+    {
+      "event" : "esptool",
+      "line" : "Hard resetting via RTS pin...",
+      "t" : 75.599999999999994
+    },
+    {
+      "event" : "writing",
+      "percent" : 100,
+      "t" : 75.799999999999997
+    },
+    {
+      "event" : "restarting",
+      "t" : 75.799999999999997
+    },
+    {
+      "device_id" : "deskhub-44bd8d60c598",
+      "event" : "confirmed",
+      "t" : 99.900000000000006,
+      "version" : "0.3.22"
+    },
+    {
+      "event" : "done",
+      "ok" : true,
+      "t" : 99.900000000000006
+    }
+  ],
+  "package" : "deskhub-0.3.22-esp32s3.zip",
+  "port" : "/dev/cu.usbmodem20101",
+  "tool" : "deskhub-flash"
+}

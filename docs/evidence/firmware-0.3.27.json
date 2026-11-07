@@ -1,0 +1,40 @@
+{
+  "version": "0.3.27",
+  "date": "2026-11-07",
+  "device": "deskhub-44bd8d60c598",
+  "what": "蓝牙升级（docs/desktop-app-design.md 13.11）的真机端到端：0.3.26 经蓝牙升级到 0.3.27，用的是桌面 App 自己的代码（DeskHub --ble-update，测试入口只是代替人点按钮）",
+  "user_approved": "2026-11-07 用户说“都做”：USB 刷支持蓝牙升级的固件、USB 写公钥、退出用户的 DeskHub、蓝牙升级（含中途断开）；中途因为发现问题，USB 刷了带修复的 0.3.23 到 0.3.26",
+  "trust": {
+    "key": "这台 Mac 安全隔区里的 P-256 钥匙；指纹 db16904af6aeaf2edbf484bd93602c9b8e964ad65632ace616198b0134bb856d",
+    "written": "deskhub-flash --write-key（USB update_key 请求）；设备回的指纹和 Mac 的一样"
+  },
+  "problems_found_on_the_device": [
+    "0.3.22：已配对的 Mac 用缓存的旧服务表，看不到新加的升级特征。修复（0.3.23）：加密连接建好后发“服务已变更”，App 收到后重新发现服务",
+    "0.3.23：写公钥后开机不加载 Wi-Fi 配置（配置里记的期望公钥为空，和新公钥对不上），屏幕显示 Wi-Fi 未配置。修复（0.3.24）：期望公钥为空时照常加载；写公钥时连同配置重存。刷上后 Wi-Fi 自己连上",
+    "0.3.24：蓝牙信息里的公钥指纹是空的：指纹在 NimBLE 任务里算，4 KB 栈不够。修复（0.3.25）：开机和写公钥后在别的任务里算好，交给蓝牙模块缓存",
+    "0.3.25：设备回“内存不够”：写闪存的任务要 8 KB 内部内存栈，开机后要不到。修复（0.3.26）：任务用 PSRAM 栈，闪存操作和签名核对交给 flash_worker",
+    "App 重新打包后签名变了，macOS 重新问蓝牙权限，App 一直等在“未打开”；用户点“允许”后继续（ad-hoc 签名的 App 每次更新都可能这样）"
+  ],
+  "interrupted": {
+    "record": "ble-update-e2e/run-interrupted.json",
+    "how": "写到 1,030,192 字节时强行结束 App（kill -9）",
+    "after": "20 秒后 USB 读到：0.3.26、ui_alive true、Wi-Fi 已连接（设备放弃了这次升级，旧固件照常运行）；随后的完整升级能正常开始"
+  },
+  "full_update": {
+    "record": "ble-update-e2e/run-0.3.27.json",
+    "time": "约 240 秒（写入约 20 KB/s，4,479,328 字节）",
+    "read_back": "App 在设备重启、重连后读到蓝牙信息里的 0.3.27：confirmed",
+    "self_test": "75 秒后 USB 读到 0.3.27、ui_alive true、Wi-Fi 已连接、电量 100%：自检通过，没有回滚（firmware-0.3.27-status.json）"
+  },
+  "usb_flashes_on_the_way": "usb-flash-e2e/run-0.3.22.json 到 run-0.3.26.json（都用 deskhub-flash，每次读回确认）",
+  "checks_done": [
+    "主机测试 19 组（新增 bluetooth_firmware_update O1 到 O9）、界面流程全部通过；App core-check 全部通过（F15 到 F19）",
+    "变异检查 scripts/mutation/ble_update.py 28/28"
+  ],
+  "not_tested": [
+    "签名不对、版本不新、电源不稳等拒绝路径只在主机测试里测过，真机上没有一一试",
+    "新固件自检不过时的自动回滚（真机上没有故意做一个起不来的版本）",
+    "App 窗口里的“通过蓝牙升级”按钮本身（测试入口走的是同一个函数）",
+    "两台 Mac"
+  ]
+}

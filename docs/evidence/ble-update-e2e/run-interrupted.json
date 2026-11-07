@@ -1,0 +1,270 @@
+{
+  "events" : [
+    {
+      "line" : "waiting for the touch screen",
+      "t" : 0
+    },
+    {
+      "line" : "info before: deskhub-44bd8d60c598 0.3.26 key db16904af6ae",
+      "t" : 2
+    },
+    {
+      "line" : "start 0.3.27 4479936 bytes, frame 253",
+      "t" : 2
+    },
+    {
+      "line" : "event ready",
+      "t" : 2.6000000000000001
+    },
+    {
+      "line" : "event writing(16616)",
+      "t" : 3.5
+    },
+    {
+      "line" : "event writing(33232)",
+      "t" : 4.2999999999999998
+    },
+    {
+      "line" : "event writing(49848)",
+      "t" : 5.0999999999999996
+    },
+    {
+      "line" : "event writing(66464)",
+      "t" : 5.9000000000000004
+    },
+    {
+      "line" : "event writing(83080)",
+      "t" : 6.9000000000000004
+    },
+    {
+      "line" : "event writing(99696)",
+      "t" : 7.5999999999999996
+    },
+    {
+      "line" : "event writing(116312)",
+      "t" : 8.5
+    },
+    {
+      "line" : "event writing(132928)",
+      "t" : 9.3000000000000007
+    },
+    {
+      "line" : "event writing(149544)",
+      "t" : 10.300000000000001
+    },
+    {
+      "line" : "event writing(166160)",
+      "t" : 11.199999999999999
+    },
+    {
+      "line" : "event writing(182776)",
+      "t" : 12
+    },
+    {
+      "line" : "event writing(199392)",
+      "t" : 12.9
+    },
+    {
+      "line" : "event writing(216008)",
+      "t" : 13.699999999999999
+    },
+    {
+      "line" : "event writing(232624)",
+      "t" : 14.6
+    },
+    {
+      "line" : "event writing(249240)",
+      "t" : 15.5
+    },
+    {
+      "line" : "event writing(265856)",
+      "t" : 16.300000000000001
+    },
+    {
+      "line" : "event writing(282472)",
+      "t" : 17.100000000000001
+    },
+    {
+      "line" : "event writing(299088)",
+      "t" : 17.899999999999999
+    },
+    {
+      "line" : "event writing(315704)",
+      "t" : 18.899999999999999
+    },
+    {
+      "line" : "event writing(332320)",
+      "t" : 19.899999999999999
+    },
+    {
+      "line" : "event writing(348936)",
+      "t" : 20.800000000000001
+    },
+    {
+      "line" : "event writing(365552)",
+      "t" : 21.699999999999999
+    },
+    {
+      "line" : "event writing(382168)",
+      "t" : 22.5
+    },
+    {
+      "line" : "event writing(398784)",
+      "t" : 23.300000000000001
+    },
+    {
+      "line" : "event writing(415400)",
+      "t" : 24.199999999999999
+    },
+    {
+      "line" : "event writing(432016)",
+      "t" : 24.899999999999999
+    },
+    {
+      "line" : "event writing(448632)",
+      "t" : 25.699999999999999
+    },
+    {
+      "line" : "event writing(465248)",
+      "t" : 26.600000000000001
+    },
+    {
+      "line" : "event writing(481864)",
+      "t" : 27.300000000000001
+    },
+    {
+      "line" : "event writing(498480)",
+      "t" : 28.199999999999999
+    },
+    {
+      "line" : "event writing(515096)",
+      "t" : 29
+    },
+    {
+      "line" : "event writing(531712)",
+      "t" : 29.800000000000001
+    },
+    {
+      "line" : "event writing(548328)",
+      "t" : 30.800000000000001
+    },
+    {
+      "line" : "event writing(564944)",
+      "t" : 31.699999999999999
+    },
+    {
+      "line" : "event writing(581560)",
+      "t" : 32.5
+    },
+    {
+      "line" : "event writing(598176)",
+      "t" : 33.299999999999997
+    },
+    {
+      "line" : "event writing(614792)",
+      "t" : 34.200000000000003
+    },
+    {
+      "line" : "event writing(631408)",
+      "t" : 35.100000000000001
+    },
+    {
+      "line" : "event writing(648024)",
+      "t" : 36
+    },
+    {
+      "line" : "event writing(664640)",
+      "t" : 36.899999999999999
+    },
+    {
+      "line" : "event writing(681256)",
+      "t" : 37.700000000000003
+    },
+    {
+      "line" : "event writing(697872)",
+      "t" : 38.5
+    },
+    {
+      "line" : "event writing(714488)",
+      "t" : 39.299999999999997
+    },
+    {
+      "line" : "event writing(731104)",
+      "t" : 40.299999999999997
+    },
+    {
+      "line" : "event writing(747720)",
+      "t" : 41.200000000000003
+    },
+    {
+      "line" : "event writing(764336)",
+      "t" : 42.100000000000001
+    },
+    {
+      "line" : "event writing(780952)",
+      "t" : 42.899999999999999
+    },
+    {
+      "line" : "event writing(797568)",
+      "t" : 43.899999999999999
+    },
+    {
+      "line" : "event writing(814184)",
+      "t" : 44.600000000000001
+    },
+    {
+      "line" : "event writing(830800)",
+      "t" : 45.5
+    },
+    {
+      "line" : "event writing(847416)",
+      "t" : 46.299999999999997
+    },
+    {
+      "line" : "event writing(864032)",
+      "t" : 47.100000000000001
+    },
+    {
+      "line" : "event writing(880648)",
+      "t" : 48.200000000000003
+    },
+    {
+      "line" : "event writing(897264)",
+      "t" : 49
+    },
+    {
+      "line" : "event writing(913880)",
+      "t" : 50.200000000000003
+    },
+    {
+      "line" : "event writing(930496)",
+      "t" : 51.5
+    },
+    {
+      "line" : "event writing(947112)",
+      "t" : 52.200000000000003
+    },
+    {
+      "line" : "event writing(963728)",
+      "t" : 53.100000000000001
+    },
+    {
+      "line" : "event writing(980344)",
+      "t" : 54.100000000000001
+    },
+    {
+      "line" : "event writing(996960)",
+      "t" : 55.100000000000001
+    },
+    {
+      "line" : "event writing(1013576)",
+      "t" : 55.899999999999999
+    },
+    {
+      "line" : "event writing(1030192)",
+      "t" : 56.899999999999999
+    }
+  ],
+  "package" : "deskhub-0.3.27-esp32s3.zip",
+  "tool" : "DeskHub --ble-update"
+}
