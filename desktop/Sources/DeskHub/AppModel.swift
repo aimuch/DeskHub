@@ -19,7 +19,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var displays: [DisplayIdentity] = []
     @Published private(set) var ddcProblem: String?
     @Published private(set) var match: BindingMatch = .notBound
-    @Published private(set) var currentValue: UInt16?       // the input read back from the bound display; nil when not known
+    @Published private(set) var currentValue: UInt16? {     // the input read back from the bound display; nil when not known
+        didSet { link.sendCurrent(currentInputID(config, readBack: currentValue)) }   // the touch screen marks it (A39)
+    }
     @Published private(set) var busyID: String?              // the input being switched or tried
     @Published private(set) var trialStatus: [String: String] = [:]
     @Published private(set) var last: LastResult?
@@ -36,12 +38,23 @@ final class AppModel: ObservableObject {
         let (c, problem) = store.load()
         config = c
         configProblem = problem
+        link.sources = { [weak self] in self.map { LinkProtocol.sourceMessages(menuEntries($0.config)) } ?? [] }
+        link.onRequest = { [weak self] r in self?.remoteSwitch(r) }
+        link.current = { [weak self] in self.map { currentInputID($0.config, readBack: $0.currentValue) } ?? "" }
         refresh()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.now = Date() }
+        }
+        // While the touch screen is connected, the monitor's input is read every 10 s (about 0.1 s each), so a switch made
+        // with the monitor's own buttons shows up on the touch screen too.
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, case .connected = self.link.state else { return }
+                self.readCurrent()
+            }
         }
     }
 
@@ -91,18 +104,41 @@ final class AppModel: ObservableObject {
     }
 
     // ---- switching (K2: the white list, one at a time; K3: the result as the monitor confirms it) ----
-    func switchTo(_ id: String) {
-        guard busyID == nil, case .success(let input) = canSwitch(config, match: match, inputID: id), let d = boundDisplay, gate.begin() else { return }
+    func switchTo(_ id: String) { _ = startSwitch(id, from: "menu") { _ in } }
+
+    // The one switch path for the menu and the touch screen. Returns the refusal when nothing was sent.
+    @discardableResult
+    private func startSwitch(_ id: String, from: String, done: @escaping (SwitchResult) -> Void) -> SwitchResult? {
+        if busyID != nil || gate.isBusy { return LinkProtocol.busy }
+        let allowed = canSwitch(config, match: match, inputID: id)
+        if case .failure(let refusal) = allowed { return LinkProtocol.refused(refusal) }
+        guard case .success(let input) = allowed, let d = boundDisplay else { return LinkProtocol.refused(.displayMissing) }
+        guard gate.begin() else { return LinkProtocol.busy }
         busyID = id
         work.async {
             let r = performSwitch(d, to: input.value)
-            SwitchLog.write(["kind": "switch", "input": input.name, "value": Int(input.value)], r)
+            SwitchLog.write(["kind": from == "menu" ? "switch" : "touch", "input": input.name, "value": Int(input.value)], r)
             DispatchQueue.main.async {
                 self.last = LastResult(name: input.name, result: r, at: Date())
                 self.currentValue = r.readBack
                 self.busyID = nil
                 self.gate.end()
+                done(r)
             }
+        }
+        return nil
+    }
+
+    // ---- the touch screen (Bluetooth) ----
+    let link = TouchScreenLink()
+
+    // A request from the touch screen: the same white list and the same switch as the menu. Exactly one result goes back.
+    private func remoteSwitch(_ r: SwitchRequest) {
+        if let refused = startSwitch(r.id, from: "touch", done: { [weak self] result in
+            self?.link.sendResult(LinkProtocol.resultMessage(req: r.req, result: result))
+        }) {
+            SwitchLog.write(["kind": "touch_refused", "input": r.id, "value": 0], refused)
+            link.sendResult(LinkProtocol.resultMessage(req: r.req, result: refused))
         }
     }
 
@@ -248,9 +284,11 @@ final class AppModel: ObservableObject {
     private func replace(_ c: AppConfig) {
         do {
             try store.save(c)
+            let menuBefore = menuEntries(config)
             config = c
             saveProblem = nil
             match = matchBinding(c.binding, among: displays)
+            if menuEntries(c) != menuBefore { link.resendSources() }   // the touch screen shows what the menu shows
         } catch {
             saveProblem = "没有保存：\(error.localizedDescription)"
         }

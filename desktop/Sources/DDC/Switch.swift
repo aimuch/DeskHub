@@ -11,6 +11,10 @@ public func readInput(_ display: DDCDisplay) -> Result<UInt16, ReadError> {
 
 // Blocks for about 4 s: call it off the main thread.
 public func performSwitch(_ display: DDCDisplay, to target: UInt16, sleep: (Double) -> Void = { Thread.sleep(forTimeInterval: $0) }) -> SwitchResult {
+    // Already there (read back, K3): no command. A monitor told to switch to the input it shows blanks and syncs again.
+    if case .success(let now) = readInput(display), inputMatches(readBack: now, target: target) {
+        return SwitchResult(outcome: .confirmed, detail: "", readBack: now)
+    }
     do {
         try display.write(vcp: inputSourceVCP, value: target)
     } catch {

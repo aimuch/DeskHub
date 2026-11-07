@@ -183,22 +183,42 @@ private struct InputRow: View {
 
 // ---- the touch screen (until the firmware has Bluetooth) ----
 private struct DevicePage: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var link: TouchScreenLink
     var body: some View {
         Text("触摸屏").font(.title2.weight(.semibold))
-        Text("触摸屏通过蓝牙连这台 Mac。在触摸屏上点输入源，由这个 App 切。").font(.caption).foregroundStyle(.secondary)
-        Card {
+        Text("触摸屏通过蓝牙连这台 Mac。在触摸屏上点输入源，由这个 App 切；菜单里试切过的输入源会自动发给它。").font(.caption).foregroundStyle(.secondary)
+        Card(highlight: { if case .connected = link.state { return true }; return false }()) {
             HStack {
-                Image(systemName: "dot.radiowaves.left.and.right").font(.title2).foregroundStyle(.secondary)
+                Image(systemName: "dot.radiowaves.left.and.right").font(.title2).foregroundStyle(linkText(link.state).1)
                 VStack(alignment: .leading) {
-                    Text("还没有配对").font(.headline)
-                    Text("触摸屏的蓝牙固件还在做。做好以后在这里配对。").font(.caption).foregroundStyle(.secondary)
+                    Text(linkText(link.state).0).font(.headline)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("配对…") {}.disabled(true)
+                if link.isPaired {
+                    Button("忘记这台") { link.forget() }
+                } else {
+                    Button(link.state == .searching ? "正在找…" : "配对…") { link.pair() }
+                        .buttonStyle(.borderedProminent).tint(accent)
+                        .disabled(link.state == .searching || { if case .unavailable = link.state { return true }; return false }())
+                }
             }
+            if let p = link.problem { Text(p).font(.caption).foregroundStyle(warnColor) }
         }
-        Text("以后的配对步骤：1. 在触摸屏上打开“设置 › 连接与配对 › 配对电脑”（2 分钟内有效）。2. 点这里的“配对…”，两边各显示 6 位数字。3. 数字一样，30 秒内两边都点确认。")
+        Text("配对：1. 在触摸屏上打开 设置 › 连接与配对 › 配对电脑（2 分钟内有效）。2. 点这里的“配对…”。3. 两边各显示 6 位数字；数字一样，30 秒内在 Mac 和触摸屏上都点确认。之后会自动连接。")
             .font(.caption).foregroundStyle(.secondary)
+        Text("“忘记这台”只在这个 App 里忘记。系统里的配对要在 系统设置 › 蓝牙 里移除；触摸屏上的在 设置 › 连接与配对 › 删除配对。")
+            .font(.caption).foregroundStyle(.secondary)
+    }
+    private var detail: String {
+        switch link.state {
+        case .connected: return "已发去 \(menuEntries(model.config).count) 个输入源"
+        case .connecting: return "触摸屏不在附近或者没开时，会一直等它"
+        case .searching: return "在触摸屏上点“配对电脑”"
+        case .notPaired: return "配对一次，以后自动连接"
+        case .unavailable: return "蓝牙不能用"
+        }
     }
 }
 

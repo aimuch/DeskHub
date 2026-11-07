@@ -23,8 +23,20 @@ let iconChoices: [(key: String, name: String)] = [("desktop", "主机"), ("lapto
 
 func color(_ o: Outcome) -> Color { o == .confirmed ? okColor : o == .sentUnconfirmed ? warnColor : badColor }
 
+// The touch screen's state in words, for the menu and the settings window.
+func linkText(_ s: TouchScreenLink.State) -> (String, Color) {
+    switch s {
+    case .connected(let name): return ("已连接 · \(name)", okColor)
+    case .connecting: return ("正在连接…", .secondary)
+    case .searching: return ("正在找触摸屏…", accent)
+    case .notPaired: return ("还没有配对", .secondary)
+    case .unavailable(let why): return (why, warnColor)
+    }
+}
+
 struct MenuView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var link: TouchScreenLink
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -43,7 +55,7 @@ struct MenuView: View {
                 Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(.secondary)
                 Text("触摸屏")
                 Spacer()
-                Text("还没有配对").foregroundStyle(.secondary)
+                Text(linkText(link.state).0).foregroundStyle(linkText(link.state).1).lineLimit(1)
             }
             .font(.callout).padding(.horizontal, 14)
             Divider().padding(.vertical, 6)

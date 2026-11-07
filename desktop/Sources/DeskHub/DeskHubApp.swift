@@ -45,14 +45,14 @@ struct DeskHubApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView().environmentObject(model)
+            MenuView().environmentObject(model).environmentObject(model.link)
         } label: {
             Image(systemName: menuIcon)
         }
         .menuBarExtraStyle(.window)
 
         Window("DeskHub 设置", id: "settings") {
-            SettingsView().environmentObject(model)
+            SettingsView().environmentObject(model).environmentObject(model.link)
         }
         .windowResizability(.contentSize)
     }

@@ -230,6 +230,12 @@ public func trialResult(reached: SwitchResult, back: SwitchResult, at: Date) -> 
           readOther: reached.outcome == .sentUnconfirmed && reached.readBack != nil)
 }
 
+// The input the monitor is on, for the touch screen: only an input of the menu, only from a read-back (K3).
+public func currentInputID(_ c: AppConfig, readBack: UInt16?) -> String {
+    guard let v = readBack else { return "" }
+    return menuEntries(c).first { inputMatches(readBack: v, target: $0.value) }?.id ?? ""
+}
+
 // ---- one switch at a time (K2) ----
 public final class SwitchGate: @unchecked Sendable {
     private let lock = NSLock()

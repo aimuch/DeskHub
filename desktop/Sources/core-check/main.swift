@@ -24,6 +24,17 @@
 //     unconfirmed (a monitor that cannot report its input). A trial stored by 0.1.0 without that field reads as before.
 // F9  The last result reads in words: the input, the outcome, how long ago. A time in the future is "just now".
 // F10 The standard values of the ports: DP1 15, DP2 16, HDMI1 17, HDMI2 18, USB-C 27; "other" has none.
+// F11 The touch screen link (docs/desktop-app-design.md 13.3), the App's side: the source list goes out as begin, one
+//     message per input, end; only inputs that passed their trial, at most 12, in menu order, each message at most 512
+//     bytes, valid JSON with exactly the fields the firmware wants (ble_protocol.cpp), the port as its key.
+// F12 A switch request from the touch screen is parsed strictly: op "switch", a whole req in 1...4294967295, an id of 1 to
+//     48 bytes without control characters, nothing else. Anything else is ignored (never "half a request").
+// F13 A request is answered with exactly one result for its req. A request the App refuses (not in the white list, the
+//     display missing, a switch already running) is answered "not_sent" with the reason, and nothing is sent to the monitor.
+//     The outcome words are those the firmware knows: confirmed, sent_unconfirmed, not_sent. A long detail is cut on a
+//     character boundary to 120 bytes.
+// F14 The current input for the touch screen: the menu input that matches the read-back (low byte, as F2), else "" (not
+//     known: no read-back, or a value no listed input has). Only inputs in the menu can be current.
 import DeskHubCore
 import Foundation
 
@@ -188,6 +199,64 @@ check(lastResultText(name: "X", result: SwitchResult(outcome: .confirmed, detail
 
 // ---- F10 ----
 check(InputPort.dp1.standardValue == 15 && InputPort.dp2.standardValue == 16 && InputPort.hdmi1.standardValue == 17 && InputPort.hdmi2.standardValue == 18 && InputPort.usbc.standardValue == 27 && InputPort.other.standardValue == nil, "standard values")
+
+// ---- F11 ----
+do {
+    let msgs = LinkProtocol.sourceMessages(menuEntries(config))
+    check(msgs.count == 5, "begin, three inputs, end")
+    func json(_ s: String) -> [String: Any]? { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] }
+    check(json(msgs[0])?["op"] as? String == "sources_begin" && json(msgs[0])?["count"] as? Int == 3 && json(msgs[0])?.count == 2, "begin with the count")
+    let m1 = json(msgs[2]) ?? [:]
+    check(m1["op"] as? String == "source" && m1["i"] as? Int == 1 && m1["id"] as? String == "m1" && m1["name"] as? String == "MacBook M1" && m1["port"] as? String == "hdmi1" && m1.count == 5, "one input")
+    check(json(msgs[3])?["port"] as? String == "usbc", "USB-C is usbc")
+    check(json(msgs[4])?["op"] as? String == "sources_end" && json(msgs[4])?.count == 1, "end")
+    check(!msgs.contains { $0.contains("dp2") || $0.contains("\"h2\"") || $0.contains("lost") }, "inputs without a passed trial are not sent")
+    check(msgs.allSatisfy { $0.utf8.count <= 512 }, "each message fits one write")
+    var many = AppConfig()
+    for i in 0..<12 { many.inputs.append(InputSource(id: "i\(i)", name: String(repeating: "名", count: 10), port: .other, value: UInt16(100 + i), icon: "tv", isThisMac: false, trial: trial(.confirmed, returned: true))) }
+    let big = LinkProtocol.sourceMessages(menuEntries(many))
+    check(big.count == 14 && big.allSatisfy { $0.utf8.count <= 512 }, "12 inputs with long names")
+    check(json(big[1])?["port"] as? String == "other", "other is other")
+    check(LinkProtocol.sourceMessages([]) == [#"{"count":0,"op":"sources_begin"}"#, #"{"op":"sources_end"}"#], "an empty list")
+}
+
+// ---- F12 ----
+do {
+    check(LinkProtocol.parseRequest(Data(#"{"op":"switch","req":7,"id":"m1"}"#.utf8)) == SwitchRequest(req: 7, id: "m1"), "a request")
+    for bad in [#""#, #"{}"#, #"{"op":"switch","req":7}"#, #"{"op":"switch","req":0,"id":"m1"}"#, #"{"op":"switch","req":7.5,"id":"m1"}"#,
+                #"{"op":"switch","req":-1,"id":"m1"}"#, #"{"op":"switch","req":4294967296,"id":"m1"}"#, #"{"op":"switch","req":"7","id":"m1"}"#,
+                #"{"op":"switch","req":7,"id":""}"#, #"{"op":"switch","req":7,"id":"m1","x":1}"#, #"{"op":"reboot","req":7,"id":"m1"}"#,
+                #"{"op":"switch","req":7,"id":"tab\there"}"#, "{\"op\":\"switch\",\"req\":7,\"id\":\"" + String(repeating: "i", count: 49) + "\"}", "[1,2]", "not json"] {
+        if LinkProtocol.parseRequest(Data(bad.utf8)) != nil { print("accepted: \(bad)") }
+        check(LinkProtocol.parseRequest(Data(bad.utf8)) == nil, "refused: \(bad)")
+    }
+}
+
+// ---- F13 ----
+do {
+    func json(_ s: String) -> [String: Any]? { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] }
+    let ok = json(LinkProtocol.resultMessage(req: 7, result: SwitchResult(outcome: .confirmed, detail: "", readBack: 17))) ?? [:]
+    check(ok["op"] as? String == "result" && ok["req"] as? Int == 7 && ok["outcome"] as? String == "confirmed" && ok["detail"] as? String == "" && ok.count == 4, "a confirmed result")
+    check(json(LinkProtocol.resultMessage(req: 8, result: SwitchResult(outcome: .sentUnconfirmed, detail: "读不回", readBack: nil)))?["outcome"] as? String == "sent_unconfirmed", "unconfirmed")
+    check(json(LinkProtocol.resultMessage(req: 9, result: SwitchResult(outcome: .notSent, detail: "x", readBack: nil)))?["outcome"] as? String == "not_sent", "not sent")
+    let long = LinkProtocol.resultMessage(req: 1, result: SwitchResult(outcome: .notSent, detail: String(repeating: "长", count: 100), readBack: nil))
+    let d = json(long)?["detail"] as? String ?? ""
+    check(d.utf8.count <= 120 && d.hasPrefix("长长") && d.allSatisfy { $0 == "长" }, "a long detail is cut on a character")
+    check(LinkProtocol.refused(.notTried).outcome == .notSent && LinkProtocol.refused(.notTried).detail.contains("试切"), "not in the white list")
+    check(LinkProtocol.refused(.displayMissing).outcome == .notSent && !LinkProtocol.refused(.displayMissing).detail.isEmpty, "display missing")
+    check(LinkProtocol.busy.outcome == .notSent && !LinkProtocol.busy.detail.isEmpty, "busy")
+}
+
+// ---- F14 ----
+do {
+    check(currentInputID(config, readBack: 0x0F11) == "m1", "HDMI read back is MacBook M1")
+    check(currentInputID(config, readBack: 0x0F0F) == "mini", "DP read back is this Mac")
+    check(currentInputID(config, readBack: nil) == "", "no read-back: not known")
+    check(currentInputID(config, readBack: 0x0F10) == "", "DP2 is not in the menu: not known")
+    check(currentInputID(config, readBack: 99) == "", "a value nobody has")
+    check(LinkProtocol.currentMessage("m1") == #"{"id":"m1","op":"current"}"#, "the message")
+    check(LinkProtocol.currentMessage("") == #"{"id":"","op":"current"}"#, "not known")
+}
 
 if failures > 0 {
     print("core-check: \(failures) check(s) failed")
