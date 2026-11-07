@@ -11,8 +11,12 @@ let package = Package(
         .target(name: "DeskHubCore"),
         // DDC over IOAVService (private API, Apple silicon only). The only code that talks to a monitor.
         .target(name: "DDC", dependencies: ["DeskHubCore"]),
+        // USB flashing of the touch screen (docs/desktop-app-design.md 13.10): the package on disk, esptool, the USB status.
+        .target(name: "Flasher", dependencies: ["DeskHubCore"]),
         // The menu bar App.
-        .executableTarget(name: "DeskHub", dependencies: ["DeskHubCore", "DDC"]),
+        .executableTarget(name: "DeskHub", dependencies: ["DeskHubCore", "DDC", "Flasher"]),
+        // USB flashing from the command line, through the same code as the App (the end-to-end run, the evidence).
+        .executableTarget(name: "deskhub-flash", dependencies: ["DeskHubCore", "Flasher"]),
         // A command line for the experiments and the evidence: list, read, and switch through the same code as the App.
         .executableTarget(name: "deskhub-ddc", dependencies: ["DeskHubCore", "DDC"]),
         // The tests of DeskHubCore. A plain program, not `swift test`: the command line tools have no Testing macros.

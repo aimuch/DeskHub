@@ -16,6 +16,7 @@ DeskHub code is provided under the Apache License 2.0 in LICENSE. Upstream code,
 | cryptography | Local certificate/key generation | Apache-2.0 OR BSD-3-Clause |
 | pyserial 3.5 | USB serial configuration tool | BSD-3-Clause |
 | pytest / pytest-asyncio / jsonschema | Development verification only | MIT |
+| esptool v5.6.0 (Espressif, standalone macOS arm64 build) | Shipped inside DeskHub.app (`Contents/Resources/esptool/`) and run as a separate program by the firmware page to flash the touch screen over USB; release asset SHA-256 pinned in `desktop/scripts/fetch_esptool.sh` | GPL-2.0-or-later; its LICENSE is shipped next to it; [source](https://github.com/espressif/esptool/tree/v5.6.0) |
 
 All transitive firmware dependencies and component hashes are recorded in `firmware/dependencies.lock`. Python dependencies are pinned in `agent/uv.lock`; USB transport dependencies are pinned in `tools/requirements.txt`. Packaged releases must retain license files from their actual resolved dependencies.
 

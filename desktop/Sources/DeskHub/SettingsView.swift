@@ -3,7 +3,7 @@ import DeskHubCore
 import SwiftUI
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case displays = "显示器", inputs = "输入源", device = "触摸屏", general = "通用"
+    case displays = "显示器", inputs = "输入源", device = "触摸屏", firmware = "固件", general = "通用"
     var id: String { rawValue }
 }
 
@@ -30,6 +30,7 @@ struct SettingsView: View {
                     case .displays: DisplaysPage()
                     case .inputs: InputsPage()
                     case .device: DevicePage()
+                    case .firmware: FirmwarePage()
                     case .general: GeneralPage()
                     }
                     if let p = model.saveProblem { Text(p).foregroundStyle(badColor).font(.caption) }

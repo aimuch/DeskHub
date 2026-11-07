@@ -1,25 +1,120 @@
 {
   "v": 3,
-  "createdOnFiles": {"v": 1, "at": "2026-11-07T10:00:00Z"},
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-07T10:00:00Z"
+  },
   "title": "DeskHub 桌面 App",
-  "launch": {"view": "canvas"},
+  "launch": {
+    "view": "canvas"
+  },
   "pages": [],
   "boards": {
-    "Main.dc.html": {"x": 0, "y": 0, "w": 340, "h": 520, "title": "菜单 · 平时"},
-    "MenuSwitching.dc.html": {"x": 420, "y": 0, "w": 340, "h": 520, "title": "菜单 · 正在切换，以及结果"},
-    "MenuProblems.dc.html": {"x": 840, "y": 0, "w": 340, "h": 520, "title": "菜单 · 没绑定显示器、DDC 不可用"},
-    "SettingsDisplays.dc.html": {"x": 0, "y": 760, "w": 760, "h": 520, "title": "设置 · 显示器（绑定）"},
-    "SettingsInputs.dc.html": {"x": 840, "y": 760, "w": 760, "h": 520, "title": "设置 · 输入源（试切后才进菜单）"},
-    "SettingsDevice.dc.html": {"x": 1680, "y": 760, "w": 760, "h": 520, "title": "设置 · 触摸屏（蓝牙，固件做好后）"}
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 340,
+      "h": 520,
+      "title": "菜单 · 平时"
+    },
+    "MenuSwitching.dc.html": {
+      "x": 420,
+      "y": 0,
+      "w": 340,
+      "h": 520,
+      "title": "菜单 · 正在切换，以及结果"
+    },
+    "MenuProblems.dc.html": {
+      "x": 840,
+      "y": 0,
+      "w": 340,
+      "h": 520,
+      "title": "菜单 · 没绑定显示器、DDC 不可用"
+    },
+    "SettingsDisplays.dc.html": {
+      "x": 0,
+      "y": 760,
+      "w": 760,
+      "h": 520,
+      "title": "设置 · 显示器（绑定）"
+    },
+    "SettingsInputs.dc.html": {
+      "x": 840,
+      "y": 760,
+      "w": 760,
+      "h": 520,
+      "title": "设置 · 输入源（试切后才进菜单）"
+    },
+    "SettingsDevice.dc.html": {
+      "x": 1680,
+      "y": 760,
+      "w": 760,
+      "h": 520,
+      "title": "设置 · 触摸屏（蓝牙，固件做好后）"
+    },
+    "SettingsFirmware.dc.html": {
+      "x": 0,
+      "y": 1600,
+      "w": 760,
+      "h": 520,
+      "title": "设置 · 固件（USB 刷机）"
+    },
+    "SettingsFirmwareFlashing.dc.html": {
+      "x": 840,
+      "y": 1600,
+      "w": 760,
+      "h": 520,
+      "title": "设置 · 固件：刷入中、读回确认、没刷完"
+    }
   },
-  "order": ["Main.dc.html", "MenuSwitching.dc.html", "MenuProblems.dc.html", "SettingsDisplays.dc.html", "SettingsInputs.dc.html", "SettingsDevice.dc.html"],
+  "order": [
+    "Main.dc.html",
+    "MenuSwitching.dc.html",
+    "MenuProblems.dc.html",
+    "SettingsDisplays.dc.html",
+    "SettingsInputs.dc.html",
+    "SettingsDevice.dc.html",
+    "SettingsFirmware.dc.html",
+    "SettingsFirmwareFlashing.dc.html"
+  ],
   "notes": {
-    "rowMenu": {"x": 0, "y": -300, "text": "菜单栏（点菜单栏图标打开）", "kind": "title1", "maxW": 1180},
-    "rowSettings": {"x": 0, "y": 520, "text": "设置窗口", "kind": "title1", "maxW": 2440},
-    "scope": {"x": 1260, "y": 0, "w": 380, "size": "m", "fill": "yellow",
-              "text": "第一版做什么\n1. 菜单栏里点输入源，App 用 DDC 直接切，不需要 BetterDisplay 和 Agent。\n2. 显示器按 UUID、序列号、IO 位置绑定（K2）。\n3. 输入源要在设置里试切成功才进菜单（白名单）。\n4. 读回一致才写“已确认”，否则“已发送（未确认）”（K3）。\n5. 开机自启；只开一个。\n6. 触摸屏（蓝牙）先占位，固件做好后再接。\n以后：快捷键、Wi-Fi 通道。"},
-    "icon": {"x": 1260, "y": 420, "w": 380, "size": "m", "fill": "blue",
-             "text": "菜单栏图标：显示器轮廓。\n正常：白色。\n正在切换：轮廓里一个点在闪。\n有问题（没绑定、DDC 不可用）：轮廓加一道斜杠。"}
+    "rowMenu": {
+      "x": 0,
+      "y": -300,
+      "text": "菜单栏（点菜单栏图标打开）",
+      "kind": "title1",
+      "maxW": 1180
+    },
+    "rowSettings": {
+      "x": 0,
+      "y": 520,
+      "text": "设置窗口",
+      "kind": "title1",
+      "maxW": 2440
+    },
+    "scope": {
+      "x": 1260,
+      "y": 0,
+      "w": 380,
+      "size": "m",
+      "fill": "yellow",
+      "text": "第一版做什么\n1. 菜单栏里点输入源，App 用 DDC 直接切，不需要 BetterDisplay 和 Agent。\n2. 显示器按 UUID、序列号、IO 位置绑定（K2）。\n3. 输入源要在设置里试切成功才进菜单（白名单）。\n4. 读回一致才写“已确认”，否则“已发送（未确认）”（K3）。\n5. 开机自启；只开一个。\n6. 触摸屏（蓝牙）先占位，固件做好后再接。\n以后：快捷键、Wi-Fi 通道。"
+    },
+    "icon": {
+      "x": 1260,
+      "y": 420,
+      "w": 380,
+      "size": "m",
+      "fill": "blue",
+      "text": "菜单栏图标：显示器轮廓。\n正常：白色。\n正在切换：轮廓里一个点在闪。\n有问题（没绑定、DDC 不可用）：轮廓加一道斜杠。"
+    },
+    "rowFirmware": {
+      "x": 0,
+      "y": 1360,
+      "text": "固件：USB 刷机（docs/desktop-app-design.md 13.10）",
+      "kind": "title1",
+      "maxW": 1600
+    }
   },
   "designSystems": []
 }

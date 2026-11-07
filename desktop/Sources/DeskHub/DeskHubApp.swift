@@ -27,6 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // A firmware write in progress is never killed (docs/desktop-app-design.md 13.10 W2).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard FlashGuard.busy else { return .terminateNow }
+        let a = NSAlert()
+        a.messageText = "正在给触摸屏刷固件"
+        a.informativeText = "现在退出会让固件只写一半，设备可能起不来。刷完再退出。"
+        a.addButton(withTitle: "好")
+        a.runModal()
+        return .terminateCancel
+    }
+
     // Only one DeskHub at a time: a second one brings the first forward and quits (two would send two commands).
     func applicationWillFinishLaunching(_ notification: Notification) {
         guard let id = Bundle.main.bundleIdentifier else { return }
@@ -42,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct DeskHubApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @StateObject private var firmware = FirmwareModel()
 
     var body: some Scene {
         MenuBarExtra {
@@ -52,7 +64,8 @@ struct DeskHubApp: App {
         .menuBarExtraStyle(.window)
 
         Window("DeskHub 设置", id: "settings") {
-            SettingsView().environmentObject(model).environmentObject(model.link)
+            SettingsView().environmentObject(model).environmentObject(model.link).environmentObject(firmware)
+                .onAppear { firmware.refreshPorts() }
         }
         .windowResizability(.contentSize)
     }

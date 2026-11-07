@@ -35,6 +35,18 @@
 //     character boundary to 120 bytes.
 // F14 The current input for the touch screen: the menu input that matches the read-back (low byte, as F2), else "" (not
 //     known: no read-back, or a value no listed input has). Only inputs in the menu can be current.
+// F15 USB flashing, the package (13.10 P1 to P8): taken only when the manifest is JSON of at most 64 KB, schema_version the
+//     integer 1, the board and chip of this device, signed_ota false, a version of 1 to 31 safe characters, the flash settings
+//     dio/16MB/80m, exactly the 4 images at their fixed offsets and paths, each within its partition, no overlap, no path
+//     that is absolute, has "..", a backslash, a colon or an empty part, no link, every file present with its size and
+//     SHA-256, the boot and app images for ESP32-S3 (0xE9, chip 9), the app descriptor with its magic, project "deskhub"
+//     and the version of the manifest. Anything else is refused with a reason, before any port is opened.
+// F16 Versions compare as dotted numbers (0.3.21 > 0.3.9); anything else is "cannot tell" (nil).
+// F17 The USB status (R4): only a line that is a JSON object with a boolean "ok" and a result with the device fields is an
+//     answer; logs, echoes and other JSON are skipped; ok:false is "refused"; an answer with a bad id, board, protocol or
+//     version is "bad". Lines come out of the byte stream whole; a frame over 16 KB or more than 128 KB in all fails.
+// F18 esptool: the bundled one says 5.6.0; flash-id must show ESP32-S3 and 16 MB; the progress of the whole package is read
+//     from "Writing at 0x... a/b bytes" lines, image by image, and never goes past 1.
 import DeskHubCore
 import Foundation
 
@@ -258,6 +270,160 @@ do {
     check(currentInputID(config, readBack: 99) == "", "a value nobody has")
     check(LinkProtocol.currentMessage("m1") == #"{"id":"m1","op":"current"}"#, "the message")
     check(LinkProtocol.currentMessage("") == #"{"id":"","op":"current"}"#, "not known")
+}
+
+// ---- F15: the firmware package ----
+func espImage(size: Int, chip: UInt16 = 9) -> Data {
+    var d = Data(repeating: 0xff, count: size)
+    d[0] = 0xE9
+    d[12] = UInt8(chip & 0xff); d[13] = UInt8(chip >> 8)
+    return d
+}
+func appImage(version: String, project: String = "deskhub", magic: UInt32 = 0xABCD5432, chip: UInt16 = 9) -> Data {
+    var d = espImage(size: 4096, chip: chip)
+    for i in 0..<4 { d[32 + i] = UInt8((magic >> (8 * UInt32(i))) & 0xff) }
+    for i in 48..<112 { d[i] = 0 }
+    for (i, b) in version.utf8.enumerated() where i < 32 { d[48 + i] = b }
+    for (i, b) in project.utf8.enumerated() where i < 32 { d[80 + i] = b }
+    return d
+}
+struct FakePackage {
+    var files: [String: PackageFile] = [:]
+    var manifest: [String: Any] = [:]
+    init(version: String = "0.3.21") {
+        let images: [(String, String, Data)] = [
+            ("0x0", "bootloader/bootloader.bin", espImage(size: 2048)),
+            ("0x8000", "partition_table/partition-table.bin", Data(repeating: 0xaa, count: 3072)),
+            ("0xf000", "ota_data_initial.bin", Data(repeating: 0xff, count: 8192)),
+            ("0x20000", "deskhub.bin", appImage(version: version)),
+        ]
+        var list: [[String: Any]] = []
+        for (off, path, data) in images {
+            files[path] = .data(data)
+            list.append(["offset": off, "path": path, "size_bytes": data.count, "sha256": hex(data)])
+        }
+        manifest = ["schema_version": 1, "version": version, "chip": "esp32s3", "board": "ESP32-S3-Touch-AMOLED-2.16",
+                    "build_verified": true, "hardware_verified": false, "signed_ota": false,
+                    "flash_settings": ["flash_mode": "dio", "flash_size": "16MB", "flash_freq": "80m"], "files": list]
+    }
+    func hex(_ d: Data) -> String { SHA256Hex.of(d) }
+    func check(_ manifestData: Data? = nil) -> Result<FirmwarePackage, PackageProblem> {
+        let m = manifestData ?? (try! JSONSerialization.data(withJSONObject: manifest))
+        return FirmwareCheck.verify(manifest: m, file: { files[$0] ?? .missing })
+    }
+    mutating func setFile(_ i: Int, _ key: String, _ value: Any?) {
+        var list = manifest["files"] as! [[String: Any]]
+        list[i][key] = value
+        manifest["files"] = list
+    }
+}
+enum SHA256Hex { static func of(_ d: Data) -> String { FirmwareCheck.sha256HexForTests(d) } }
+func refused(_ r: Result<FirmwarePackage, PackageProblem>, _ want: PackageProblem, _ what: String) {
+    if case .failure(let p) = r { check(p == want, "\(what): \(p), want \(want)") } else { check(false, "\(what): taken") }
+}
+do {
+    let good = FakePackage()
+    if case .success(let pkg) = good.check() {
+        check(pkg.version == "0.3.21" && pkg.images.map(\.offset) == [0x0, 0x8000, 0xF000, 0x20000], "a good package")
+        check(pkg.totalBytes == 2048 + 3072 + 8192 + 4096, "its size")
+    } else { check(false, "a good package is taken") }
+    refused(FirmwareCheck.verify(manifest: nil, file: { _ in .missing }), .manifestMissing, "no manifest")
+    refused(good.check(Data("not json".utf8)), .manifestBad, "not JSON")
+    refused(good.check(Data("[1,2]".utf8)), .manifestBad, "not an object")
+    refused(good.check(Data(repeating: 0x20, count: 65537)), .manifestBad, "over 64 KB")
+    var p = good; p.manifest["schema_version"] = 2; refused(p.check(), .wrongSchema, "schema 2")
+    p = good; p.manifest["schema_version"] = "1"; refused(p.check(), .wrongSchema, "schema as text")
+    p = good; p.manifest["schema_version"] = true; refused(p.check(), .wrongSchema, "schema as true")
+    p = good; p.manifest["schema_version"] = 1.5; refused(p.check(), .wrongSchema, "schema 1.5")
+    p = good; p.manifest["board"] = "ESP32-S3-Box"; refused(p.check(), .wrongBoard, "another board")
+    p = good; p.manifest["chip"] = "esp32"; refused(p.check(), .wrongBoard, "another chip")
+    p = good; p.manifest["signed_ota"] = true; refused(p.check(), .wrongBoard, "a signed package")
+    p = good; p.manifest["signed_ota"] = nil; refused(p.check(), .wrongBoard, "no signed_ota")
+    for v in ["", "0.3 21", "0.3.21\n", String(repeating: "1", count: 32), "0.3/21"] {
+        p = good; p.manifest["version"] = v; refused(p.check(), .badVersion, "version [\(v)]")
+    }
+    p = good; p.manifest["version"] = 321; refused(p.check(), .badVersion, "version as a number")
+    p = good; p.manifest["flash_settings"] = ["flash_mode": "qio", "flash_size": "16MB", "flash_freq": "80m"]; refused(p.check(), .wrongFlashSettings, "qio")
+    p = good; p.manifest["flash_settings"] = ["flash_mode": "dio", "flash_size": "16MB", "flash_freq": "80m", "x": 1]; refused(p.check(), .wrongFlashSettings, "an extra setting")
+    p = good; var l = p.manifest["files"] as! [[String: Any]]; l.removeLast(); p.manifest["files"] = l; refused(p.check(), .wrongImageCount, "3 images")
+    p = good; l = p.manifest["files"] as! [[String: Any]]; l.append(l[0]); p.manifest["files"] = l; refused(p.check(), .wrongImageCount, "5 images")
+    for bad in ["/deskhub.bin", "../deskhub.bin", "a/../deskhub.bin", "deskhub\\x.bin", "c:deskhub.bin", "a//deskhub.bin", "./deskhub.bin", ""] {
+        p = good; p.setFile(3, "path", bad); refused(p.check(), .badPath, "path [\(bad)]")
+    }
+    p = good; p.files["deskhub.bin"] = .symlink; refused(p.check(), .symlink, "a link")
+    p = good; p.setFile(3, "offset", "0x30000"); refused(p.check(), .badOffset, "the app not at 0x20000")
+    p = good; p.setFile(3, "offset", "131072"); refused(p.check(), .badOffset, "an offset not in hex")
+    p = good; p.setFile(3, "offset", 0x20000); refused(p.check(), .badOffset, "an offset as a number")
+    p = good; p.setFile(2, "path", "deskhub.bin"); refused(p.check(), .duplicate, "a path twice")
+    p = good; p.setFile(2, "offset", "0x20000"); refused(p.check(), .duplicate, "an offset twice")
+    p = good; p.setFile(1, "path", "ota_data_initial.bin"); p.setFile(2, "path", "partition_table/partition-table.bin"); refused(p.check(), .badOffset, "paths swapped")
+    p = good; p.setFile(1, "size_bytes", 0x1001); refused(p.check(), .tooLarge, "over its partition")
+    p = good; p.setFile(1, "size_bytes", 0); refused(p.check(), .tooLarge, "size 0")
+    p = good; p.setFile(1, "size_bytes", "3072"); refused(p.check(), .tooLarge, "size as text")
+    p = good; p.setFile(1, "sha256", "ABC"); refused(p.check(), .badDigest, "a short digest")
+    p = good; p.setFile(1, "sha256", String(repeating: "A", count: 64)); refused(p.check(), .badDigest, "a digest in capitals")
+    p = good; p.files["ota_data_initial.bin"] = nil; refused(p.check(), .missingFile, "a missing file")
+    p = good; p.files["ota_data_initial.bin"] = .data(Data(repeating: 0xff, count: 8191)); refused(p.check(), .sizeMismatch, "a short file")
+    p = good; p.files["ota_data_initial.bin"] = .data(Data(repeating: 0xfe, count: 8192)); refused(p.check(), .digestMismatch, "another file of the same size")
+    func withApp(_ d: Data) -> FakePackage { var q = good; q.files["deskhub.bin"] = .data(d); q.setFile(3, "size_bytes", d.count); q.setFile(3, "sha256", SHA256Hex.of(d)); return q }
+    refused(withApp(appImage(version: "0.3.21", chip: 0)).check(), .notESP32S3, "an ESP32 app")
+    var noMagic = appImage(version: "0.3.21"); noMagic[0] = 0xE8; refused(withApp(noMagic).check(), .notESP32S3, "no image magic")
+    refused(withApp(appImage(version: "0.3.21", magic: 0x12345678)).check(), .badDescriptor, "no descriptor magic")
+    refused(withApp(appImage(version: "0.3.21", project: "other")).check(), .badDescriptor, "another project")
+    refused(withApp(appImage(version: "0.3.20")).check(), .versionMismatch, "the app is another version")
+    refused(withApp(Data(repeating: 0xE9, count: 100)).check(), .notESP32S3, "too short for a descriptor")
+    var boot = good; let b = espImage(size: 2048, chip: 2); boot.files["bootloader/bootloader.bin"] = .data(b); boot.setFile(0, "sha256", SHA256Hex.of(b))
+    refused(boot.check(), .notESP32S3, "an S2 bootloader")
+    check(!PackageProblem.digestMismatch.words.isEmpty && PackageProblem.digestMismatch.words.contains("没有连设备"), "the words say nothing was touched")
+}
+
+// ---- F16: versions ----
+do {
+    check(FirmwareVersion.compare("0.3.21", "0.3.20") == 1 && FirmwareVersion.compare("0.3.9", "0.3.21") == -1, "dotted numbers")
+    check(FirmwareVersion.compare("0.3.21", "0.3.21") == 0 && FirmwareVersion.compare("1.0", "0.9.9") == 1, "equal, and different lengths")
+    check(FirmwareVersion.compare("0.3.21", "0.3.21.0") == 0, "a trailing zero")
+    check(FirmwareVersion.compare("0.3.21-dev", "0.3.21") == nil && FirmwareVersion.compare("", "1") == nil && FirmwareVersion.compare("1..2", "1") == nil, "cannot tell")
+}
+
+// ---- F17: the USB status ----
+do {
+    func line(_ s: String) -> StatusLine { StatusParse.line(Data(s.utf8)) }
+    let good = #"{"ok":true,"result":{"device_id":"deskhub-44bd8d60c598","firmware_version":"0.3.21","board_model":"ESP32-S3-Touch-AMOLED-2.16","protocol_version":"1"}}"#
+    check(line(good + "\n") == .identity(DeviceIdentity(deviceID: "deskhub-44bd8d60c598", version: "0.3.21")), "an answer")
+    check(line(good) == .identity(DeviceIdentity(deviceID: "deskhub-44bd8d60c598", version: "0.3.21")), "without the newline")
+    check(line("I (1234) deskhub: boot\n") == .skip && line(#"{"op":"identify"}"#) == .skip && line("[1,2]") == .skip, "logs, echoes, arrays")
+    check(line(#"{"ok":"yes","result":{"device_id":"deskhub-44bd8d60c598"}}"#) == .skip, "ok not a boolean")
+    check(line(#"{"ok":true,"result":{"other":1}}"#) == .skip, "an answer about something else")
+    check(line(#"{"ok":false,"error":"x"}"#) == .refused, "refused")
+    for (field, value) in [("device_id", "\"deskhub-44BD8D60C598\""), ("device_id", "\"deskhub-44bd8d60c59\""), ("board_model", "\"other\""),
+                           ("protocol_version", "\"2\""), ("protocol_version", "1"), ("firmware_version", "\"0.3 21\""), ("firmware_version", "3")] {
+        let bad = good.replacingOccurrences(of: try! NSRegularExpression(pattern: "\"\(field)\":(\"[^\"]*\"|[0-9]+)").firstMatch(in: good, range: NSRange(good.startIndex..., in: good)).map { String(good[Range($0.range, in: good)!]) } ?? "", with: "\"\(field)\":\(value)")
+        if case .bad = line(bad) { check(true, "") } else { check(false, "a bad \(field) \(value) is not refused") }
+    }
+    var r = LineReader()
+    let parts = r.feed(Data("I (1) log\n{\"ok\":tr".utf8)) + r.feed(Data("ue}\nrest".utf8))
+    check(parts.map { String(decoding: $0, as: UTF8.self) } == ["I (1) log\n", "{\"ok\":true}\n"] && !r.failed, "lines are whole")
+    var big = LineReader(); _ = big.feed(Data(repeating: 0x41, count: StatusParse.maxFrame + 1)); check(big.failed, "a frame over 16 KB")
+    var many = LineReader()
+    for _ in 0..<200 { _ = many.feed(Data((String(repeating: "x", count: 1000) + "\n").utf8)) }
+    check(many.failed, "more than 128 KB in all")
+}
+
+// ---- F18: esptool ----
+do {
+    check(EsptoolOutput.versionOK("esptool v5.6.0\n5.6.0\n") && !EsptoolOutput.versionOK("esptool v5.3.1\n5.3.1\n") && !EsptoolOutput.versionOK(""), "the version")
+    let probe = "Connecting...\nChip type:          ESP32-S3 (QFN56) (revision v0.2)\nFeatures: Wi-Fi\nDetected flash size: 16MB\n"
+    check(EsptoolOutput.probeOK(probe), "flash-id of this board")
+    check(!EsptoolOutput.probeOK(probe.replacingOccurrences(of: "ESP32-S3", with: "ESP32-S2")), "another chip")
+    check(!EsptoolOutput.probeOK(probe.replacingOccurrences(of: "16MB", with: "8MB")), "8 MB of flash")
+    check(!EsptoolOutput.probeOK("A fatal error occurred: Could not open port"), "no port")
+    if case .success(let pkg) = FakePackage().check() {
+        let total = Double(pkg.totalBytes)
+        check(EsptoolOutput.progress("Writing at 0x00000400 [==>   ] 50.0% 1024/2048 bytes...", package: pkg) == 1024 / total, "half of the first image")
+        check(EsptoolOutput.progress("Writing at 0x00020800 [==>   ] 50.0% 2048/4096 bytes...", package: pkg) == (2048 + 3072 + 8192 + 2048) / total, "half of the app")
+        check(EsptoolOutput.progress("Writing at 0x00021000 [=====] 100.0% 9999/4096 bytes...", package: pkg) == 1, "never past 1")
+        check(EsptoolOutput.progress("Hash of data verified.", package: pkg) == nil && EsptoolOutput.progress("Writing at 0x00700000 1/2 bytes", package: pkg) == nil, "other lines")
+    } else { check(false, "the fake package for progress") }
 }
 
 if failures > 0 {
