@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>菜单 有问题时</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 340px; height: 520px; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 12px; background: #0b0d10; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #f2f4f6">
+
+  <div style="box-sizing: border-box; border-radius: 12px; background: #1e2024; box-shadow: 0 0 0 1px #34383e; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a2abb3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"></rect><path d="M12 16.5v4M8.5 20.5h7M4 3l16 16"></path></svg>
+      <span style="font-size: 14px; font-weight: 600">还没有绑定显示器</span>
+    </div>
+    <div style="font-size: 13px; line-height: 1.6; color: #a2abb3">第一次打开时是这样。在设置里选一台显示器，再试切它的输入源。试切成功的才会出现在这里。</div>
+    <a href="SettingsDisplays.dc.html" style="height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #0b0d10; background: {{accent}}">打开设置</a>
+  </div>
+
+  <div style="box-sizing: border-box; border-radius: 12px; background: #1e2024; box-shadow: 0 0 0 1px #34383e; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb547" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4.5M12 17.5h.01"></path></svg>
+      <span style="font-size: 14px; font-weight: 600">DELL U2720QM 找不到了</span>
+    </div>
+    <div style="font-size: 13px; line-height: 1.6; color: #a2abb3">绑定的这台显示器现在没连在这台 Mac 上，或者它的 DDC 不回应。输入源先变暗，不发命令。</div>
+    <div style="font-size: 12px; line-height: 1.6; color: #a2abb3">可能的原因：线拔了；显示器关了；系统升级后 DDC 不能用了。重新连上后会自动恢复。</div>
+    <div style="display: flex; flex-direction: column; gap: 2px; opacity: 0.4">
+      <div style="height: 36px; padding: 0 8px; display: flex; align-items: center; font-size: 13px">Mac mini</div>
+      <div style="height: 36px; padding: 0 8px; display: flex; align-items: center; font-size: 13px">MacBook M1</div>
+      <div style="height: 36px; padding: 0 8px; display: flex; align-items: center; font-size: 13px">MacBook M4</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":340,"height":520}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2fd8ff' };
+  }
+}
+</script>
+</body>
+</html>

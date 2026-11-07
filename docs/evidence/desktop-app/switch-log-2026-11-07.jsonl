@@ -1,0 +1,7 @@
+{"detail":"","input":"USB-C","kind":"trial_to","outcome":"confirmed","read_back":3867,"time":"2026-11-07T02:10:31Z","value":27}
+{"detail":"","input":"Andy's Mac","kind":"trial_back","outcome":"confirmed","read_back":3855,"time":"2026-11-07T02:10:31Z","value":15}
+{"detail":"","input":"HDMI","kind":"trial_to","outcome":"confirmed","read_back":3857,"time":"2026-11-07T02:10:56Z","value":17}
+{"detail":"","input":"Andy's Mac","kind":"trial_back","outcome":"confirmed","read_back":3855,"time":"2026-11-07T02:10:56Z","value":15}
+{"detail":"读回的是 15","input":"DisplayPort","kind":"trial_to","outcome":"sentUnconfirmed","read_back":3855,"time":"2026-11-07T02:11:30Z","value":16}
+{"detail":"","input":"Andy's Mac","kind":"trial_back","outcome":"confirmed","read_back":3855,"time":"2026-11-07T02:11:30Z","value":15}
+{"detail":"","input":"HDMI","kind":"switch","outcome":"confirmed","read_back":3857,"time":"2026-11-07T02:13:07Z","value":17}

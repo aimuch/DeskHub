@@ -1,0 +1,42 @@
+{
+  "what": "桌面 App 第一版 DeskHub.app 0.1.0（docs/desktop-app-design.md 13.8，设计稿 docs/design/app/）",
+  "date": "2026-11-07",
+  "computer": "Mac mini（Apple M4），macOS 27.2；没有 Xcode，只有命令行工具（Swift 6.4.2）",
+  "display": "DELL U2720QM：DisplayPort 接这台 Mac mini，HDMI 接 MacBook M1，USB-C 接 MacBook M4",
+  "build": "desktop/scripts/make_app.sh：swift build -c release，手工组装 .app，临时签名（ad-hoc）",
+  "checks_before_the_app": [
+    "deskhub-ddc list：两台显示器的系统 UUID、序列号、IO 位置和 m1ddc 读到的一样（见 ddc-return-path.json）",
+    "读 VCP 0x60：第一版每个包只发一次，U2720QM 第二次起一直回“没准备好”（6E 80 BE）；改成像 m1ddc 一样每个包连发两次、隔 10 ms 以后，连读 20 次全部成功；亮度读到 50，和 m1ddc 一样",
+    "U2720QM 读回的输入是两个字节：DisplayPort 是 0x0F0F，HDMI 是 0x0F11，USB-C 是 0x0F1B；低字节就是 15、17、27",
+    "命令行用 App 的同一段切换代码：切到 HDMI 读回确认，10 秒后切回 DisplayPort 读回确认（desktop-app/cli-switch-hdmi-2026-11-07.jsonl）"
+  ],
+  "core_checks": "swift run core-check：规则的失败模式 F1 到 F10，全部通过（不是 swift test：命令行工具没有 Testing 的宏插件）",
+  "user_run": {
+    "who": "用户在 App 里操作；记录来自 App 自己写的切换日志和配置文件",
+    "log": "desktop-app/switch-log-2026-11-07.jsonl",
+    "steps": [
+      "10:07 绑定 U2720QM，读回这台 Mac 在 DisplayPort（15）",
+      "10:10 试切 USB-C（27）：过去读回 0x0F1B，已确认；切回读回 0x0F0F，已确认",
+      "10:10 试切 HDMI（17）：过去读回 0x0F11，已确认；切回已确认",
+      "10:11 试切 DisplayPort 2（16）：读回仍是 15，已发送（未确认）（DP2 上没有接东西）；切回已确认",
+      "10:13 从菜单切到 HDMI：读回 0x0F11，已确认"
+    ],
+    "user_said": "绑定、试切、菜单都试过，除了卡顿没有别的问题；修完以后说“流畅了”"
+  },
+  "problems_found_and_fixed": [
+    "点“通用”卡住：每次重画都在主线程问系统开机自启的状态，临时签名的 App 要查好几秒。改成后台问一次并记住",
+    "没有 App 图标：加了 AppIcon.icns（desktop/scripts/make_icon.swift 画的）",
+    "设置窗口不跟手、点按钮没反应、打字卡：菜单栏 App 的窗口不会变成当前窗口。打开设置时临时变成普通 App 并来到前面，关窗口后变回去",
+    "菜单闪：每次打开都重发所有状态。改成只在值变了时更新",
+    "DisplayPort 2 进了菜单：显示器明明读回了别的输入，试切还算通过。改成读回别的输入就不通过（F8）；0.1.0 存的未确认试切要重新试",
+    "试切日志两行的时间都是结束时间：改成各记各的"
+  ],
+  "not_tested": [
+    "修好卡顿以后的版本只听你说“流畅了”，我看不到屏幕",
+    "开机自启（“通用”里的开关）没有试",
+    "U2719DS 没有绑定和切换过",
+    "改名字、换图标、添加和删除输入源只在代码里，没有记录到真机操作",
+    "从另外两台 MacBook 切回来：这台 App 只装在 Mac mini 上",
+    "Mac 睡眠以后、显示器省电以后"
+  ]
+}

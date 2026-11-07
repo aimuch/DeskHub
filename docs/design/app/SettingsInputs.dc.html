@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设置 输入源</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 760px; height: 520px; box-sizing: border-box; display: flex; border-radius: 12px; overflow: hidden; background: #1e2024; box-shadow: inset 0 0 0 1px #34383e; font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #f2f4f6">
+  <nav aria-label="设置分类" style="width: 180px; flex: none; box-sizing: border-box; padding: 44px 10px 10px; background: #17191c; display: flex; flex-direction: column; gap: 2px; box-shadow: inset -1px 0 0 #2a2e33">
+    <a href="SettingsDisplays.dc.html" style="height: 30px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; font-size: 13px">显示器</a>
+    <a href="SettingsInputs.dc.html" aria-current="page" style="height: 30px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; font-size: 13px; background: {{accentSoft}}; color: {{accent}}">输入源</a>
+    <a href="SettingsDevice.dc.html" style="height: 30px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; font-size: 13px">触摸屏</a>
+    <a href="SettingsDisplays.dc.html" style="height: 30px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; font-size: 13px">通用</a>
+  </nav>
+  <main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 28px 28px 20px; display: flex; flex-direction: column; gap: 12px">
+    <div>
+      <div style="font-size: 20px; font-weight: 600">输入源 · DELL U2720QM</div>
+      <div style="margin-top: 4px; font-size: 12px; color: #a2abb3">试切成功的输入源才会出现在菜单和触摸屏上。名字和图标会同步给触摸屏。</div>
+    </div>
+
+    <div style="border-radius: 10px; background: #26292e; overflow: hidden">
+      <div style="height: 30px; padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px 110px; align-items: center; gap: 10px; font-size: 11px; color: #8a939b; box-shadow: inset 0 -1px 0 #34383e">
+        <span>名字</span><span>接口</span><span>数值</span><span>状态</span>
+      </div>
+      <div style="height: 46px; padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px 110px; align-items: center; gap: 10px; font-size: 13px; box-shadow: inset 0 -1px 0 #2f3338">
+        <span>Mac mini</span><span style="color: #c4cbd2">DisplayPort 1</span><span style="font-family: ui-monospace, Menlo, monospace; color: #c4cbd2">15</span>
+        <span style="font-size: 12px; color: #59f0a6">试切过 · 能切回</span>
+      </div>
+      <div style="height: 46px; padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px 110px; align-items: center; gap: 10px; font-size: 13px; box-shadow: inset 0 -1px 0 #2f3338">
+        <span>MacBook M1</span><span style="color: #c4cbd2">HDMI 1</span><span style="font-family: ui-monospace, Menlo, monospace; color: #c4cbd2">17</span>
+        <span style="font-size: 12px; color: #59f0a6">试切过 · 能切回</span>
+      </div>
+      <div style="height: 46px; padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px 110px; align-items: center; gap: 10px; font-size: 13px; box-shadow: inset 0 -1px 0 #2f3338">
+        <span>MacBook M4</span><span style="color: #c4cbd2">USB-C</span><span style="font-family: ui-monospace, Menlo, monospace; color: #c4cbd2">27</span>
+        <span style="font-size: 12px; color: #59f0a6">试切过 · 能切回</span>
+      </div>
+      <div style="height: 46px; padding: 0 14px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px 110px; align-items: center; gap: 10px; font-size: 13px">
+        <span style="color: #a2abb3">DisplayPort 2</span><span style="color: #c4cbd2">DisplayPort 2</span><span style="font-family: ui-monospace, Menlo, monospace; color: #c4cbd2">16</span>
+        <button type="button" style="all: unset; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; text-align: center; box-shadow: inset 0 0 0 1px #3d4248">试切</button>
+      </div>
+    </div>
+
+    <div style="border-radius: 10px; background: #26292e; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 13px; font-weight: 500">试切是怎么做的</div>
+      <div style="font-size: 12px; line-height: 1.6; color: #a2abb3">1. 发命令切到这个输入源。2. 读回当前输入，看是不是它。3. 20 秒后自动切回这台 Mac。能切回，才标“能切回”。切不回时，用显示器按键切回来，这个输入源不进菜单。</div>
+    </div>
+    <div style="font-size: 12px; color: #8a939b">数值是显示器的 DDC 编号。DELL 用标准值；LG 等用另一套，可以手动改。</div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":760,"height":520}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.accent ?? '#2fd8ff';
+    const rgb = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).join(',');
+    return { accent: a, accentSoft: 'rgba(' + rgb + ',0.14)' };
+  }
+}
+</script>
+</body>
+</html>
