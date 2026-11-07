@@ -150,6 +150,10 @@ void core_init() {
                 s.agent_id = field(o,"agent_id"); s.token = field(o,"token"); s.ca_pem = field(o,"ca_pem");s.update_public_key_pem=field(o,"expected_update_key_pem");
                 auto ntp=field(o,"ntp_server");if(!ntp.empty())s.ntp_server=ntp;
                 s.revision = number(o,"revision",0);
+                // A configuration stored when the device had no update key expected none: a key written later (USB update_key,
+                // docs/desktop-app-design.md 13.11) does not make it a broken pairing. Without this the Wi-Fi was not loaded
+                // after the key was written (2026-11-07, on the device).
+                if(s.update_public_key_pem.empty())s.update_public_key_pem=credentials.update_public_key_pem;
                 if(s.update_public_key_pem!=credentials.update_public_key_pem)unmatched_pairing=true;
                 else if (!s.ssid.empty() && s.ssid.size()<=32 && s.password.size()<=64 && (s.url.empty() || s.url.rfind("https://",0) == 0) && valid_ntp_server(s.ntp_server)) credentials = s;
             }
@@ -270,8 +274,17 @@ esp_err_t save_update_key(const std::string &pem) {
     nvs_handle_t trust;
     esp_err_t e = nvs_open("dh_trust", NVS_READWRITE, &trust);
     if (e == ESP_OK) { e = nvs_set_str(trust, "update_key", pem.c_str()); if (e == ESP_OK) e = nvs_commit(trust); nvs_close(trust); }
-    if (e == ESP_OK) { Guard g; credentials.update_public_key_pem = pem; trust_read_fault = false; }
-    return e;
+    if (e != ESP_OK) return e;
+    Guard g;
+    credentials.update_public_key_pem = pem;
+    trust_read_fault = false;
+    // The stored configuration names the key it expects: store it again with this one, so the two always agree at boot.
+    if (!credentials.ssid.empty() && credentials.revision < UINT32_MAX) {
+        Secrets s = credentials;
+        s.revision = credentials.revision + 1;
+        if (persist_credentials(s) == ESP_OK) credentials = s;   // if not: the old record still loads (it expected no key, or boot says so)
+    }
+    return ESP_OK;
 }
 static esp_err_t reset_config_locked() {
     if(radio_owner!=NetworkOwner::None)return ESP_ERR_INVALID_STATE;
