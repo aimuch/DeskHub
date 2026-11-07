@@ -9,6 +9,9 @@
 #include "pairing_device.hpp"
 #include "wifi_change.hpp"
 #include "probe.h"
+#include "ble_link.hpp"
+#include "flash_worker.hpp"
+#include "esp_heap_caps.h"
 #include "json_util.hpp"
 #include "cJSON.h"
 #include "esp_log.h"
@@ -149,7 +152,11 @@ void usb(void *) {
         for(int i=0;i<n;++i){char ch=data[i];if(ch=='\n'){
             cJSON *o=nullptr;
             if(overflow)o=result(false,"PAYLOAD_TOO_LARGE","USB帧超过16KiB");
-            else{auto *input=dh::parse_json_strict(line.c_str(),line.size());o=input?handle(input):result(false,"INVALID_JSON","无效JSON");cJSON_Delete(input);}
+            else{auto *input=dh::parse_json_strict(line.c_str(),line.size());
+                // This task's stack is in PSRAM: a request may write flash, so it is handled on the flash worker (flash_worker.hpp).
+                if(!input)o=result(false,"INVALID_JSON","无效JSON");
+                else if(!dh::flash_run([&]{o=handle(input);}))o=result(false,"BUSY","设备内部任务没有启动，请重启设备");
+                cJSON_Delete(input);}
             char *output=cJSON_PrintUnformatted(o);cJSON_Delete(o);if(output){usb_serial_jtag_write_bytes(output,strlen(output),pdMS_TO_TICKS(1000));usb_serial_jtag_write_bytes("\n",1,pdMS_TO_TICKS(1000));free(output);}
             std::fill(line.begin(),line.end(),0);line.clear();overflow=false;
         }else if(ch!='\r'){if(line.size()<16383&&!overflow)line.push_back(ch);else overflow=true;}}
@@ -169,11 +176,21 @@ extern "C" void app_main() {
     // Never print frames, tokens, SSIDs, Authorization headers, or trust material.
     esp_log_level_set("esp-tls",ESP_LOG_NONE);esp_log_level_set("HTTP_CLIENT",ESP_LOG_NONE);
     dh::core_init();dh::board_init();dh::charge::init();
+    dh::ble::start();      // Bluetooth to the App first: it needs internal memory before the screen and Wi-Fi take theirs (H2)
+    dh::flash_worker_start();   // flash writes of the tasks below, whose stacks are in PSRAM (flash_worker.hpp)
     probe_start_early();   // test builds only (components/probe)
     usb_serial_jtag_driver_config_t usb_cfg{};usb_cfg.rx_buffer_size=2048;usb_cfg.tx_buffer_size=2048;
-    if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)xTaskCreate(usb,"dh_usb",8192,nullptr,4,nullptr);
+    // Internal memory is short once Bluetooth is up: the USB and power tasks keep their stacks in PSRAM. Neither writes flash
+    // itself (USB requests run on the flash worker; the power task only uses I2C). A task that cannot start says so.
+    auto start_task=[](TaskFunction_t fn,const char *name,uint32_t stack,UBaseType_t prio){
+        if(xTaskCreateWithCaps(fn,name,stack,nullptr,prio,nullptr,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT)!=pdPASS){
+            static std::string what;what=std::string("TASK_START_FAILED：")+name;
+            dh::mutate([](dh::Snapshot &v,void *p){v.error=*static_cast<std::string*>(p);},&what);
+        }
+    };
+    if(usb_serial_jtag_driver_install(&usb_cfg)==ESP_OK)start_task(usb,"dh_usb",8192,4);
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
     dh::audio::init();   // a task of its own: the codec is created there, so a missing speaker never delays the start
-    dh::network_start();dh::wifi_change::init();dh::agent_start();dh::management_start();dh::pairing_device::start();xTaskCreate(housekeeping,"dh_power",6144,nullptr,5,nullptr);
+    dh::network_start();dh::wifi_change::init();dh::agent_start();dh::management_start();dh::pairing_device::start();start_task(housekeeping,"dh_power",6144,5);
     probe_start();   // measurement only in test builds (components/probe); does nothing in a release build
 }
