@@ -38,8 +38,10 @@ bool forget_all();                             // every bond; the link drops. tr
 struct UpdateHooks {
     bool (*allowed)(std::string &why) = nullptr;                                  // no other update, no self-test, power steady
     update::Checked (*verify)(const std::string &envelope, void *ctx) = nullptr;  // signature with update_key + the 8 fields
-    std::string (*key_fingerprint)() = nullptr;                                   // "" when the device has no update key
     void (*active)(bool on) = nullptr;                                            // a Bluetooth update runs: the Agent's waits
 };
 void set_update_hooks(const UpdateHooks &);
+// The fingerprint of the update key, for the info characteristic ("" when none). Computed by the caller, never in the
+// NimBLE task: parsing the key there needs more than its 4 KB of stack, and gave "" (2026-11-07, on the device).
+void set_update_key(const std::string &fingerprint);
 }  // namespace dh::ble

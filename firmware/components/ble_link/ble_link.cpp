@@ -45,6 +45,7 @@ Requests requests;
 PairingWindow window;
 esp_timer_handle_t ticker = nullptr;
 UpdateHooks hooks;
+std::string key_fingerprint;   // under mu
 int64_t now_ms();
 void set_command(const std::string &text);
 
@@ -288,7 +289,12 @@ void drop_link_state_locked() {
 }
 
 int read_info(uint16_t, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
-    const std::string text = info_json(snapshot().device_id, VERSION, hooks.key_fingerprint ? hooks.key_fingerprint() : std::string());
+    std::string fp;
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        fp = key_fingerprint;
+    }
+    const std::string text = info_json(snapshot().device_id, VERSION, fp);
     return os_mbuf_append(ctxt->om, text.data(), static_cast<uint16_t>(text.size())) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 int write_control(uint16_t handle, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
@@ -541,6 +547,7 @@ void answer_digits(bool same) {
     confirm_pending = false;
 }
 void set_update_hooks(const UpdateHooks &h) { std::lock_guard<std::mutex> lock(mu); hooks = h; }
+void set_update_key(const std::string &fingerprint) { std::lock_guard<std::mutex> lock(mu); key_fingerprint = fingerprint; }
 bool forget_all() {
     uint16_t c;
     {
@@ -567,5 +574,6 @@ void close_pairing() {}
 void answer_digits(bool) {}
 bool forget_all() { return true; }
 void set_update_hooks(const UpdateHooks &) {}
+void set_update_key(const std::string &) {}
 }  // namespace dh::ble
 #endif
