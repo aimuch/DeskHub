@@ -25,9 +25,14 @@
     "界面流程全部通过（新增 A40 time_options：默认值、两个开关、保存失败、重启读回、时间未知、14:31:25 的表针角度、英文）",
     "变异检查 scripts/mutation/time_options_ui.py：8/8、21/21"
   ],
-  "flashed": false,
+  "flashed": true,
   "not_tested": [
-    "真机上的样子和刷新（每秒重画表针）",
+    "你在屏幕上看秒和表针的样子、开关两个选项（还没有你的确认）",
     "真机上的内存"
-  ]
+  ],
+  "device": "deskhub-44bd8d60c598",
+  "flash": {
+    "how": "用户说“刷”后，用包里的 flash.py（IDF 自带 esptool）经 /dev/cu.usbmodem20101 刷入，esptool 校验哈希通过",
+    "read_back": "第一次读超时（刚开机），15 秒后读到：0.3.19、ui_alive true、Wi-Fi 已连接、电量 100%（firmware-0.3.19-status.json）"
+  }
 }

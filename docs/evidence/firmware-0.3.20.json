@@ -1,0 +1,29 @@
+{
+  "version": "0.3.20",
+  "date": "2026-11-07",
+  "build_dir": "firmware/build-0.3.20（ESP-IDF v6.0.2，-D SDKCONFIG=build-0.3.20/sdkconfig，配置来自 sdkconfig.defaults）",
+  "compiler_warnings": 0,
+  "why": "GitHub 上第一次跑 CI 失败。在本机用同一个容器 espressif/idf:v6.0.2 复现，Linux 的 GCC 13 和 AddressSanitizer 找出下面的问题",
+  "changes_since_0.3.19": [
+    "修复（真机代码）：换外观（主题、强调色、语言、字号、表针等）时，rebuild_shell 清屏删掉了页面的 body，紧接着 update() 又读它的滚动位置，读的是已释放的内存。从有 rebuild_shell 起就有，macOS 上的测试没崩。现在清屏前记下位置、清屏后把 body 置空，换外观后页面停在原处（A40 加了检查）",
+    "测试重置 reset_for_test 也把 body 置空（同一个问题的测试路径）",
+    "board_support/board.cpp：RTC 时间文字的缓冲区 32 → 96 字节；pairing_input.cpp：倒计时缓冲区 8 → 24 字节。数值有范围，原来不会溢出；GCC 13 的 format-truncation 推不出范围，报错（基线文件 board_support，K7）",
+    "测试：pairing_test 写明 pairing::parse_utc（Linux 上 int64_t 和 time_t 同类型，调到了 core 的重载）；harness 加 #include <cstring>"
+  ],
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.20-esp32s3.zip",
+      "size_bytes": 2751328,
+      "sha256": "38001212172c394eb5765114ef11971a2f79c8225617e8e31509465d0594bd70",
+      "app_image_bytes": 4468784,
+      "app_image_sha256": "cc05f34c5a8c52c0a97084c1a34558c09ef9ca98853ca0738bc57c54619019d9"
+    }
+  },
+  "checks_done": [
+    "本机（macOS）：主机测试 18 组、界面流程全部通过",
+    "容器 espressif/idf:v6.0.2（arm64，和 CI 同一个镜像，不走入口脚本，和 Actions 一样）：固件编译、主机测试 18 组、界面流程、打包全部通过",
+    "容器里用 AddressSanitizer 编界面测试：全部通过，没有内存错误"
+  ],
+  "flashed": false,
+  "not_tested": ["真机", "CI 的 x86_64 机器和 macos-15 上的 App 检查（推送后看）"]
+}
