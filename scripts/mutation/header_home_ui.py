@@ -22,11 +22,10 @@ PAGES = [
     ("the bolt is not centred in height", PG, "bolt_y = 12 - (bolt_font->line_height - bolt_font->base_line - g.box_h - g.ofs_y) - (g.box_h + 1) / 2;", "bolt_y = 1;"),
     ("the bolt is in the colour of the fill", PG, "sh.bolt = label_at(sh.box, LV_SYMBOL_CHARGE, 0, bolt_y, bolt_adv + 2, bolt_font, p.ink);", "sh.bolt = label_at(sh.box, LV_SYMBOL_CHARGE, 0, bolt_y, bolt_adv + 2, bolt_font, p.card);"),
     # the home page without actions
-    ("the ring stays small without actions", PG, "const int d = none ? 252 : 216,", "const int d = 216,"),
-    ("the ring stays at the top without actions", PG, "const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 2 : 0;", "const int y = 0;"),
-    ("the ring is not in the middle of the space", PG, "const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 2 : 0;", "const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 4 : 0;"),
-    ("the ring moves when there are actions", PG, "const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 2 : 0;", "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;"),
-    ("the ring gets large with actions", PG, "const int d = none ? 252 : 216,", "const int d = none ? 252 : 252,"),
+    # v2: the overview has the ring only, always 252 px in the middle of the body (docs/design v2 HomeRing)
+    ("the ring stays small", PG, "const int d = 252, x =", "const int d = 216, x ="),
+    ("the ring stays at the top", PG, "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;", "const int y = 0;"),
+    ("the ring is not in the middle of the space", PG, "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;", "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 4;"),
     ("the line stays at the old place", PG, "    notice_y = y + d + 10;", "    notice_y = 226;"),
     ("the dot stays at the old place", PG, "notice_y + (lh(look.caption) - 10) / 2);", "226 + (lh(look.caption) - 10) / 2);"),
     ("the clock stays at the old place", PG, "y + d / 2 - 68);", "40);"),

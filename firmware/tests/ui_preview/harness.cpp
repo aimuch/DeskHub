@@ -12,7 +12,7 @@
 //  A4  Every button and slider has a touch area of at least 56x56 px, and no two touch areas overlap.
 //  A5  The screen says what the model says: unknown battery is not 0 %, stale power is "pending", an absent battery
 //      draws no fill, the ring lights only healthy channels, gauges stay empty for expired metrics.
-//  A6  Navigation: the four tabs, the header buttons, the settings rows and the power segments reach their pages.
+//  A6  Navigation: the buttons of the navigation, the header buttons, the settings rows and the power segments reach their pages.
 //  A7  Wake: while the screen is dimmed or off the first touch only wakes it. The second one acts.
 //  A8  Actions: an offline Agent cannot run an action; an online one runs it once; a refused action shows a notice.
 //  A9  Appearance: a choice is applied, saved, and survives a restart. A failed save keeps the old look and says so.
@@ -30,8 +30,8 @@
 //  A18 Header icons: no words; USB, bolt and battery follow the power state and never show old data; a slash for
 //      "not there"; Wi-Fi blinks while it connects and stops when it is connected; the percent can be switched off.
 //  A19 Appearance options: the battery percent and the ring thickness are stored, applied, and read back by a restart.
-//  A27 The home page without actions (docs/design Dev-HomeEmpty): the ring is larger and the ring with its line under it sits
-//      in the middle of the body, so that no blank band is left under it; with actions nothing moves; the taps still work.
+//  A27 The overview (docs/design v2 HomeRing, as Dev-HomeEmpty was): the ring is 252 px and the ring with its line under it sits
+//      in the middle of the body, so that no blank band is left; actions or none, nothing moves; the taps still work.
 //  A26 The bolt is inside the battery (docs/design Dev-Header): bolt and digits are one group in the middle of the battery,
 //      the bolt in front of the digits with a gap; no bolt slot is left outside the battery, so the USB icon is next to it.
 //  A25 The sound page (docs/design Dev-Sound): a row in Settings; the alert sound is off until it is turned on, and turning it
@@ -44,13 +44,29 @@
 //  A24 The ring is explained (docs/design Dev-RingInfo): the line under it says "tap the ring" or names the first dark segment;
 //      a tap on the ring opens a sheet with one row per segment; "close", or a tap outside the sheet, closes it; the clock in
 //      the middle still opens the clock page; another note under the ring (a command, an error) has priority over the line.
-//  A23 No "set up network and pairing" card: with no actions, the home page draws nothing in their place and the Actions
-//      page says there are none in one line of text. The header icons and the Connect page already say what is missing.
+//  A23 No "set up network and pairing" card: with no input sources the switch page says there are none in one line of text.
+//      The header icons and the Connect page already say what is missing.
 //  A22 While the pairing page is shown the screen stays awake: the person has to read the code and the hotspot password,
 //      and the window is five minutes, as long as the screen would be off. Nothing else keeps it awake.
 //  A21 The digits sit in the middle of the battery icon, measured on the pixels that are drawn (a text box that is
 //      centred is not enough: the line of a font has room under the digits).
 //  A20 No "experimental" word anywhere on the power pages and in the confirm dialog.
+//  A28 Pages and the home page (docs/design v2 Pages): the device starts on the home page, the first SHOWN page (Switch by
+//      default). The navigation is the shown pages in their order, then Settings; there is no computer page. Showing, hiding
+//      and moving a page is stored at once and changes the navigation at once; the last shown page cannot be hidden and the
+//      page says so; a failed save keeps the old order and says so; a restart starts on the new home page.
+//  A29 Wake goes home: when the screen comes back from the clock page that idling forced, it shows the home page. A page that
+//      the person chose with a navigation button is not overridden.
+//  A30 The switch page: a list or tiles with icons (Settings > Input sources). Each source shows its name and its port; a tap
+//      runs it once; offline nothing runs. The style is stored and survives a restart.
+//  A31 Name and icon of a source (Settings > Input sources > a source): the keyboard edits the name (ASCII, 1 to 32 bytes);
+//      Done stores it and the switch page shows it; back closes the keyboard and stores nothing; an icon tap stores the icon
+//      and the switch page draws it; "restore" brings back the App's name and icon; a failed save keeps the old name and says so.
+//  A32 Themes: night (pure black) is the default; the three classic themes can still be chosen and change the background;
+//      what 0.3.x stored opens in the night theme with its colour.
+//  A33 No computer metrics anywhere: no CPU or memory on any page, and the Agent is never asked for them.
+//  A34 The clock page (docs/design v2 HomeClock): the four dots follow the ring (lit only for a healthy channel, dark when
+//      the channel is down or its data is stale); the time and the date are there; an unknown time lights no time dot.
 //  A16 Charge protection flow: off shows its button; the dialog passes the limit on; the controller's state is what the
 //      page says (on, failsafe, unconfirmed); turning it off asks nothing; a save that fails is shown and changes nothing.
 #include "agent_client.hpp"
@@ -113,8 +129,9 @@ static esp_err_t mock_brightness_result = ESP_OK, mock_rotation_result = ESP_OK,
 static int mock_rotation = 0;
 static unsigned rotation_calls = 0, brightness_calls = 0, save_calls = 0, reset_calls = 0, submit_calls = 0, lock_calls = 0, unlock_calls = 0;
 static bool submit_result = true;
-static std::string stored_text;
-static bool store_ok = true;
+static std::string stored_text, stored_sources;
+static bool store_ok = true, sources_ok = true;
+static unsigned sources_saves = 0;
 static unsigned store_saves = 0;
 
 extern "C" time_t time(time_t *out) {
@@ -194,14 +211,23 @@ void on_pairing_done(int64_t) { ++audio_paired; }
 }  // namespace audio
 esp_err_t board_brightness(int percent) { ++brightness_calls; if (mock_brightness_result == ESP_OK) mock_brightness = percent; return mock_brightness_result; }
 esp_err_t board_rotation(int degrees) { ++rotation_calls; if (mock_rotation_result == ESP_OK) mock_rotation = degrees; return mock_rotation_result; }
-bool agent_submit(const Action &) {
+static std::string last_submit_id;
+bool agent_submit(const Action &a) {
     ++submit_calls;
+    last_submit_id = a.id;
     if (submit_result) mock_snapshot.command = "已接收，等待执行";
     return submit_result;
 }
 namespace ui {
 std::string store_load() { return stored_text; }
-bool store_clear() { if (!store_ok) return false; stored_text.clear(); return true; }
+bool store_clear() { if (!store_ok) return false; stored_text.clear(); stored_sources.clear(); return true; }
+std::string sources_load() { return stored_sources; }
+bool sources_save(const std::string &text) {
+    ++sources_saves;
+    if (!sources_ok) return false;
+    stored_sources = text;
+    return true;
+}
 bool store_save(const std::string &text) {
     ++store_saves;
     if (!store_ok) return false;
@@ -340,7 +366,27 @@ static bool click_text(const std::string &t) {
     tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
     return true;
 }
-static void click_nav(int index) { tap(24 + 3 + index * 108 + 54, 440); }
+static void click_nav(int index) {
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!detail::nav_area(index, &x1, &y1, &x2, &y2)) { tap(240, 470); return; }   // no such button: a tap where there is nothing
+    tap((x1 + x2) / 2, (y1 + y2) / 2);
+}
+static int nav_index_of(const std::string &label) {
+    for (int i = 0; i < detail::nav_count(); ++i) if (detail::nav_text(i) == label) return i;
+    return -1;
+}
+static std::string nav_line() {
+    std::string out;
+    for (int i = 0; i < detail::nav_count(); ++i) out += (i ? "," : "") + detail::nav_text(i);
+    return out;
+}
+static bool tap_area(bool (*area)(int, int, int *, int *, int *, int *), int a, int b) {
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!area(a, b, &x1, &y1, &x2, &y2)) return false;
+    tap((x1 + x2) / 2, (y1 + y2) / 2);
+    step();
+    return true;
+}
 static bool top_layer_blocks() {  // a visible full-screen clickable layer (a dialog's dimmer, the wake shield) takes every touch
     for (uint32_t i = 0; i < lv_obj_get_child_count(lv_layer_top()); ++i) {
         auto *o = lv_obj_get_child(lv_layer_top(), i);
@@ -390,7 +436,7 @@ static void reset_world() {
     mock_brightness = -1; mock_rotation = 0;
     mock_brightness_result = mock_rotation_result = mock_save_result = mock_lock_result = ESP_OK;
     rotation_calls = brightness_calls = save_calls = reset_calls = submit_calls = lock_calls = unlock_calls = restart_calls = 0;
-    submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0; mock_reset_result = ESP_OK;
+    submit_result = true; stored_text.clear(); store_ok = true; store_saves = 0; stored_sources.clear(); sources_ok = true; sources_saves = 0; mock_reset_result = ESP_OK;
     audio_available = true; audio_enabled = false; audio_store_ok = true; audio_tests = audio_paired = audio_volume = 0; audio_commands.clear(); audio_test_levels.clear();
 }
 static void start_ui() {
@@ -541,7 +587,10 @@ static void check_targets(const std::string &where) {
         }
 }
 static void goto_view(detail::Page page, detail::PowerTab tab = detail::PowerTab::Level) {
-    detail::request_page(page);
+    if (page == detail::Page::SourceEdit && detail::current_page() != detail::Page::SourceEdit) {   // the edit page is about a source: the first one
+        detail::request_page(detail::Page::Actions); step();
+        detail::request_source_edit(0);
+    } else detail::request_page(page);
     detail::request_power_tab(tab);
     step();
     step();
@@ -558,16 +607,214 @@ static void save_png_source(const std::string &name) {
 
 using detail::Page;
 using detail::PowerTab;
-static const std::array<std::pair<Page, PowerTab>, 14> kViews = {{
-    {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Computer, PowerTab::Level}, {Page::Settings, PowerTab::Level},
+static const std::array<std::pair<Page, PowerTab>, 16> kViews = {{
+    {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Pages, PowerTab::Level}, {Page::Settings, PowerTab::Level},
     {Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Readings}, {Page::Power, PowerTab::Protect}, {Page::Connect, PowerTab::Level},
-    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}, {Page::Time, PowerTab::Level}}};
+    {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}, {Page::Time, PowerTab::Level},
+    {Page::Sources, PowerTab::Level}, {Page::SourceEdit, PowerTab::Level}}};
 static const char *view_name(size_t i) {
-    static const char *n[] = {"home", "actions", "computer", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time"};
+    static const char *n[] = {"home", "actions", "pages", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time", "sources", "source-edit"};
     return n[i];
 }
 
 // ---------------------------------------------------------------- cases
+static void case_pages_and_home() {
+    fresh();
+    EXPECT(detail::current_page() == Page::Actions);              // the home page by default is the switch page
+    EXPECT(nav_line() == "切换,总览,设置");
+    EXPECT(nav_index_of("电脑") < 0 && !has("电脑"));
+    click_nav(1); EXPECT(detail::current_page() == Page::Home);
+    click_nav(2); EXPECT(detail::current_page() == Page::Settings);
+    EXPECT(click_text("页面与首页")); step();
+    EXPECT(detail::current_page() == Page::Pages);
+    check_layout("pages"); check_targets("pages");
+    // show the clock: stored, and the navigation grows at once
+    EXPECT(tap_area(detail::pages_control_area, 2, 0));
+    EXPECT(stored_text.find("|S+O+C+P-|") != std::string::npos);
+    EXPECT(nav_line() == "切换,总览,时钟,设置");
+    EXPECT(detail::current_page() == Page::Pages);
+    // move the overview up: it is the home page now
+    EXPECT(tap_area(detail::pages_control_area, 1, 1));
+    EXPECT(stored_text.find("|O+S+C+P-|") != std::string::npos);
+    EXPECT(nav_line() == "总览,切换,时钟,设置");
+    EXPECT(has("首页"));
+    // hide down to one page; the last one cannot be hidden, and the page says so
+    EXPECT(tap_area(detail::pages_control_area, 1, 0));            // hide Switch
+    EXPECT(tap_area(detail::pages_control_area, 2, 0));            // hide Clock
+    const std::string one = stored_text;
+    EXPECT(one.find("|O+S-C-P-|") != std::string::npos && nav_line() == "总览,设置");
+    EXPECT(tap_area(detail::pages_control_area, 0, 0));            // hide Overview: refused
+    EXPECT(stored_text == one && nav_line() == "总览,设置" && has("至少留一个页面"));
+    // the ends do nothing
+    EXPECT(tap_area(detail::pages_control_area, 0, 1));
+    EXPECT(tap_area(detail::pages_control_area, 3, 2));
+    EXPECT(stored_text == one);
+    // a failed save keeps the old order and says so
+    store_ok = false;
+    EXPECT(tap_area(detail::pages_control_area, 3, 0));            // show Power: not stored
+    EXPECT(nav_line() == "总览,设置" && has("保存失败"));
+    // a restart starts on the new home page
+    store_ok = true;
+    start_ui();
+    EXPECT(detail::current_page() == Page::Home && nav_line() == "总览,设置");
+    // with all four shown, the five buttons fit and every one reaches its page
+    fresh("night|-|zh-CN|standard|pct|standard|P+C+O+S+|list");
+    EXPECT(detail::current_page() == Page::Power && nav_line() == "电源,时钟,总览,切换,设置");
+    const Page pages[5] = {Page::Power, Page::Clock, Page::Home, Page::Actions, Page::Settings};
+    for (int i = 0; i < 5; ++i) { click_nav(i); NOTE(detail::current_page() == pages[i], "button " << i); }
+    check_layout("nav-five"); check_targets("nav-five");
+}
+static void case_wake_goes_home() {
+    fresh();
+    click_nav(1); EXPECT(detail::current_page() == Page::Home);
+    step(61000);                                                  // idle: the clock page
+    EXPECT(detail::current_page() == Page::Clock);
+    tap(240, 200); step();                                        // a touch on the clock page: back to the home page
+    EXPECT(detail::current_page() == Page::Actions);
+    step(61000);
+    EXPECT(detail::current_page() == Page::Clock);
+    click_nav(detail::nav_count() - 1); step();                   // a navigation button wins
+    EXPECT(detail::current_page() == Page::Settings);
+}
+static void with_ports() {
+    mock_snapshot.actions[0] = {"to-mini", "Mac mini", "u2720", "mac-dp", 1};
+    mock_snapshot.actions[1] = {"to-m1", "MacBook M1", "u2720", "m1-hdmi", 1};
+    mock_snapshot.actions[2] = {"to-m4", "MacBook M4", "u2720", "m4-usbc", 1};
+    mock_snapshot.action_count = 3;
+    step(); step();
+}
+static void case_switch_styles() {
+    fresh();
+    with_ports();
+    EXPECT(detail::current_page() == Page::Actions);
+    EXPECT(detail::switch_row_count() == 3 && detail::switch_tile_count() == 0);
+    EXPECT(has("Mac mini") && has("HDMI") && has("USB-C") && has("DisplayPort"));
+    EXPECT(detail::switch_icon(0) == static_cast<int>(ui::SourceIcon::Dp) && detail::switch_icon(2) == static_cast<int>(ui::SourceIcon::UsbC));
+    EXPECT(click_text("MacBook M1"));
+    EXPECT(submit_calls == 1 && dh::last_submit_id == "to-m1");
+    check_layout("switch-list"); check_targets("switch-list");
+    // the style is chosen in Settings > Input sources
+    goto_view(Page::Sources);
+    check_layout("sources"); check_targets("sources");
+    EXPECT(click_text("图标")); step();
+    EXPECT(stored_text.find("|icons") != std::string::npos);
+    click_nav(0); step();
+    EXPECT(detail::current_page() == Page::Actions);
+    EXPECT(detail::switch_tile_count() == 3 && detail::switch_row_count() == 0);
+    EXPECT(click_text("MacBook M4"));
+    EXPECT(submit_calls == 2 && dh::last_submit_id == "to-m4");
+    check_layout("switch-icons"); check_targets("switch-icons");
+    // offline: nothing runs
+    mock_snapshot.agent_ready = false; step(); step();
+    click_text("Mac mini");
+    EXPECT(submit_calls == 2);
+    // the style survives a restart
+    const std::string saved = stored_text;
+    start_ui(); with_ports();
+    EXPECT(detail::switch_tile_count() == 3);
+    // more sources than fit: two columns, and the page scrolls
+    for (size_t i = 3; i < 7; ++i) mock_snapshot.actions[i] = {"to-" + std::to_string(i), "PC " + std::to_string(i), "u2720", "hdmi" + std::to_string(i), 1};
+    mock_snapshot.action_count = 7; step(); step();
+    EXPECT(detail::switch_tile_count() == 7);
+    check_layout("switch-icons-many"); check_targets("switch-icons-many");
+}
+static void case_source_rename() {
+    fresh();
+    with_ports();
+    goto_view(Page::Sources);
+    EXPECT(click_text("MacBook M1")); step();
+    EXPECT(detail::current_page() == Page::SourceEdit);
+    check_layout("source-edit"); check_targets("source-edit");
+    // back from the keyboard stores nothing
+    EXPECT(click_text("名字")); step();
+    EXPECT(detail::rename_open());
+    EXPECT(has("空格"));
+    for (const char *c : {"x", "y"}) EXPECT(click_text(c));
+    detail::rename_back(); step();
+    EXPECT(!detail::rename_open() && stored_sources.empty() && sources_saves == 0);
+    // type a new name; Done stores it
+    EXPECT(click_text("名字")); step();
+    for (int i = 0; i < 12; ++i) detail::rename_erase();   // the App name is there to start with
+    for (const char *c : {"o", "f", "f", "i", "c", "e"}) EXPECT(click_text(c));
+    check_layout("rename-keyboard"); check_targets("rename-keyboard");
+    EXPECT(click_text("完成")); step();
+    EXPECT(!detail::rename_open() && stored_sources.find("office") != std::string::npos);
+    EXPECT(detail::current_page() == Page::SourceEdit && has("office"));
+    // an icon
+    EXPECT(tap_area(detail::icon_choice_area, static_cast<int>(ui::SourceIcon::Laptop), 0));
+    EXPECT(stored_sources.find("laptop") != std::string::npos);
+    click_nav(0); step();
+    EXPECT(has("office") && !has("MacBook M1") && detail::switch_icon(1) == static_cast<int>(ui::SourceIcon::Laptop));
+    // it survives a restart
+    start_ui(); with_ports();
+    EXPECT(has("office"));
+    // a failed save keeps the old name and says so
+    goto_view(Page::Sources);
+    EXPECT(click_text("office")); step();
+    sources_ok = false;
+    EXPECT(tap_area(detail::icon_choice_area, static_cast<int>(ui::SourceIcon::Tv), 0));
+    EXPECT(has("保存失败") && stored_sources.find("laptop") != std::string::npos);
+    click_nav(0); step();
+    EXPECT(detail::switch_icon(1) == static_cast<int>(ui::SourceIcon::Laptop));   // the screen keeps what is stored, too
+    goto_view(Page::Sources);
+    EXPECT(click_text("office")); step();
+    // restore: the App's name and icon are back
+    sources_ok = true;
+    EXPECT(click_text("恢复 App 的名字和图标")); step();
+    EXPECT(stored_sources.find("to-m1") == std::string::npos);
+    click_nav(0); step();
+    EXPECT(has("MacBook M1") && detail::switch_icon(1) == static_cast<int>(ui::SourceIcon::Hdmi));
+    // factory reset forgets the names too
+    goto_view(Page::Sources); EXPECT(click_text("MacBook M1")); step();
+    EXPECT(click_text("名字")); step();
+    EXPECT(click_text("z")); EXPECT(click_text("完成")); step();
+    EXPECT(!stored_sources.empty());
+    goto_view(Page::Device);
+    EXPECT(click_text("恢复出厂设置")); step(); EXPECT(click_text("再次点击确认删除")); step();
+    EXPECT(stored_sources.empty());
+    goto_view(Page::Actions);
+    EXPECT(has("MacBook M1") && !has("z"));                  // the App's name is back on the screen, not only in the store
+}
+static void case_themes() {
+    fresh();
+    EXPECT(detail::current_appearance().theme == ui::ThemeId::Night);
+    EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x000000)));
+    goto_view(Page::Appearance);
+    EXPECT(has("夜航") && has("薄荷夜色") && has("深海蓝") && has("暖橙"));
+    EXPECT(click_text("薄荷夜色"));
+    EXPECT(detail::current_appearance().theme == ui::ThemeId::Mint && stored_text.rfind("mint|", 0) == 0);
+    EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03100e)));
+    EXPECT(click_text("夜航"));
+    EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x000000)));
+    // what 0.3.x stored: the night theme with the old colour
+    fresh("amber|-|zh-CN|standard|pct|standard");
+    EXPECT(detail::current_appearance().theme == ui::ThemeId::Night && detail::look.palette.accent == 0xff9e4a);
+}
+static void case_clock_page() {
+    fresh();
+    goto_view(Page::Clock);
+    for (int i = 0; i < 4; ++i) NOTE(detail::clock_dot_lit(i), "dot " << i);
+    EXPECT(has("11:00") || contains(":"));
+    mock_snapshot.agent_ready = false; step();
+    EXPECT(detail::clock_dot_lit(0) && !detail::clock_dot_lit(1) && detail::clock_dot_lit(2) && detail::clock_dot_lit(3));
+    mock_snapshot.wifi_ready = false; mock_snapshot.wifi = "未配置"; step();
+    EXPECT(!detail::clock_dot_lit(0));
+    power_auto = false; mock_power.observed_ms = mock_ms - 100; step(7000);
+    EXPECT(!detail::clock_dot_lit(2));
+    mock_snapshot.time_valid = false; step();
+    EXPECT(!detail::clock_dot_lit(3) && has("--:--"));
+    for (int i = -1; i <= 4; i += 5) EXPECT(!detail::clock_dot_lit(i));
+    goto_view(Page::Home);
+    EXPECT(!detail::clock_dot_lit(0));                       // no dots on another page
+}
+static void case_no_metrics() {
+    fresh();
+    for (size_t i = 0; i < kViews.size(); ++i) {
+        goto_view(kViews[i].first, kViews[i].second);
+        NOTE(!contains("CPU") && !has("内存") && !has("23%") && !has("48%"), view_name(i));
+        NOTE(!mock_snapshot.metrics_visible, view_name(i));
+    }
+}
 static void case_init_lock() {
     for (esp_err_t bad : {ESP_ERR_TIMEOUT, ESP_ERR_INVALID_STATE}) {
         reset_world();
@@ -603,12 +850,13 @@ static void case_heartbeat() {
 }
 static void case_matrix() {
     int views = 0;
-    for (const char *theme : {"mint", "ocean", "amber"})
+    for (const char *theme : {"night", "mint", "ocean", "amber"})
         for (const char *lang : {"zh-CN", "en-US"})
             for (const char *size : {"small", "standard", "large"}) {
-                fresh(std::string(theme) + "|-|" + lang + "|" + size);
+                fresh(std::string(theme) + "|-|" + lang + "|" + size + "|pct|standard|S+O+C-P-|list");
+                with_ports();
                 if (std::string(lang) == "en-US") {  // action names come from the user's Agent; the English check is for our own text
-                    mock_snapshot.actions[0].label = "To Mac"; mock_snapshot.actions[1].label = "To PC"; step();
+                    mock_snapshot.actions[0].label = "To Mac"; mock_snapshot.actions[1].label = "To PC"; mock_snapshot.actions[2].label = "To M4"; step();
                 }
                 for (size_t i = 0; i < kViews.size(); ++i) {
                     goto_view(kViews[i].first, kViews[i].second);
@@ -616,6 +864,20 @@ static void case_matrix() {
                     check_layout(where);
                     check_targets(where);
                     ++views;
+                }
+                {   // the switch page as tiles, and the navigation with all five buttons
+                    detail::request_switch_style(ui::SwitchStyle::Icons); step(); step();
+                    goto_view(Page::Actions);
+                    const std::string where = std::string(theme) + "/" + lang + "/" + size + "/switch-icons";
+                    check_layout(where);
+                    check_targets(where);
+                    fresh(std::string(theme) + "|-|" + lang + "|" + size + "|pct|standard|P+C+O+S+|icons");
+                    with_ports();
+                    for (Page pg : {Page::Power, Page::Clock, Page::Home, Page::Actions, Page::Settings}) {
+                        goto_view(pg);
+                        check_layout(where + "/nav-five");
+                        check_targets(where + "/nav-five");
+                    }
                 }
                 {   // the pairing page, with the longest strings it can get
                     dh::PairingInfo info; info.code = "ZZZZZZZZ"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "ABCDEFGHJKMN"; info.remaining_s = 299;
@@ -627,7 +889,7 @@ static void case_matrix() {
                     dh::ui_pairing_hide(); step();
                 }
             }
-    EXPECT(views == 3 * 2 * 3 * 14);
+    EXPECT(views == 4 * 2 * 3 * 16);
 }
 static void case_state_fidelity() {
     using detail::header_battery_text;
@@ -635,6 +897,7 @@ static void case_state_fidelity() {
     using detail::header_slashed;
     using detail::header_usb_shown;
     fresh();
+    goto_view(Page::Home);
     // The header is icons: none of the old words is on the screen.
     EXPECT(!contains("电脑在线") && !contains("已连接 ·") && !contains("USB接入") && !contains("电量 ") && !contains("dBm"));
     EXPECT(header_battery_text() == "67" && detail::header_fill_width() > 0 && header_bolt_shown() && header_usb_shown());
@@ -656,14 +919,17 @@ static void case_state_fidelity() {
     EXPECT(header_battery_text().empty() && detail::header_fill_width() == 0 && header_slashed(2) && !header_bolt_shown() && header_usb_shown());
     // stale power: nothing from the old sample, no USB, no bolt
     fresh();
+    goto_view(Page::Home);
     power_auto = false; mock_power.observed_ms = mock_ms - 100; step(7000);
     EXPECT(header_battery_text() == "?" && detail::header_fill_width() == 0 && !header_usb_shown() && !header_bolt_shown() && !detail::ring_lit(2));
     // fault
     fresh();
+    goto_view(Page::Home);
     mock_power.fault = true; step();
     EXPECT(header_battery_text() == "!" && !header_usb_shown() && !header_bolt_shown() && !detail::ring_lit(2));
     // channels: not configured and offline are slashed
     fresh();
+    goto_view(Page::Home);
     mock_snapshot.wifi_ready = false; mock_snapshot.wifi = "未配置"; mock_snapshot.agent_ready = false; mock_snapshot.time_valid = false; step();
     EXPECT(!detail::ring_lit(0) && !detail::ring_lit(1) && detail::ring_lit(2) && !detail::ring_lit(3));
     EXPECT(header_slashed(0) && header_slashed(1) && has("--:--") && has("时间未同步"));
@@ -684,20 +950,10 @@ static void case_state_fidelity() {
     // the percent switched off: the fill stays, the digits go
     fresh("mint|-|zh-CN|standard|nopct|standard");
     EXPECT(header_battery_text().empty() && detail::header_fill_width() > 0);
-    // expired metrics on the Computer page
-    fresh();
-    goto_view(Page::Computer);
-    auto a = arcs();
-    EXPECT(a.size() == 2 && arc_filled(a[0]) && arc_filled(a[1]) && has("23%") && has("48%") && has("电脑指标 · 数据有效"));
-    mock_snapshot.metrics_expires_ms = mock_ms - 1; step();
-    a = arcs();
-    EXPECT(a.size() == 2 && !arc_filled(a[0]) && !arc_filled(a[1]) && !has("23%") && has("指标已过期 · 等待刷新"));
-    mock_snapshot.sampled_ms = 0; step();
-    EXPECT(has("尚未采样 · 等待电脑连接"));
     // power level gauge
     fresh();
     goto_view(Page::Power);
-    a = arcs();
+    auto a = arcs();
     EXPECT(a.size() == 1 && arc_filled(a[0]) && has("67%") && has("PMIC 估算，未验证"));
     mock_power.soc_percent = -1; step();
     EXPECT(!arc_filled(arcs()[0]) && has("--") && has("电量未知"));
@@ -712,31 +968,30 @@ static void case_state_fidelity() {
     EXPECT(has("已接收，等待执行"));
     step(15000);
     EXPECT(!has("已接收，等待执行"));
-    // offline Home variant
+    // offline: the switch page says why nothing can be switched
     fresh();
-    mock_snapshot.agent_ready = false; mock_snapshot.metrics_expires_ms = mock_ms - 1; step();
-    EXPECT(has("指标已过期 · 等待刷新") && contains("Agent 未连接"));
+    mock_snapshot.agent_ready = false; mock_snapshot.metrics_expires_ms = mock_ms - 1; step(); step();
+    EXPECT(!has("指标已过期 · 等待刷新") && contains("Agent 未连接"));
     for (auto *t : touch_targets()) { (void)t; }
 }
 static void case_navigation() {
     fresh();
-    EXPECT(detail::current_page() == Page::Home);
-    click_nav(1); EXPECT(detail::current_page() == Page::Actions);
-    click_nav(2); EXPECT(detail::current_page() == Page::Computer);
-    click_nav(3); EXPECT(detail::current_page() == Page::Settings);
-    click_nav(0); EXPECT(detail::current_page() == Page::Home);
+    EXPECT(detail::current_page() == Page::Actions);
+    click_nav(1); EXPECT(detail::current_page() == Page::Home);
+    click_nav(2); EXPECT(detail::current_page() == Page::Settings);
+    click_nav(0); EXPECT(detail::current_page() == Page::Actions);
     tap(100, 30); EXPECT(detail::current_page() == Page::Connect);       // header left
     tap(380, 30); EXPECT(detail::current_page() == Page::Power);         // header right
-    click_nav(3);
+    click_nav(2);
     struct Row { const char *label; Page page; };
-    for (Row r : {Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"声音", Page::Sound}, Row{"日期与时间", Page::Time}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
-        click_nav(3);
+    for (Row r : {Row{"页面与首页", Page::Pages}, Row{"输入源", Page::Sources}, Row{"显示与亮度", Page::Display}, Row{"外观", Page::Appearance}, Row{"连接与配对", Page::Connect}, Row{"电池与电源", Page::Power}, Row{"声音", Page::Sound}, Row{"日期与时间", Page::Time}, Row{"桌面时钟", Page::Clock}, Row{"设备信息", Page::Device}}) {
+        click_nav(2);
         EXPECT(detail::current_page() == Page::Settings);
         EXPECT(click_text(r.label));
         NOTE(detail::current_page() == r.page, "row " << r.label);
     }
     // tap the clock in the ring
-    click_nav(0); tap(240, 150); EXPECT(detail::current_page() == Page::Clock);
+    click_nav(1); tap(240, 210); EXPECT(detail::current_page() == Page::Clock);
     // power segments
     goto_view(Page::Power);
     EXPECT(click_text("读数")); EXPECT(detail::current_power_tab() == PowerTab::Readings);
@@ -749,10 +1004,10 @@ static void case_wake() {
     EXPECT(detail::current_page() == Page::Clock);
     step(60000);                                    // dimmed after 120 s
     EXPECT(mock_brightness < mock_config.brightness);
-    click_nav(1);                                   // the first touch only wakes
-    EXPECT(detail::current_page() == Page::Clock);
-    click_nav(1);
+    click_nav(1);                                   // the first touch only wakes: the home page, not the button
     EXPECT(detail::current_page() == Page::Actions);
+    click_nav(1);
+    EXPECT(detail::current_page() == Page::Home);
     EXPECT(mock_brightness == mock_config.brightness);
 }
 static void case_actions() {
@@ -776,7 +1031,7 @@ static void case_actions() {
     fresh();
     mock_snapshot.action_count = 0; step();
     goto_view(Page::Actions);
-    EXPECT(has("尚无可用动作"));
+    EXPECT(has("还没有输入源"));
     // layout order from the managed configuration
     fresh();
     mock_config.layout.action_count = 1; mock_config.layout.action_ids[0] = "desktop.switch_to_pc"; mock_config.revision++; step(); step();
@@ -791,14 +1046,14 @@ static void case_appearance() {
     fresh();
     goto_view(Page::Appearance);
     EXPECT(click_text("深海蓝"));
-    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard");
+    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-|list");
     EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Ocean);
     EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03131c)));
     EXPECT(click_text("English"));
-    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard");
-    EXPECT(has("Appearance") && has("Home") && has("Settings") && !contains("外观"));
+    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-|list");
+    EXPECT(has("Appearance") && has("Switch") && has("Status") && has("Settings") && !contains("外观"));
     EXPECT(click_text("Large"));
-    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard");
+    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-|list");
     EXPECT(detail::current_page() == Page::Appearance);  // the page stays
     // a restart restores it
     const std::string saved = stored_text;
@@ -809,16 +1064,16 @@ static void case_appearance() {
     goto_view(Page::Appearance);
     store_ok = false;
     EXPECT(click_text("暖橙"));
-    EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Mint && stored_text.empty() && has("保存失败"));
-    EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03100e)));
+    EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Night && stored_text.empty() && has("保存失败"));
+    EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x000000)));
     // corrupt storage: the default look
     for (const char *bad : {"garbage", "mint|zzzz|zh-CN|standard", "mint|-|fr|standard", "|||"}) {
         fresh(bad);
-        EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Mint && detail::current_appearance().lang == dh::ui::Lang::ZhCN && detail::look.body == &btr_ui_20);
+        EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Night && detail::current_appearance().lang == dh::ui::Lang::ZhCN && detail::look.body == &btr_ui_20);
     }
     // an unreadable accent in storage is not applied
     fresh("mint|0e2a24|zh-CN|standard");
-    EXPECT(detail::look.palette.accent == 0x5ee6b8);
+    EXPECT(detail::look.palette.accent == 0x2fd8ff);   // 0.3.x text: the night theme, and its own accent
     // a readable accent is applied
     fresh("mint|ff7eb6|zh-CN|standard");
     EXPECT(detail::look.palette.accent == 0xff7eb6);
@@ -831,7 +1086,7 @@ static void case_appearance() {
         EXPECT(swatch != nullptr);
         if (swatch) { lv_obj_scroll_to_view_recursive(swatch, LV_ANIM_OFF); lv_obj_update_layout(detail::screen_object()); lv_area_t a; lv_obj_get_coords(swatch, &a); tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2); }
     }
-    EXPECT(stored_text == "mint|4fc3f7|zh-CN|standard|pct|standard" && detail::look.palette.accent == 0x4fc3f7);
+    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-|list" && detail::look.palette.accent == 0x4fc3f7);
     // the page of every tier still draws its own choices selected
     fresh("amber|-|zh-CN|small");
     goto_view(Page::Appearance);
@@ -888,7 +1143,7 @@ static void case_idle_and_leaks() {
         const auto &v = kViews[i % kViews.size()];
         detail::request_page(v.first); detail::request_power_tab(v.second); step(0);
     }
-    detail::request_page(Page::Home); step(0); step(0);
+    detail::request_page(Page::Actions); step(0); step(0);   // the home page, where it started
     EXPECT(detail::live_object_count() == base);
 }
 static void case_orchestration() {
@@ -956,7 +1211,7 @@ static void case_pairing() {
     step();
     EXPECT(has("624819") && has("04:32") && contains("DeskHub-C598") && has("取消配对"));
     EXPECT(has("热点密码") && has("K7M2QX9TWD4P"));
-    EXPECT(!has("总览") && !has("动作"));           // the shell is hidden
+    EXPECT(!has("总览") && !has("切换"));           // the shell is hidden
     EXPECT(detail::pairing_bar_percent() == 90);
     step(2000);
     EXPECT(has("04:30"));
@@ -986,7 +1241,7 @@ static void case_pairing() {
     EXPECT(cancels == 1);
     dh::ui_pairing_hide(); step();
     EXPECT(has("总览") && !has("取消配对"));
-    EXPECT(detail::current_page() == Page::Home);
+    EXPECT(detail::current_page() == Page::Actions);
     save_png_source("state-pairing-hidden");
     dh::ui_pairing_hide(); step();                 // a second hide does nothing
     EXPECT(has("总览"));
@@ -1091,19 +1346,19 @@ static void case_appearance_options() {   // A19
     EXPECT(click_text("隐藏"));
     step(); step();
     EXPECT(chosen("隐藏") && !chosen("显示"));
-    EXPECT(stored_text == "mint|-|zh-CN|standard|nopct|standard" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
+    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-|list" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
     EXPECT(click_text("显示"));
     step(); step();
-    EXPECT(stored_text == "mint|-|zh-CN|standard|pct|standard" && detail::header_battery_text() == "67");
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list" && detail::header_battery_text() == "67");
     EXPECT(click_text("粗"));
     step(); step();
-    EXPECT(stored_text == "mint|-|zh-CN|standard|pct|thick" && chosen("粗") && !chosen("细"));
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-|list" && chosen("粗") && !chosen("细"));
     fresh("mint|-|zh-CN|standard|nopct|thin");      // what is stored is what the page shows as chosen
     goto_view(Page::Appearance);
     EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
     // the rings follow the tier, on the Home page and on the power page; a restart reads the stored tier back
     struct Tier { const char *name; int home, gauge; };
-    for (const Tier &t : {Tier{"thin", 12, 7}, Tier{"standard", 20, 11}, Tier{"thick", 28, 15}}) {
+    for (const Tier &t : {Tier{"thin", 14, 7}, Tier{"standard", 23, 11}, Tier{"thick", 33, 15}}) {
         fresh(std::string("mint|-|zh-CN|standard|pct|") + t.name);
         goto_view(Page::Home);
         EXPECT(detail::home_ring_width() == t.home);
@@ -1112,7 +1367,7 @@ static void case_appearance_options() {   // A19
     }
     fresh("mint|-|zh-CN|standard");                 // what 0.3.x stored
     goto_view(Page::Home);
-    EXPECT(detail::home_ring_width() == 20 && detail::header_battery_text() == "67");
+    EXPECT(detail::home_ring_width() == 23 && detail::header_battery_text() == "67");
     fresh();                                        // saving fails: the old look stays and the page says so
     store_ok = false;
     goto_view(Page::Appearance);
@@ -1212,44 +1467,37 @@ static void case_bolt_in_battery() {   // A26
     EXPECT(!detail::header_bolt_shown());
 }
 static void case_home_without_actions() {   // A27
-    fresh(); step(); step();
-    int rx1 = 0, ry1 = 0, rx2 = 0, ry2 = 0, nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
-    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2));
-    EXPECT(rx2 - rx1 + 1 == 216 && ry1 == detail::kBodyTop);                      // with actions: as it was
-    EXPECT(!detail::home_first_action_label().empty());
-    mock_snapshot.action_count = 0; step(); step();
-    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && detail::home_notice_area(&nx1, &ny1, &nx2, &ny2));
-    const int d = rx2 - rx1 + 1, body_end = detail::kBodyTop + detail::kBodyH;
-    NOTE(d >= 240 && d <= 264, "the ring is " << d << " px wide, not 240 to 264");
-    EXPECT(std::abs((rx1 + rx2) / 2 - 240) <= 1);
-    const int top = ry1 - detail::kBodyTop, bottom = body_end - ny2;
-    NOTE(ny1 >= ry2 + 4 && ny2 <= body_end, "the line is not under the ring and inside the body: ring ends " << ry2 << ", line [" << ny1 << "," << ny2 << "]");
-    NOTE(top >= 8 && bottom >= 8 && std::abs(top - bottom) <= 6, "a blank band is left: " << top << " px over the ring and " << bottom << " px under the line");
-    EXPECT(detail::home_first_action_label().empty());
-    EXPECT(detail::home_ring_width() == 23);                                      // the thickness grows with the ring: 20 of 216 is 23 of 252
-    check_layout("home-no-actions"); save_png_source("state-home-no-actions");
-    const int cy = (ry1 + ry2) / 2;
-    tap(240, cy - 10); step();                                                    // the clock in the middle
-    EXPECT(detail::current_page() == Page::Clock);
-    fresh(); mock_snapshot.action_count = 0; step(); step();
-    tap(240, cy + 50); step();                                                    // the lower end of the place of the date: the clock moved with the ring
-    EXPECT(detail::current_page() == Page::Clock);
-    // The dot before the line is on the line.
-    fresh(); mock_snapshot.action_count = 0; mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; step(); step();
-    int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
-    EXPECT(detail::home_notice_area(&nx1, &ny1, &nx2, &ny2) && detail::home_notice_dot_area(&dx1, &dy1, &dx2, &dy2));
-    NOTE(dy1 >= ny1 && dy2 <= ny2 + 1, "the dot [" << dy1 << "," << dy2 << "] is not on the line [" << ny1 << "," << ny2 << "]");
-    fresh(); mock_snapshot.action_count = 0; step(); step();
-    tap(rx1 + 10, cy); step();                                                    // on the ring itself
-    EXPECT(detail::ring_info_open());
-    EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
-    tap(rx2 - 8, cy); step();                                                     // the far rim of the larger ring is part of the touch area
-    EXPECT(detail::ring_info_open());
-    EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
-    // the actions come back: the ring is small again, at the top, with the cards under it
-    fresh(); mock_snapshot.action_count = 0; step(); step();
-    fresh(); step(); step();
-    EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && rx2 - rx1 + 1 == 216 && ry1 == detail::kBodyTop && !detail::home_first_action_label().empty());
+    for (const size_t count : {size_t{2}, size_t{0}}) {
+        fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
+        int rx1 = 0, ry1 = 0, rx2 = 0, ry2 = 0, nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
+        EXPECT(detail::home_ring_area(&rx1, &ry1, &rx2, &ry2) && detail::home_notice_area(&nx1, &ny1, &nx2, &ny2));
+        const int d = rx2 - rx1 + 1, body_end = detail::kBodyTop + detail::kBodyH;
+        NOTE(d == 252, "the ring is " << d << " px wide, not 252");
+        EXPECT(std::abs((rx1 + rx2) / 2 - 240) <= 1);
+        const int top = ry1 - detail::kBodyTop, bottom = body_end - ny2;
+        NOTE(ny1 >= ry2 + 4 && ny2 <= body_end, "the line is not under the ring and inside the body: ring ends " << ry2 << ", line [" << ny1 << "," << ny2 << "]");
+        NOTE(top >= 8 && bottom >= 8 && std::abs(top - bottom) <= 6, "a blank band is left: " << top << " px over the ring and " << bottom << " px under the line");
+        EXPECT(detail::home_first_action_label().empty());                        // no cards on the overview
+        EXPECT(detail::home_ring_width() == 23);                                  // the thickness grows with the ring: 20 of 216 is 23 of 252
+        check_layout("overview"); save_png_source(count ? "state-overview" : "state-overview-no-actions");
+        const int cy = (ry1 + ry2) / 2;
+        tap(240, cy - 10); step();                                                // the clock in the middle
+        EXPECT(detail::current_page() == Page::Clock);
+        fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
+        tap(240, cy + 50); step();                                                // the lower end of the place of the date
+        EXPECT(detail::current_page() == Page::Clock);
+        fresh(); mock_snapshot.action_count = count; mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; goto_view(Page::Home); step();
+        int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+        EXPECT(detail::home_notice_area(&nx1, &ny1, &nx2, &ny2) && detail::home_notice_dot_area(&dx1, &dy1, &dx2, &dy2));
+        NOTE(dy1 >= ny1 && dy2 <= ny2 + 1, "the dot [" << dy1 << "," << dy2 << "] is not on the line [" << ny1 << "," << ny2 << "]");
+        fresh(); mock_snapshot.action_count = count; goto_view(Page::Home); step();
+        tap(rx1 + 10, cy); step();                                                // on the ring itself
+        EXPECT(detail::ring_info_open());
+        EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
+        tap(rx2 - 8, cy); step();                                                 // the far rim is part of the touch area
+        EXPECT(detail::ring_info_open());
+        EXPECT(click_text("关闭")); step(); EXPECT(!detail::ring_info_open());
+    }
 }
 static void case_pairing_keeps_awake() {   // A22
     fresh();
@@ -1268,18 +1516,19 @@ static void case_no_setup_card() {   // A23
     for (const bool agent : {true, false}) {
         fresh();
         mock_snapshot.action_count = 0; mock_snapshot.agent_ready = agent; step(); step();
-        EXPECT(!has("设置网络与配对") && !has("首次设置") && !has("尚无可用动作"));   // the home page: nothing in the place of the cards
+        goto_view(Page::Home); step();
+        EXPECT(!has("设置网络与配对") && !has("首次设置") && !has("还没有输入源"));   // the overview: nothing about the sources
         goto_view(Page::Actions); step();
         EXPECT(!has("设置网络与配对") && !has("首次设置"));
-        EXPECT(has("尚无可用动作") && has("在 Agent 绑定显示器后，动作会显示在这里。"));
+        EXPECT(has("还没有输入源") && has("App 绑定显示器后，输入源会显示在这里。"));
         check_layout("no-actions"); check_targets("no-actions");
     }
 }
 static void case_ring_info() {   // A24
-    fresh(); step(); step();
+    fresh(); goto_view(Page::Home); step();
     EXPECT(has("点圆环看说明") && !detail::ring_info_open());
-    tap(240, 150); EXPECT(detail::current_page() == Page::Clock);              // the clock in the middle is unchanged
-    fresh(); step(); step();
+    tap(240, 210); EXPECT(detail::current_page() == Page::Clock);              // the clock in the middle is unchanged
+    fresh(); goto_view(Page::Home); step();
     EXPECT(!detail::notice_dot_shown());                                         // the hint has no dot
     tap(142, 170); step();                                                       // on the ring, outside the clock
     EXPECT(detail::ring_info_open() && detail::ring_info_dot_filled(0) && detail::ring_info_dot_filled(1) && detail::ring_info_dot_filled(2) && detail::ring_info_dot_filled(3));
@@ -1292,7 +1541,7 @@ static void case_ring_info() {   // A24
     tap(240, 90); step(); EXPECT(detail::ring_info_open());                      // a tap on the sheet itself does not close it
     tap(240, 470); step(); EXPECT(!detail::ring_info_open());                    // a tap outside the sheet closes it
     // A dark segment is named under the ring and explained in the sheet.
-    fresh(); mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; step(); step();
+    fresh(); mock_snapshot.agent_ready = false; mock_snapshot.agent = "未配对"; goto_view(Page::Home); step();
     EXPECT(has("电脑没连上") && !has("点圆环看说明") && detail::notice_dot_shown());   // the dot is the colour of the dark segment
     tap(142, 170); step();
     EXPECT(detail::ring_info_open() && has("没连上") && has("未配对") && has("已连接"));
@@ -1317,13 +1566,13 @@ static void case_ring_info() {   // A24
     mock_snapshot.command = "已接收，等待执行"; step();
     EXPECT(has("已接收，等待执行") && !has("电脑没连上") && !detail::notice_dot_shown());   // another note has no dot
     // Wi-Fi down names the network, and the computer row says it needs Wi-Fi first.
-    fresh(); mock_snapshot.wifi_ready = false; mock_snapshot.agent_ready = false; mock_snapshot.wifi = "未配置"; step(); step();
+    fresh(); mock_snapshot.wifi_ready = false; mock_snapshot.agent_ready = false; mock_snapshot.wifi = "未配置"; goto_view(Page::Home); step();
     EXPECT(has("网络没连上"));
     tap(142, 170); step();
     EXPECT(has("未配置网络") && has("要先连上 Wi-Fi"));
     EXPECT(click_text("关闭")); step();
     // English.
-    fresh("mint|-|en-US|standard|pct|standard"); step(); step();
+    fresh("mint|-|en-US|standard|pct|standard"); goto_view(Page::Home); step();
     EXPECT(has("Tap the ring for details"));
     tap(142, 170); step();
     EXPECT(has("Status ring") && has("Network") && has("Computer") && has("Close"));
@@ -1332,7 +1581,7 @@ static void case_ring_info() {   // A24
 }
 static void case_sound() {   // A25
     fresh(); step(); step();
-    click_nav(3); EXPECT(detail::current_page() == Page::Settings);
+    click_nav(2); EXPECT(detail::current_page() == Page::Settings);
     EXPECT(has("声音") && has("提示音、音量、试听"));
     EXPECT(click_text("声音")); step();
     EXPECT(detail::current_page() == Page::Sound);
@@ -1419,7 +1668,7 @@ static void case_sound() {   // A25
 //      turns the local time into UTC by the zone and writes the RTC; a refused time keeps the numbers and says so.
 static void case_time() {
     fresh(); step(); step();
-    click_nav(3); EXPECT(has("日期与时间") && has("时区、手动校时"));
+    click_nav(2); EXPECT(has("日期与时间") && has("时区、手动校时"));
     EXPECT(click_text("日期与时间")); step(); EXPECT(detail::current_page() == Page::Time);
     EXPECT(has("时区") && has("手动校时") && has("UTC+8") && has("保存时间") && has("-1") && has("+1"));
     check_layout("time"); check_targets("time");
@@ -1611,20 +1860,27 @@ static void case_wifi_keyboard() {
 
 static void case_screenshots() {
     if (out_dir.empty()) return;
-    for (const char *theme : {"mint", "ocean", "amber"}) {
-        fresh(std::string(theme) + "|-|zh-CN|standard");
+    for (const char *theme : {"night", "mint", "ocean", "amber"}) {
+        fresh(std::string(theme) + "|-|zh-CN|standard|pct|standard|S+O+C-P-|list");
+        with_ports();
         for (size_t i = 0; i < kViews.size(); ++i) {
             goto_view(kViews[i].first, kViews[i].second);
             save_png_source(std::string(theme) + "-" + view_name(i));
         }
     }
-    fresh("mint|ff7eb6|en-US|large");
+    fresh("night|ff7eb6|en-US|large|pct|standard|S+O+C-P-|icons");
+    with_ports();
     for (size_t i : {0, 1, 4, 8}) { goto_view(kViews[i].first, kViews[i].second); save_png_source(std::string("en-large-") + view_name(i)); }
-    fresh("ocean|-|zh-CN|small");
+    fresh("night|-|zh-CN|small|pct|standard|S+O+C-P-|icons");
+    with_ports();
     for (size_t i : {0, 3, 8}) { goto_view(kViews[i].first, kViews[i].second); save_png_source(std::string("zh-small-") + view_name(i)); }
-    fresh();   // offline Home
-    mock_snapshot.agent_ready = false; mock_snapshot.metrics_expires_ms = mock_ms - 1; step(); step();
+    fresh();   // offline
+    with_ports();
+    mock_snapshot.agent_ready = false; step(); step();
     save_png_source("state-offline");
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-|icons");
+    with_ports();
+    save_png_source("state-switch-icons");
     fresh();
     dh::PairingInfo info; info.code = "624819"; info.hotspot = "DeskHub-C598"; info.hotspot_password = "K7M2QX9TWD4P"; info.remaining_s = 272;
     dh::ui_pairing_show(info, [] {}); step();
@@ -1657,13 +1913,18 @@ int main(int argc, char **argv) {
         {"idle_and_leaks", case_idle_and_leaks}, {"orchestration", case_orchestration}, {"pairing_page", case_pairing},
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
+        {"pages_and_home", case_pages_and_home}, {"wake_goes_home", case_wake_goes_home}, {"switch_styles", case_switch_styles},
+        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page},
         {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
     std::ostringstream report;
     report << "{\n  \"simulation_only\": true,\n  \"cases\": [\n";
     bool first = true;
     for (const auto &c : cases) {
-        if (const char *only=std::getenv("DESKHUB_PREVIEW_CASE")) { if (std::string(c.name)!=only) continue; }
+        if (const char *only=std::getenv("DESKHUB_PREVIEW_CASE")) {   // one case, or several split by commas
+            const std::string list = std::string(",") + only + ",";
+            if (list.find(std::string(",") + c.name + ",") == std::string::npos) continue;
+        }
         current_case = c.name;
         failures_now.clear();
         c.fn();

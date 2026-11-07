@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>电池与电源</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size: 40px 40px; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+
+  <div style="position: absolute; left: 52px; right: 52px; top: 20px; height: 28px; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; gap: 14px; align-items: center">
+      <svg width="24" height="22" viewBox="0 0 24 24" fill="none" stroke="#2fd8ff" stroke-width="2" stroke-linecap="round" role="img" aria-label="Wi-Fi 已连接"><path d="M2 9a15 15 0 0 1 20 0"></path><path d="M5.5 12.5a10 10 0 0 1 13 0"></path><path d="M9 16a5 5 0 0 1 6 0"></path><path d="M12 19.5h.01"></path></svg>
+      <svg width="24" height="22" viewBox="0 0 24 24" fill="none" stroke="#59f0a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="App 在线"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"></rect><path d="M8.5 20.5h7M12 16v4.5"></path></svg>
+    </div>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="USB 供电"><path d="M12 3v14"></path><path d="M8 7l4-4 4 4"></path><circle cx="12" cy="19" r="2"></circle></svg>
+  </div>
+
+  <svg width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="电量 96%" style="position: absolute; left: 120px; top: 56px">
+    <g transform="rotate(135 120 120)">
+      <circle cx="120" cy="120" r="104" fill="none" stroke="#0f1a22" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="75 25"></circle>
+      <circle cx="120" cy="120" r="104" fill="none" stroke="#59f0a6" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="72 28"></circle>
+      <circle cx="120" cy="120" r="88" fill="none" stroke="#1d2b35" stroke-width="5" pathLength="100" stroke-dasharray="0.6 2.4"></circle>
+      <circle cx="120" cy="120" r="104" fill="none" stroke="#ffb547" stroke-width="18" pathLength="100" stroke-dasharray="0.8 99.2" stroke-dashoffset="-67.5"></circle>
+    </g>
+  </svg>
+  <div style="position: absolute; left: 120px; top: 56px; width: 240px; height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center">
+    <span style="font-family: Montserrat, sans-serif; font-weight: 300; font-size: 68px; line-height: 1">96<span style="font-size: 26px; color: #9fb4be">%</span></span>
+    <span style="margin-top: 6px; font-size: 15px; color: #59f0a6">已停充 · 保护上限 90%</span>
+  </div>
+
+  <div style="position: absolute; left: 44px; right: 44px; top: 300px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+    <div style="height: 70px; box-sizing: border-box; padding: 10px 12px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b; display: flex; flex-direction: column; justify-content: space-between">
+      <span style="font-size: 12px; color: #7f97a3">电池</span>
+      <span style="font-family: Montserrat, sans-serif; font-size: 20px; font-weight: 500">4.10<span style="font-size: 13px; color: #7f97a3"> V</span></span>
+    </div>
+    <div style="height: 70px; box-sizing: border-box; padding: 10px 12px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b; display: flex; flex-direction: column; justify-content: space-between">
+      <span style="font-size: 12px; color: #7f97a3">USB</span>
+      <span style="font-family: Montserrat, sans-serif; font-size: 20px; font-weight: 500">5.16<span style="font-size: 13px; color: #7f97a3"> V</span></span>
+    </div>
+    <div style="height: 70px; box-sizing: border-box; padding: 10px 12px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b; display: flex; flex-direction: column; justify-content: space-between">
+      <span style="font-size: 12px; color: #7f97a3">芯片温度</span>
+      <span style="font-family: Montserrat, sans-serif; font-size: 20px; font-weight: 500">38<span style="font-size: 13px; color: #7f97a3"> 度</span></span>
+    </div>
+  </div>
+
+  <nav aria-label="主导航" style="position: absolute; left: 44px; right: 44px; bottom: 18px; height: 60px; box-sizing: border-box; padding: 4px; display: flex; gap: 4px; border-radius: 30px; background: #05080c; box-shadow: inset 0 0 0 1px #15212b">
+    <a href="Main.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">切换</a>
+    <a href="HomeRing.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">总览</a>
+    <a href="HomeClock.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">时钟</a>
+    <a href="HomePower.dc.html" aria-current="page" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: {{accent}}; background: {{accentSoft}}; box-shadow: inset 0 0 0 1px {{accentLine}}">电源</a>
+    <a href="Settings.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">设置</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.accent ?? '#2fd8ff';
+    const rgb = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).join(',');
+    return { accent: a, accentSoft: 'rgba(' + rgb + ',0.12)', accentLine: 'rgba(' + rgb + ',0.6)' };
+  }
+}
+</script>
+</body>
+</html>

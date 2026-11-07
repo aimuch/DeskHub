@@ -16,7 +16,9 @@ LV_FONT_DECLARE(btr_ui_28);
 LV_FONT_DECLARE(font_clock_72);
 
 namespace dh::ui::detail {
-enum class Page : uint8_t { Home, Actions, Computer, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time };
+// Home is the status overview and Actions is the switch page (the names are older than the v2 design).
+enum class Page : uint8_t { Home, Actions, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time, Pages, Sources, SourceEdit };
+Page page_of(View);   // the page that shows a view of the navigation
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
 // The panel has rounded corners (Waveshare does not publish the radius). Text and marks in the four corners must stay
@@ -61,6 +63,8 @@ struct Frame {
     std::string last_error;               // result of the last settings action
     std::string rotation_error;
     bool confirm_reset = false;
+    SourceNames sources;                  // the local names and icons of the input sources
+    std::string edit_id;                  // the source the edit page is about
 };
 
 // ---- ui_kit.cpp: equality-guarded setters (LVGL 9.4 invalidates even when a style is set to its current value) ----
@@ -83,6 +87,12 @@ lv_obj_t *button(lv_obj_t *parent, lv_event_cb_t cb, void *data, int w, int h); 
 lv_obj_t *pill(lv_obj_t *parent, const std::string &text, uint32_t ink, uint32_t fill, uint32_t edge, const lv_font_t *font);
 lv_obj_t *arc_segment(lv_obj_t *parent, int size, int start, int end, uint32_t rgb, int width, lv_opa_t opa);
 lv_obj_t *gauge(lv_obj_t *parent, int size, int width, uint32_t rgb);
+// ---- ui_icons.cpp: the icons of the input sources, drawn as strokes on a 24 grid (docs/design v2 SourceEdit) ----
+lv_obj_t *source_icon(lv_obj_t *parent, SourceIcon, int size, uint32_t rgb, int stroke);
+void source_icon_ink(lv_obj_t *, uint32_t rgb);
+SourceIcon source_icon_of(lv_obj_t *);   // what an icon object draws; Auto for anything else
+// The 60 ticks of the clock page: the five-minute ones longer and in `major`.
+lv_obj_t *tick_ring(lv_obj_t *parent, int size, uint32_t minor, uint32_t major);
 void gauge_set(lv_obj_t *, bool valid, float percent, uint32_t rgb);
 void ensure_touch_target(lv_obj_t *);  // lv_obj_set_ext_click_area up to kMinTarget
 
@@ -118,6 +128,18 @@ void request_time_zone(int delta);    // the next or the previous zone: saved at
 bool request_time_save(const std::string &utc);   // false: not set, and the page says so
 void request_time_redraw();
 void request_pairing();              // "pair" on the Connect page: asks the backend for the hotspot
+void request_pages_toggle(int slot);  // the switch of a row of the Pages page: stored at once; the last shown page stays and the page says so
+void request_pages_move(int slot, int delta);
+void request_switch_style(SwitchStyle);
+void request_source_edit(size_t index);   // the edit page of the source shown at this index of the switch actions
+void request_source_icon(SourceIcon);     // for the source of the edit page; Auto restores the App's
+void request_source_restore();
+bool request_source_name(const std::string &name);   // from the keyboard; false: not stored (the page says so)
+// ---- ui_rename.cpp: the keyboard for the name of a source (docs/design Dev-Keyboard, without the password parts) ----
+void rename_start(const std::string &current);
+bool rename_opened();
+void rename_tick(bool blocked, bool pairing);
+void rename_reset();
 void wifi_close();
 bool wifi_opened();
 void wifi_tick(lv_obj_t *screen, int64_t now, bool blocked, bool pairing);
@@ -162,6 +184,19 @@ int power_gauge_width();            // px thickness of the gauge on the Level ta
 bool ring_lit(int index);           // 0 wifi, 1 agent, 2 power, 3 time; false when the page has no ring
 std::string home_first_action_label();
 lv_obj_t *accent_swatch(int index); // Appearance page only, otherwise nullptr
+int nav_count();                     // the buttons of the navigation, Settings included
+std::string nav_text(int index);
+bool nav_area(int index, int *x1, int *y1, int *x2, int *y2);
+// The Pages page: `which` 0 the switch, 1 up, 2 down of the row `slot`.
+bool pages_control_area(int slot, int which, int *x1, int *y1, int *x2, int *y2);
+bool icon_choice_area(int icon, int unused, int *x1, int *y1, int *x2, int *y2);   // the edit page: the button of a SourceIcon
+int switch_row_count();              // the switch page: rows in the list style, 0 otherwise
+int switch_tile_count();             // the switch page: tiles in the icon style, 0 otherwise
+int switch_icon(int index);          // the SourceIcon the switch page draws for a source; -1 when there is none
+bool clock_dot_lit(int index);       // the clock page: 0 Wi-Fi, 1 App, 2 power, 3 time; false on any other page
+bool rename_open();
+void rename_back();
+void rename_erase();
 int pairing_bar_percent();          // length of the countdown bar in percent, -1 without a pairing page
 void reset_for_test();  // drops the screen, timer and every piece of state, so a test can call ui_start() again
 }  // namespace dh::ui::detail

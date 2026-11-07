@@ -11,6 +11,9 @@ constexpr Palette kOcean = {0x03131c, 0x062a3a, 0x0a2130, 0x173c50, 0xe6f6ff, 0x
                             0x4fc3f7, 0x4de0b6, 0xffc857, 0x9fa8ff, 0xff7b7b};
 constexpr Palette kAmber = {0x120c08, 0x24150a, 0x1e1510, 0x3a2a1f, 0xf5e9dc, 0xb09a85, 0xff9e4a, 0x3a2412, 0x2a1f17,
                             0x45c8ea, 0x8ddf6c, 0xffb347, 0xdb8ff2, 0xff7b7b};
+// Night: pure black, so nothing is lit but what is drawn. selected = the card with 16 % of the accent.
+constexpr Palette kNight = {0x000000, 0x000000, 0x070b10, 0x15212b, 0xe8f3f7, 0x7f97a3, 0x2fd8ff, 0x0d2c36, 0x0f1a22,
+                            0x2fd8ff, 0x59f0a6, 0xffb547, 0xb18cff, 0xff7b7b};
 
 double channel(uint32_t v) {
     const double c = v / 255.0;
@@ -44,22 +47,25 @@ const Palette &theme_palette(ThemeId id) {
     switch (id) {
     case ThemeId::Ocean: return kOcean;
     case ThemeId::Amber: return kAmber;
-    case ThemeId::Mint: break;
+    case ThemeId::Mint: return kMint;
+    case ThemeId::Night: break;
     }
-    return kMint;
+    return kNight;
 }
 ThemeId theme_from_name(const std::string &name) {
     if (name == "ocean") return ThemeId::Ocean;
     if (name == "amber") return ThemeId::Amber;
-    return ThemeId::Mint;
+    if (name == "mint") return ThemeId::Mint;
+    return ThemeId::Night;
 }
 const char *theme_name(ThemeId id) {
     switch (id) {
     case ThemeId::Ocean: return "ocean";
     case ThemeId::Amber: return "amber";
-    case ThemeId::Mint: break;
+    case ThemeId::Mint: return "mint";
+    case ThemeId::Night: break;
     }
-    return "mint";
+    return "night";
 }
 
 double contrast_ratio(uint32_t a, uint32_t b) {

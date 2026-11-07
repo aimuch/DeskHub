@@ -20,6 +20,9 @@ namespace {
 Page page = Page::Home, desired = Page::Home;
 PowerTab tab = PowerTab::Level, desired_tab = PowerTab::Level;
 Appearance appearance;
+SourceNames sources;          // the local names and icons of the input sources
+std::string edit_id;          // the source of the edit page
+bool clock_forced = false;    // idling put the clock page up: waking goes back to the home page
 lv_obj_t *screen = nullptr, *body = nullptr, *shield = nullptr, *pairing_view = nullptr, *blank = nullptr;
 lv_timer_t *ui_timer = nullptr;
 DisplayPolicy policy;
@@ -67,6 +70,10 @@ void active_touch(lv_event_t *ev) {
     if (lv_event_get_code(ev) == LV_EVENT_PRESSED) policy.last_activity_ms = monotonic_ms();
 }
 
+// The pages that keep their own message (a save that failed there), cleared when the page changes.
+bool own_error(Page p) { return p == Page::Appearance || p == Page::Pages || p == Page::Sources || p == Page::SourceEdit; }
+Page home_page() { return page_of(home_view(appearance.pages)); }
+
 // Everything the pages read, taken once per tick.
 Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool want_paired) {
     Frame f;
@@ -82,15 +89,18 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.config_pending = config_due != 0;
     f.effective_brightness = policy.effective;
     f.mode = policy.mode;
-    f.last_error = desired == Page::Appearance ? appearance_error : last_error;
+    f.last_error = own_error(desired) ? appearance_error : last_error;
     f.rotation_error = rotation_error;
     f.confirm_reset = confirm_reset;
+    f.sources = sources;
+    f.edit_id = edit_id;
     return f;
 }
 
 void rebuild_shell() {
     if (wifi_opened()) wifi_close();
     wifi_reset();
+    rename_reset();
     lv_obj_clean(screen);
     pairing_view = nullptr;
     build_shell(screen);
@@ -144,18 +154,22 @@ void update() {
     {   // The pairing page is read, not touched: the code and the hotspot password must not vanish with the screen.
         // Night limits and power protection are policy rules of their own and still apply.
         std::lock_guard<std::mutex> lock(pairing_mutex);
-        if (pairing_on || wifi_opened()) policy.last_activity_ms = now;
+        if (pairing_on || wifi_opened() || rename_opened()) policy.last_activity_ms = now;
     }
     policy.update(c, now, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min));
-    bool visible = page == Page::Computer && policy.mode == DisplayMode::Active;
-    if (s.metrics_visible != visible) mutate([](Snapshot &v, void *p) { v.metrics_visible = *static_cast<bool *>(p); }, &visible);
+    // The device shows no metrics of the computer any more: the Agent is never asked for them.
+    if (s.metrics_visible) mutate([](Snapshot &v, void *) { v.metrics_visible = false; });
     const bool blocked = policy.mode == DisplayMode::Off || policy.mode == DisplayMode::Dimmed || policy.gesture_blocked;
     set_hidden(shield, !blocked);
     if (old_brightness != policy.effective) {
         if (board_brightness(policy.effective) == ESP_OK) old_brightness = policy.effective;
         else last_error = tr(look.lang, Str::BrightnessFailed);
     }
-    if (policy.mode == DisplayMode::Clock && page != Page::Clock) desired = Page::Clock;
+    if (policy.mode == DisplayMode::Clock && page != Page::Clock && !clock_forced) { desired = Page::Clock; clock_forced = true; }
+    if (policy.mode == DisplayMode::Active && clock_forced) {   // awake again: home, unless a button already chose a page
+        clock_forced = false;
+        if (desired == Page::Clock) desired = home_page();
+    }
 
     // A new look replaces the whole screen. It runs here, never inside the event that asked for it.
     if (look_dirty) {
@@ -191,7 +205,7 @@ void update() {
         actions_changed = a.id != b.id || a.target != b.target || a.input != b.input || a.label != b.label || a.generation != b.generation;
     }
     const bool need_build = page != desired || tab != desired_tab || rebuilding || rendered_revision != c.revision ||
-                            ((page == Page::Home || page == Page::Actions) && actions_changed) || !built || built_agent != s.agent_ready;
+                            ((page == Page::Actions || page == Page::Sources || page == Page::SourceEdit) && actions_changed) || !built || built_agent != s.agent_ready;
     Frame f = make_frame(s, c, now, desired == Page::Connect);
     if (need_build) {
         const bool same = page == desired;
@@ -201,7 +215,7 @@ void update() {
         tab = desired_tab;
         if (page != Page::Device) confirm_reset = false;
         f.confirm_reset = confirm_reset;
-        f.last_error = page == Page::Appearance ? appearance_error : last_error;
+        f.last_error = own_error(page) ? appearance_error : last_error;
         build_page(body, page, tab, f);
         rendered_revision = c.revision;
         rebuilding = false;
@@ -216,6 +230,7 @@ void update() {
     if (!pairing_now) refresh_page(page, tab, f);
     if (pairing_view) refresh_pairing(info, deadline, now);
     wifi_tick(screen, now, blocked, pairing_now);
+    rename_tick(blocked, pairing_now);
     if (blocked && shield) lv_obj_move_foreground(shield);
 
     // Always-on keeps the mode Active, so the clock page still needs its burn-in shift.
@@ -233,6 +248,15 @@ void update() {
 }  // namespace
 
 // ---------------------------------------------------------------- what the pages ask for
+Page page_of(View v) {
+    switch (v) {
+    case View::Switch: return Page::Actions;
+    case View::Clock: return Page::Clock;
+    case View::Power: return Page::Power;
+    case View::Overview: break;
+    }
+    return Page::Home;
+}
 void request_update() { if (ui_timer) lv_timer_ready(ui_timer); }
 void note_activity() { policy.last_activity_ms = monotonic_ms(); }
 void request_page(Page p) { desired = p; note_activity(); request_update(); }
@@ -314,6 +338,61 @@ void request_time_redraw() {
     rebuilding = true;
     request_update();
 }
+// The Pages page. Hiding the last shown page is refused there and said there; the ends of the list do nothing.
+void request_pages_toggle(int slot) {
+    Appearance next = appearance;
+    if (slot < 0 || !pages_toggle(next.pages, static_cast<size_t>(slot))) {
+        note_activity();
+        appearance_error = tr(look.lang, Str::PagesKeepOne);
+        rebuilding = true;
+        request_update();
+        return;
+    }
+    apply_appearance(next);
+}
+void request_pages_move(int slot, int delta) {
+    Appearance next = appearance;
+    if (slot < 0 || !pages_move(next.pages, static_cast<size_t>(slot), delta)) { note_activity(); return; }
+    apply_appearance(next);
+}
+void request_switch_style(SwitchStyle style) {
+    Appearance next = appearance;
+    next.style = style;
+    apply_appearance(next);
+}
+// The names and icons of the sources. A change that cannot be stored leaves the old one and says so on the page.
+namespace {
+void store_sources(const SourceNames &next, bool valid) {
+    note_activity();
+    if (!valid || !sources_save(serialize_sources(next))) appearance_error = tr(look.lang, Str::SaveFailed);
+    else { sources = next; appearance_error.clear(); }
+    rebuilding = true;
+    request_update();
+}
+}  // namespace
+void request_source_edit(size_t index) {
+    note_activity();
+    if (index >= shown_count) return;
+    edit_id = shown_actions[index].id;
+    desired = Page::SourceEdit;
+    request_update();
+}
+void request_source_icon(SourceIcon icon) {
+    SourceNames next = sources;
+    const bool ok = set_source_icon(next, edit_id, icon);
+    store_sources(next, ok);
+}
+void request_source_restore() {
+    SourceNames next = sources;
+    reset_source(next, edit_id);
+    store_sources(next, true);
+}
+bool request_source_name(const std::string &name) {
+    SourceNames next = sources;
+    const bool ok = set_source_name(next, edit_id, name);
+    store_sources(next, ok);
+    return ok && appearance_error.empty();
+}
 void request_pairing() {
     note_activity();
     if (pairing_request) pairing_request();
@@ -367,7 +446,7 @@ void do_factory_reset() {
     if (reset_config() == ESP_OK) {
         // The sound and the appearance live in namespaces of their own, apart from the configuration: forget them too.
         const bool sound = audio::reset_settings(), shown = store_clear();
-        if (shown) { appearance = Appearance{}; look = make_look(appearance); look_dirty = true; }
+        if (shown) { appearance = Appearance{}; sources.clear(); look = make_look(appearance); look_dirty = true; }
         last_error = tr(look.lang, sound && shown ? Str::ResetDone : Str::ResetPartial);  // stay on the page, so the message is read
         confirm_reset = false;
     } else last_error = tr(look.lang, Str::ResetFailed);
@@ -415,6 +494,10 @@ void reset_for_test() {
     page = desired = Page::Home;
     tab = desired_tab = PowerTab::Level;
     appearance = Appearance{};
+    sources.clear();
+    edit_id.clear();
+    clock_forced = false;
+    rename_reset();
     look = make_look(appearance);
     policy = DisplayPolicy{};
     old_brightness = -1; applied_rotation = 0; attempted_rotation = -1;
@@ -440,7 +523,9 @@ void ui_start() {
     struct DisplayLockGuard { ~DisplayLockGuard() { esp_lv_adapter_unlock(); } } guard;
     mutate([](Snapshot &s, void *) { if (s.error.rfind("UI_LOCK_FAILED:", 0) == 0) s.error.clear(); });
     appearance = ui::parse_appearance(ui::store_load());
+    sources = ui::parse_sources(ui::sources_load());
     look = make_look(appearance);
+    page = desired = home_page();   // the device starts on the home page
     screen = lv_obj_create(nullptr);
     lv_obj_remove_style_all(screen);
     lv_obj_set_size(screen, kScreen, kScreen);

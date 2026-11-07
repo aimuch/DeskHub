@@ -76,7 +76,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/ui_preview/harness.cpp` | 恢复出厂的 F1 到 F4：声音和外观也被清掉，删不掉时要说 |
 | `scripts/ui_preview/touch_orientation_test.cpp` | 补上显示锁的替身：0.3.13 以后 `render.py` 整条命令链接失败，这个回归一直没有运行 |
 | `firmware/components/board_support/`（`display_buffers.cpp`、`board.cpp`、`CMakeLists.txt`）、`firmware/tests/`（`display_buffers_test.cpp`、`board_cache_test.cpp`、`board_stubs/esp_lv_adapter_display.h`、`CMakeLists.txt`）、`scripts/ui_preview/touch_orientation_test.cpp` | 绘图缓冲开机预留在内部内存（拦截 `esp_lv_adapter_register_display`），LVGL 任务栈 12 KB 放 PSRAM；去掉横纹的根源 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.16，各两处 |
+| `firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/`（`harness.cpp`、`CMakeLists.txt`） | 界面 v2：页面与首页、切换页样式、输入源名字和图标、夜航主题，去掉电脑指标（T24 到 T27、A28 到 A34） |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.17，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 

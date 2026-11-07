@@ -5,14 +5,15 @@
 #include <string>
 
 namespace dh::ui {
-enum class ThemeId { Mint, Ocean, Amber };
+// Night is the default (docs/design v2, "夜航仪表"): pure black. The other three are the classic themes.
+enum class ThemeId { Mint, Ocean, Amber, Night };
 // 0xRRGGBB. `accent` and `selected` are the two colours a custom accent changes; the rest belongs to the theme.
 struct Palette {
     uint32_t bg, bg2, card, edge, ink, muted, accent, selected, track, wifi, agent, power, clock, danger;
 };
 const Palette &theme_palette(ThemeId);
-ThemeId theme_from_name(const std::string &name);  // anything unknown is Mint
-const char *theme_name(ThemeId);                   // "mint", "ocean", "amber"
+ThemeId theme_from_name(const std::string &name);  // anything unknown is Night
+const char *theme_name(ThemeId);                   // "night", "mint", "ocean", "amber"
 
 // The battery icon is filled with the colour of its level at this strength (percent) and the digits are drawn over the
 // fill in ink. 40 keeps the digits at 4.5:1 or better in every theme (tested in ui_model_test.cpp, T20).

@@ -7,6 +7,7 @@
 #include "core.hpp"
 #include "ui_text.hpp"
 #include "ui_theme.hpp"
+#include <array>
 #include <cstdint>
 #include <ctime>
 #include <string>
@@ -21,18 +22,58 @@ FontPx font_px(SizeTier);
 enum class RingTier { Thin, Standard, Thick };
 struct RingPx { int home, gauge; };
 RingPx ring_px(RingTier);  // Thin 12/7, Standard 20/11 (what it was before the tiers), Thick 28/15
+// ---- pages (docs/design v2 Pages): which pages are in the navigation, in which order; the first shown one is the home page ----
+enum class View : uint8_t { Switch, Overview, Clock, Power };
+constexpr size_t kViewCount = 4;
+struct PageSlot { View view; bool shown; };
+using PageOrder = std::array<PageSlot, kViewCount>;
+PageOrder default_pages();                          // Switch and Overview shown, Clock and Power hidden
+View home_view(const PageOrder &);                  // the first shown page
+std::vector<View> nav_views(const PageOrder &);     // the shown pages, in order (Settings comes after them, always)
+bool pages_toggle(PageOrder &, size_t slot);        // false: out of range, or it is the last shown page
+bool pages_move(PageOrder &, size_t slot, int delta);   // delta -1 or +1; false at the ends or out of range
+std::string serialize_pages(const PageOrder &);     // "S+O+C-P-"
+bool parse_pages(const std::string &, PageOrder &); // false (and `out` untouched) unless every page is there once and one is shown
+// How the switch page shows the input sources.
+enum class SwitchStyle : uint8_t { List, Icons };
+
 struct Appearance {
-    ThemeId theme = ThemeId::Mint;
+    ThemeId theme = ThemeId::Night;
     uint32_t accent = 0;  // 0 = the theme's own
     Lang lang = Lang::ZhCN;
     SizeTier size = SizeTier::Standard;
     bool show_percent = true;  // the digits inside the battery icon of the header
     RingTier ring = RingTier::Standard;
+    PageOrder pages = default_pages();
+    SwitchStyle style = SwitchStyle::List;
 };
-std::string serialize(const Appearance &);            // "mint|5ee6b8|zh-CN|standard|pct|standard"
-// The four fields that 0.3.x stored are still understood (the two new options are the defaults). Anything else that is
-// malformed is the default appearance.
+std::string serialize(const Appearance &);            // "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list"
+// What 0.3.x stored (4 or 6 fields) is still understood: the theme becomes night and keeps its own colour as the accent,
+// unless an accent was chosen. Anything else that is malformed is the default appearance.
 Appearance parse_appearance(const std::string &);
+
+// ---- input sources: the App's switch actions, with a name and an icon the person may set on the device ----
+enum class SourceIcon : uint8_t { Auto, Hdmi, Dp, UsbC, Laptop, Desktop, Monitor, Console, Tv };
+extern const std::array<SourceIcon, 8> kIconChoices;   // what the edit page offers (Auto is "restore")
+const char *icon_key(SourceIcon);                       // "auto", "hdmi", ... as stored
+SourceIcon port_icon(const std::string &input_id);      // read from the words of the id; Monitor when no port is named
+std::string port_tag(const std::string &input_id);      // "HDMI", "DisplayPort", "USB-C"; "" when no port is named
+struct SourceLocal { std::string id, name; SourceIcon icon = SourceIcon::Auto; };
+using SourceNames = std::vector<SourceLocal>;
+constexpr size_t kMaxSourceNames = 12, kMaxSourceName = 32, kMaxSourceId = 48;
+bool valid_source_name(const std::string &);            // 1 to 32 bytes of valid UTF-8 without control characters
+// "" for the name, or Auto for the icon, gives the App's back. false: a bad id or name, or a 13th source.
+bool set_source_name(SourceNames &, const std::string &id, const std::string &name);
+bool set_source_icon(SourceNames &, const std::string &id, SourceIcon);
+void reset_source(SourceNames &, const std::string &id);
+std::string serialize_sources(const SourceNames &);
+SourceNames parse_sources(const std::string &);         // a damaged text is nothing at all
+struct SourceView {
+    std::string id, name, tag, sub;
+    SourceIcon icon = SourceIcon::Monitor;   // never Auto: what is drawn
+    bool enabled = false, renamed = false;
+};
+std::vector<SourceView> make_sources(Lang, const Snapshot &, const SourceNames &);   // at most 12, in the order of the snapshot
 
 // ---- shared ----
 enum class Tone { Ok, Info, Warn, Danger, Off };
@@ -82,11 +123,9 @@ TimeDraft time_draft(bool time_valid, time_t utc_now, int tz_minutes);    // the
 void time_draft_step(TimeDraft &, int field, int delta);                  // wraps, except the year (2024 to 2099); the day stays in its month
 std::string time_draft_utc(const TimeDraft &, int tz_minutes);            // "2026-11-05T06:32:00Z"; empty for a time that does not exist or that the core refuses
 
-// ---- computer ----
+// ---- gauges ----
 struct Gauge { bool valid = false; float percent = 0; std::string text = "--"; };
 Gauge parse_percent(const std::string &raw, bool fresh);  // "23.4%" is valid; "--", 150%, -1% and text are not
-struct ComputerView { Gauge cpu, memory; std::string rx, tx, footer; Tone footer_tone = Tone::Off; };
-ComputerView make_computer(Lang, const Snapshot &, int64_t now_ms);
 
 // ---- power ----
 struct PowerView {

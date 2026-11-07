@@ -92,10 +92,76 @@ RingPx ring_px(RingTier t) {
     }
     return {20, 11};
 }
+// ---- pages ----
+namespace {
+char view_letter(View v) { return v == View::Switch ? 'S' : v == View::Overview ? 'O' : v == View::Clock ? 'C' : 'P'; }
+bool view_of(char c, View &v) {
+    switch (c) {
+    case 'S': v = View::Switch; return true;
+    case 'O': v = View::Overview; return true;
+    case 'C': v = View::Clock; return true;
+    case 'P': v = View::Power; return true;
+    default: return false;
+    }
+}
+}  // namespace
+PageOrder default_pages() { return {{{View::Switch, true}, {View::Overview, true}, {View::Clock, false}, {View::Power, false}}}; }
+View home_view(const PageOrder &o) {
+    for (const auto &s : o) if (s.shown) return s.view;
+    return View::Switch;   // parse_pages and pages_toggle never leave none shown
+}
+std::vector<View> nav_views(const PageOrder &o) {
+    std::vector<View> out;
+    for (const auto &s : o) if (s.shown) out.push_back(s.view);
+    if (out.empty()) out.push_back(View::Switch);
+    return out;
+}
+bool pages_toggle(PageOrder &o, size_t slot) {
+    if (slot >= o.size()) return false;
+    if (o[slot].shown) {
+        size_t shown = 0;
+        for (const auto &s : o) shown += s.shown ? 1 : 0;
+        if (shown <= 1) return false;
+    }
+    o[slot].shown = !o[slot].shown;
+    return true;
+}
+bool pages_move(PageOrder &o, size_t slot, int delta) {
+    if ((delta != -1 && delta != 1) || slot >= o.size()) return false;
+    if ((delta < 0 && slot == 0) || (delta > 0 && slot + 1 >= o.size())) return false;
+    std::swap(o[slot], o[static_cast<size_t>(static_cast<int>(slot) + delta)]);
+    return true;
+}
+std::string serialize_pages(const PageOrder &o) {
+    std::string out;
+    for (const auto &s : o) { out += view_letter(s.view); out += s.shown ? '+' : '-'; }
+    return out;
+}
+bool parse_pages(const std::string &text, PageOrder &out) {
+    if (text.size() != 2 * kViewCount) return false;
+    PageOrder o{};
+    std::array<bool, kViewCount> seen{};
+    bool any = false;
+    for (size_t i = 0; i < kViewCount; ++i) {
+        View v;
+        if (!view_of(text[2 * i], v) || seen[static_cast<size_t>(v)]) return false;
+        const char flag = text[2 * i + 1];
+        if (flag != '+' && flag != '-') return false;
+        seen[static_cast<size_t>(v)] = true;
+        o[i] = {v, flag == '+'};
+        any = any || flag == '+';
+    }
+    if (!any) return false;
+    out = o;
+    return true;
+}
+
+// ---- appearance ----
 std::string serialize(const Appearance &a) {
     return std::string(theme_name(a.theme)) + "|" + (a.accent ? fmt("%06x", static_cast<unsigned>(a.accent & 0xffffff)) : std::string("-")) + "|" +
            lang_name(a.lang) + "|" + size_name(a.size) + "|" + (a.show_percent ? "pct" : "nopct") + "|" +
-           (a.ring == RingTier::Thin ? "thin" : a.ring == RingTier::Thick ? "thick" : "standard");
+           (a.ring == RingTier::Thin ? "thin" : a.ring == RingTier::Thick ? "thick" : "standard") + "|" + serialize_pages(a.pages) + "|" +
+           (a.style == SwitchStyle::Icons ? "icons" : "list");
 }
 Appearance parse_appearance(const std::string &text) {
     Appearance out;
@@ -108,11 +174,13 @@ Appearance parse_appearance(const std::string &text) {
         if (bar == std::string::npos) break;
         from = bar + 1;
     }
-    if (field.size() != 4 && field.size() != 6) return Appearance{};
+    if (field.size() != 4 && field.size() != 6 && field.size() != 8) return Appearance{};
+    const bool old = field.size() != 8;   // 0.3.x: the classic themes were the only ones
     Appearance a;
     if (field[0] == "mint") a.theme = ThemeId::Mint;
     else if (field[0] == "ocean") a.theme = ThemeId::Ocean;
     else if (field[0] == "amber") a.theme = ThemeId::Amber;
+    else if (field[0] == "night" && !old) a.theme = ThemeId::Night;
     else return Appearance{};
     if (field[1] == "-") a.accent = 0;
     else if (hex6(field[1])) a.accent = static_cast<uint32_t>(strtoul(field[1].c_str(), nullptr, 16));
@@ -124,7 +192,7 @@ Appearance parse_appearance(const std::string &text) {
     else if (field[3] == "standard") a.size = SizeTier::Standard;
     else if (field[3] == "large") a.size = SizeTier::Large;
     else return Appearance{};
-    if (field.size() == 6) {
+    if (field.size() >= 6) {
         if (field[4] == "pct") a.show_percent = true;
         else if (field[4] == "nopct") a.show_percent = false;
         else return Appearance{};
@@ -133,7 +201,187 @@ Appearance parse_appearance(const std::string &text) {
         else if (field[5] == "thick") a.ring = RingTier::Thick;
         else return Appearance{};
     }
+    if (field.size() == 8) {
+        if (!parse_pages(field[6], a.pages)) return Appearance{};
+        if (field[7] == "list") a.style = SwitchStyle::List;
+        else if (field[7] == "icons") a.style = SwitchStyle::Icons;
+        else return Appearance{};
+    }
+    if (old) {   // the new look, with the colour the person had: ocean's blue is close to night's own
+        if (a.accent == 0 && a.theme != ThemeId::Ocean) a.accent = theme_palette(a.theme).accent;
+        a.theme = ThemeId::Night;
+    }
     return a;
+}
+
+// ---- input sources ----
+const std::array<SourceIcon, 8> kIconChoices = {SourceIcon::Hdmi, SourceIcon::Dp, SourceIcon::UsbC, SourceIcon::Laptop,
+                                                SourceIcon::Desktop, SourceIcon::Monitor, SourceIcon::Console, SourceIcon::Tv};
+const char *icon_key(SourceIcon i) {
+    switch (i) {
+    case SourceIcon::Hdmi: return "hdmi";
+    case SourceIcon::Dp: return "dp";
+    case SourceIcon::UsbC: return "usbc";
+    case SourceIcon::Laptop: return "laptop";
+    case SourceIcon::Desktop: return "desktop";
+    case SourceIcon::Monitor: return "monitor";
+    case SourceIcon::Console: return "console";
+    case SourceIcon::Tv: return "tv";
+    case SourceIcon::Auto: break;
+    }
+    return "auto";
+}
+namespace {
+bool icon_of(const std::string &key, SourceIcon &out) {
+    for (SourceIcon i : {SourceIcon::Auto, SourceIcon::Hdmi, SourceIcon::Dp, SourceIcon::UsbC, SourceIcon::Laptop, SourceIcon::Desktop,
+                         SourceIcon::Monitor, SourceIcon::Console, SourceIcon::Tv})
+        if (key == icon_key(i)) { out = i; return true; }
+    return false;
+}
+// The words of an input id, in lower case, with a trailing number taken off: "Mini-DP2" is {"mini", "dp"}.
+std::vector<std::string> id_words(const std::string &id) {
+    std::vector<std::string> words;
+    std::string w;
+    auto flush = [&] {
+        while (!w.empty() && w.back() >= '0' && w.back() <= '9') w.pop_back();
+        if (!w.empty()) words.push_back(w);
+        w.clear();
+    };
+    for (char c : id) {
+        const char l = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+        if ((l >= 'a' && l <= 'z') || (l >= '0' && l <= '9')) w += l;
+        else flush();
+    }
+    flush();
+    return words;
+}
+bool valid_utf8_text(const std::string &s) {
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t n = 0;
+        uint32_t cp = 0;
+        if (c < 0x80) { if (c < 0x20 || c == 0x7f) return false; ++i; continue; }
+        if ((c >> 5) == 6) { n = 2; cp = c & 0x1f; }
+        else if ((c >> 4) == 14) { n = 3; cp = c & 0x0f; }
+        else if ((c >> 3) == 30) { n = 4; cp = c & 0x07; }
+        else return false;
+        if (i + n > s.size()) return false;
+        for (size_t k = 1; k < n; ++k) {
+            const unsigned char d = static_cast<unsigned char>(s[i + k]);
+            if ((d >> 6) != 2) return false;
+            cp = (cp << 6) | (d & 0x3f);
+        }
+        if ((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && (cp < 0x10000 || cp > 0x10ffff)) || (cp >= 0xd800 && cp <= 0xdfff) ||
+            (cp >= 0x80 && cp < 0xa0))
+            return false;
+        i += n;
+    }
+    return true;
+}
+bool valid_source_id(const std::string &id) { return !id.empty() && id.size() <= kMaxSourceId && valid_utf8_text(id); }
+SourceLocal *find_source(SourceNames &names, const std::string &id) {
+    for (auto &n : names) if (n.id == id) return &n;
+    return nullptr;
+}
+// The entry for `id`, made when there is room; nullptr for a bad id or a 13th source.
+SourceLocal *entry_for(SourceNames &names, const std::string &id) {
+    if (!valid_source_id(id)) return nullptr;
+    if (auto *e = find_source(names, id)) return e;
+    if (names.size() >= kMaxSourceNames) return nullptr;
+    names.push_back({id, "", SourceIcon::Auto});
+    return &names.back();
+}
+void drop_empty(SourceNames &names) {
+    names.erase(std::remove_if(names.begin(), names.end(), [](const SourceLocal &n) { return n.name.empty() && n.icon == SourceIcon::Auto; }), names.end());
+}
+}  // namespace
+SourceIcon port_icon(const std::string &input_id) {
+    const auto w = id_words(input_id);
+    for (size_t i = 0; i < w.size(); ++i) {
+        if (w[i] == "hdmi") return SourceIcon::Hdmi;
+        if (w[i] == "dp" || w[i] == "displayport") return SourceIcon::Dp;
+        if (w[i] == "usbc" || w[i] == "typec" || w[i] == "thunderbolt") return SourceIcon::UsbC;
+        if ((w[i] == "usb" || w[i] == "type") && i + 1 < w.size() && w[i + 1] == "c") return SourceIcon::UsbC;
+    }
+    return SourceIcon::Monitor;
+}
+std::string port_tag(const std::string &input_id) {
+    switch (port_icon(input_id)) {
+    case SourceIcon::Hdmi: return "HDMI";
+    case SourceIcon::Dp: return "DisplayPort";
+    case SourceIcon::UsbC: return "USB-C";
+    default: return "";
+    }
+}
+bool valid_source_name(const std::string &name) { return !name.empty() && name.size() <= kMaxSourceName && valid_utf8_text(name); }
+bool set_source_name(SourceNames &names, const std::string &id, const std::string &name) {
+    if (!name.empty() && !valid_source_name(name)) return false;
+    if (name.empty() && valid_source_id(id) && !find_source(names, id)) return true;   // nothing to forget
+    auto *e = entry_for(names, id);
+    if (!e) return false;
+    e->name = name;
+    drop_empty(names);
+    return true;
+}
+bool set_source_icon(SourceNames &names, const std::string &id, SourceIcon icon) {
+    if (icon == SourceIcon::Auto && valid_source_id(id) && !find_source(names, id)) return true;
+    auto *e = entry_for(names, id);
+    if (!e) return false;
+    e->icon = icon;
+    drop_empty(names);
+    return true;
+}
+void reset_source(SourceNames &names, const std::string &id) {
+    names.erase(std::remove_if(names.begin(), names.end(), [&](const SourceLocal &n) { return n.id == id; }), names.end());
+}
+// Records end with 0x1e, fields are split by 0x1f: neither can be in an id or a name (no control characters).
+std::string serialize_sources(const SourceNames &names) {
+    std::string out;
+    for (const auto &n : names) out += n.id + '\x1f' + n.name + '\x1f' + icon_key(n.icon) + '\x1e';
+    return out;
+}
+SourceNames parse_sources(const std::string &text) {
+    SourceNames out;
+    if (text.size() > 2048) return {};
+    size_t from = 0;
+    while (from < text.size()) {
+        const size_t end = text.find('\x1e', from);
+        if (end == std::string::npos) return {};
+        const std::string record = text.substr(from, end - from);
+        from = end + 1;
+        const size_t a = record.find('\x1f');
+        const size_t b = a == std::string::npos ? std::string::npos : record.find('\x1f', a + 1);
+        if (b == std::string::npos || record.find('\x1f', b + 1) != std::string::npos) return {};
+        SourceLocal n;
+        n.id = record.substr(0, a);
+        n.name = record.substr(a + 1, b - a - 1);
+        if (!valid_source_id(n.id) || (!n.name.empty() && !valid_source_name(n.name)) || !icon_of(record.substr(b + 1), n.icon)) return {};
+        if (n.name.empty() && n.icon == SourceIcon::Auto) return {};
+        if (find_source(out, n.id) || out.size() >= kMaxSourceNames) return {};
+        out.push_back(n);
+    }
+    return out;
+}
+std::vector<SourceView> make_sources(Lang l, const Snapshot &s, const SourceNames &names) {
+    std::vector<SourceView> out;
+    const size_t n = std::min<size_t>(s.action_count, s.actions.size());
+    for (size_t i = 0; i < n; ++i) {
+        const Action &a = s.actions[i];
+        SourceView v;
+        v.id = a.id;
+        v.name = a.label.empty() ? a.id : dynamic_text(l, a.label);
+        v.icon = port_icon(a.input);
+        v.tag = port_tag(a.input);
+        for (const auto &local : names) {
+            if (local.id != a.id || a.id.empty()) continue;
+            if (!local.name.empty()) { v.name = local.name; v.renamed = true; }
+            if (local.icon != SourceIcon::Auto) v.icon = local.icon;
+        }
+        v.enabled = s.agent_ready;
+        if (!v.enabled) v.sub = T(l, Str::ActionOffline);
+        out.push_back(v);
+    }
+    return out;
 }
 
 // ---- freshness ----
@@ -281,7 +529,7 @@ ClockView make_clock(Lang l, bool time_valid, time_t utc_now) {
     return c;
 }
 
-// ---- computer ----
+// ---- gauges ----
 Gauge parse_percent(const std::string &raw, bool fresh) {
     Gauge g;
     if (!fresh) return g;
@@ -299,20 +547,6 @@ Gauge parse_percent(const std::string &raw, bool fresh) {
     g.text = fmt("%.0f%%", v);
     return g;
 }
-ComputerView make_computer(Lang l, const Snapshot &s, int64_t now_ms) {
-    ComputerView c;
-    const bool fresh = metrics_fresh(s, now_ms);
-    c.cpu = parse_percent(s.cpu, fresh);
-    c.memory = parse_percent(s.memory, fresh);
-    auto rate = [&](const std::string &v) { return fresh && !v.empty() && v != "不可用" ? v : std::string("--"); };
-    c.rx = rate(s.network);
-    c.tx = rate(s.network_send);
-    if (s.sampled_ms == 0) { c.footer = T(l, Str::MetricsWaiting); c.footer_tone = Tone::Off; }
-    else if (!fresh) { c.footer = T(l, Str::MetricsExpired); c.footer_tone = Tone::Warn; }
-    else { c.footer = T(l, Str::MetricsFresh); c.footer_tone = Tone::Ok; }
-    return c;
-}
-
 // ---- power ----
 PowerView make_power(Lang l, const PowerState &p, int64_t now_ms) {
     PowerView v;

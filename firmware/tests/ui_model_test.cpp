@@ -19,7 +19,7 @@
 // T12 Clock: invalid time shows "--:--" and "not synced", never 1970. Valid time uses the local time zone.
 // T13 Percent parsing: only "<0..100>%" counts. "--", text, NaN, inf, negative, over 100, trailing junk, a missing
 //     "%" and stale data are invalid and show "--", never 0 %.
-// T14 Computer: not sampled, expired and fresh are three different footers. Gauges, rates are "--" unless fresh.
+// T14 (gone in 0.3.17: the device no longer shows the computer's CPU, memory and network.)
 // T15 Power readings: "--" with a reason note when the ADC failed, the sample is stale or the PMIC faulted;
 //     values outside the plausible range are refused even when the board says ADC_OK; rounding is correct.
 // T16 Connection rows: no IP or signal while Wi-Fi is down; a signal outside -127..-1 is "--".
@@ -29,6 +29,23 @@
 //     "stopped" and "restored" are never claimed when the state of the switch is not known; the switch-on button is
 //     disabled, with the reason, when it could not work; the switch-off button is always there while protection is on;
 //     the failsafe words say why, and say nothing when the reason is not known.
+// T24 Pages (docs/design v2 Pages): the default is Switch and Overview shown, Clock and Power hidden; the home page is the
+//     first SHOWN page, not the first slot; the last shown page cannot be hidden; a move swaps with the neighbour and is
+//     refused at the ends and for a slot out of range (nothing changes); the navigation lists the shown pages in order,
+//     never empty, never twice. Every order and every non-empty choice round-trips. A text with a page missing or twice,
+//     an unknown letter, a bad flag, the wrong length or no page shown is refused, never half-read.
+// T25 Appearance, 0.3.17 format (8 fields: + pages, + switch style). Round-trips. The default is the night theme. What
+//     0.3.x stored (4 or 6 fields) is still read: the theme becomes night and keeps its colour as the accent (an accent
+//     that was chosen stays), the pages and the style are the defaults. 7 or 9 fields, a bad style, bad pages: default.
+// T26 The night theme: the tokens of docs/design/README.md (v2), pure black, readable like the others (T1, T4).
+// T27 Input sources: the port of an input id is read from its words (hdmi, dp/displayport, usbc/usb-c/type-c/thunderbolt,
+//     with or without a number), never from a part of a word; anything else is a plain display, with no port tag.
+//     The name on the device is the local one, else the App label, else the id; the icon is the local one, else the port's.
+//     A local entry for a source that the App no longer sends is not shown. Offline: disabled, with the reason. At most 12.
+//     A name is 1 to 32 bytes of printable text (no control characters, valid UTF-8); "" means "use the App's name". An entry
+//     with neither a name nor an icon is dropped. At most 12 entries: a 13th source is refused, a known one can still change.
+//     The stored text round-trips; a damaged one (bad icon, duplicate id, empty id, control characters, too many, too long,
+//     a missing field) is read as nothing at all, never as half a list.
 #include "ui_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -66,7 +83,7 @@ static int failures = 0;
     } while (0)
 
 static const int64_t NOW = 100000;
-static const std::array<ThemeId, 3> kThemes = {ThemeId::Mint, ThemeId::Ocean, ThemeId::Amber};
+static const std::array<ThemeId, 4> kThemes = {ThemeId::Night, ThemeId::Mint, ThemeId::Ocean, ThemeId::Amber};
 
 static PowerState fresh_power() {
     PowerState p;
@@ -179,6 +196,16 @@ static void t1_palettes_readable() {
     CHECK_EQ(theme_palette(ThemeId::Ocean).card, 0x0a2130u);
     CHECK_EQ(theme_palette(ThemeId::Amber).ink, 0xf5e9dcu);
 }
+// ---- T26 ----
+static void t26_night_theme() {
+    const Palette &n = theme_palette(ThemeId::Night);
+    CHECK_EQ(n.bg, 0x000000u); CHECK_EQ(n.bg2, 0x000000u);   // pure black: no gradient, nothing lit on an AMOLED
+    CHECK_EQ(n.card, 0x070b10u); CHECK_EQ(n.edge, 0x15212bu);
+    CHECK_EQ(n.ink, 0xe8f3f7u); CHECK_EQ(n.muted, 0x7f97a3u);
+    CHECK_EQ(n.accent, 0x2fd8ffu);
+    CHECK_EQ(n.wifi, 0x2fd8ffu); CHECK_EQ(n.agent, 0x59f0a6u); CHECK_EQ(n.power, 0xffb547u); CHECK_EQ(n.clock, 0xb18cffu);
+    CHECK(std::string(theme_name(ThemeId::Night)) == "night");
+}
 static void t2_contrast_maths() {
     CHECK(std::fabs(contrast_ratio(0x000000, 0xffffff) - 21.0) < 0.01);
     CHECK(std::fabs(contrast_ratio(0x336699, 0x336699) - 1.0) < 1e-9);
@@ -246,38 +273,66 @@ static void t5_appearance() {
             for (Lang l : {Lang::ZhCN, Lang::EnUS})
                 for (SizeTier z : {SizeTier::Small, SizeTier::Standard, SizeTier::Large})
                     for (bool percent : {true, false})
-                        for (RingTier r : {RingTier::Thin, RingTier::Standard, RingTier::Thick}) {
-                            Appearance a;
-                            a.theme = t; a.accent = accent; a.lang = l; a.size = z; a.show_percent = percent; a.ring = r;
-                            const Appearance b = parse_appearance(serialize(a));
-                            CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z && b.show_percent == percent && b.ring == r);
-                            ++combos;
-                        }
-    CHECK_EQ(combos, 54 * 2 * 3);
+                        for (RingTier r : {RingTier::Thin, RingTier::Standard, RingTier::Thick})
+                            for (SwitchStyle st : {SwitchStyle::List, SwitchStyle::Icons}) {
+                                Appearance a;
+                                a.theme = t; a.accent = accent; a.lang = l; a.size = z; a.show_percent = percent; a.ring = r; a.style = st;
+                                const Appearance b = parse_appearance(serialize(a));
+                                CHECK(b.theme == t && b.accent == accent && b.lang == l && b.size == z && b.show_percent == percent && b.ring == r && b.style == st);
+                                ++combos;
+                            }
+    CHECK_EQ(combos, 4 * 3 * 2 * 3 * 2 * 3 * 2);
     Appearance d;
-    CHECK(d.show_percent && d.ring == RingTier::Standard);   // the battery percent is shown unless you turn it off
-    CHECK_EQ(serialize(d), std::string("mint|-|zh-CN|standard|pct|standard"));
+    CHECK(d.show_percent && d.ring == RingTier::Standard && d.theme == ThemeId::Night && d.style == SwitchStyle::List);
+    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list"));
     Appearance a;
     a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large; a.show_percent = false; a.ring = RingTier::Thick;
-    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick"));
-    // What 0.3.x stored has four fields. It is still understood, and the new options are the defaults.
-    const Appearance old = parse_appearance("ocean|5ee6b8|en-US|large");
-    CHECK(old.theme == ThemeId::Ocean && old.accent == 0x5ee6b8u && old.lang == Lang::EnUS && old.size == SizeTier::Large);
-    CHECK(old.show_percent && old.ring == RingTier::Standard);
+    a.style = SwitchStyle::Icons;
+    a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}}};
+    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons"));
+    const Appearance back = parse_appearance(serialize(a));
+    CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+"));
     const std::vector<std::string> bad = {
         "", "garbage", "mint|-|zh-CN", "mint|-|zh-CN|standard|pct", "mint|-|zh-CN|standard|pct|standard|extra", "mint|zzzzzz|zh-CN|standard|pct|standard",
         "mint|5EE6B8|zh-CN|standard|pct|standard", "mint|5ee6b|zh-CN|standard|pct|standard", "mint|5ee6b8f|zh-CN|standard|pct|standard",
         "pink|-|zh-CN|standard|pct|standard", "mint|-|fr-FR|standard|pct|standard", "mint|-|zh-CN|huge|pct|standard", "||||||", "mint|-|zh-CN|standard|pct|standard\n",
         "mint|-|zh-CN|standard|PCT|standard", "ocean|-|en-US|large|pct", "ocean|5ee6b8|en-US|large|nopct|thick|", "ocean|-|en-US|large|nopct|", "mint|-|zh-CN|standard|maybe|standard", "mint|-|zh-CN|standard|pct|huge", "mint|-|zh-CN|standard||",
-        "mint|zzzzzz|zh-CN|standard", "mint|-|zh-CN|standard\n", std::string(500, 'a'), "mint|-|zh-CN|standard|pct|" + std::string(100, 'x')};
+        "mint|zzzzzz|zh-CN|standard", "mint|-|zh-CN|standard\n", std::string(500, 'a'), "mint|-|zh-CN|standard|pct|" + std::string(100, 'x'),
+        // the 0.3.17 format: 8 fields exactly, a known style, pages that parse
+        "night|-|zh-CN|standard|pct|standard|S+O+C-P-", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|grid",
+        "night|-|zh-CN|standard|pct|standard|S+S+C-P-|list", "night|-|zh-CN|standard|pct|standard|S-O-C-P-|list", "night|-|zh-CN|standard|pct|standard||list",
+        "night|-|zh-CN|standard|pct|standard|S+O+C-P-|LIST", "dusk|-|zh-CN|standard|pct|standard|S+O+C-P-|list", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|x",
+        // 0.3.x never stored the night theme: a short text that names it is damaged
+        "night|-|zh-CN|standard", "night|-|zh-CN|standard|pct|standard"};
     for (const auto &s : bad) {
         const Appearance p = parse_appearance(s);
-        CHECK(p.theme == d.theme && p.accent == d.accent && p.lang == d.lang && p.size == d.size && p.show_percent == d.show_percent && p.ring == d.ring);
+        const bool same = p.theme == d.theme && p.accent == d.accent && p.lang == d.lang && p.size == d.size && p.show_percent == d.show_percent && p.ring == d.ring &&
+                          p.style == d.style && serialize_pages(p.pages) == serialize_pages(d.pages);
+        if (!same) std::fprintf(stderr, "appearance text half-read: [%s]\n", s.c_str());
+        CHECK(same);
     }
-    CHECK(theme_from_name("nonsense") == ThemeId::Mint);
+    CHECK(theme_from_name("nonsense") == ThemeId::Night);
     CHECK(lang_from_name("nonsense") == Lang::ZhCN);
     for (ThemeId t : kThemes) CHECK(theme_from_name(theme_name(t)) == t);
     for (Lang l : {Lang::ZhCN, Lang::EnUS}) CHECK(lang_from_name(lang_name(l)) == l);
+}
+// ---- T25: what 0.3.x stored moves to the night theme and keeps its colour ----
+static void t25_appearance_upgrade() {
+    struct Case { const char *stored; uint32_t accent; };
+    for (Case c : {Case{"mint|-|zh-CN|standard", 0x5ee6b8u}, Case{"ocean|-|zh-CN|standard", 0u}, Case{"amber|-|zh-CN|standard", 0xff9e4au},
+                   Case{"mint|-|en-US|large|nopct|thick", 0x5ee6b8u}, Case{"ocean|-|zh-CN|standard|pct|standard", 0u}, Case{"amber|ff7eb6|zh-CN|small|pct|thin", 0xff7eb6u},
+                   Case{"ocean|5ee6b8|en-US|large", 0x5ee6b8u}}) {
+        const Appearance p = parse_appearance(c.stored);
+        CHECK(p.theme == ThemeId::Night);
+        if (p.accent != c.accent) std::fprintf(stderr, "upgrade of %s: accent %06x\n", c.stored, static_cast<unsigned>(p.accent));
+        CHECK_EQ(p.accent, c.accent);
+        CHECK(p.style == SwitchStyle::List);
+        CHECK_EQ(serialize_pages(p.pages), std::string("S+O+C-P-"));
+    }
+    const Appearance six = parse_appearance("mint|-|en-US|large|nopct|thick");
+    CHECK(six.lang == Lang::EnUS && six.size == SizeTier::Large && !six.show_percent && six.ring == RingTier::Thick);
+    // The 0.3.17 format is taken as it is: a classic theme chosen there stays.
+    CHECK(parse_appearance("mint|-|zh-CN|standard|pct|standard|S+O+C-P-|list").theme == ThemeId::Mint);
 }
 static void t6_font_tiers() {
     const std::set<int> allowed = {16, 20, 28};
@@ -531,47 +586,6 @@ static void t13_percent() {
     CHECK(!g.valid);
     CHECK_EQ(g.text, std::string("--"));
 }
-static void t14_computer() {
-    Snapshot s = online_snapshot();
-    ComputerView c = make_computer(Lang::ZhCN, s, NOW);
-    CHECK(c.cpu.valid && c.memory.valid);
-    CHECK_EQ(c.cpu.text, std::string("23%"));
-    CHECK_EQ(c.memory.text, std::string("61%"));
-    CHECK_EQ(c.rx, std::string("1.2 MB/s"));
-    CHECK_EQ(c.tx, std::string("0.3 MB/s"));
-    CHECK_EQ(c.footer, std::string("电脑指标 · 数据有效"));
-    CHECK(c.footer_tone == Tone::Ok);
-    // Expired.
-    s.metrics_expires_ms = NOW;
-    CHECK(!metrics_fresh(s, NOW));
-    c = make_computer(Lang::ZhCN, s, NOW);
-    CHECK(!c.cpu.valid && !c.memory.valid);
-    CHECK_EQ(c.rx, std::string("--")); CHECK_EQ(c.tx, std::string("--"));
-    CHECK_EQ(c.footer, std::string("指标已过期 · 等待刷新"));
-    CHECK(c.footer_tone == Tone::Warn);
-    s.metrics_expires_ms = NOW + 1;
-    CHECK(metrics_fresh(s, NOW));
-    // Never sampled.
-    s = online_snapshot();
-    s.sampled_ms = 0;
-    s.metrics_expires_ms = NOW + 8000;
-    CHECK(!metrics_fresh(s, NOW));
-    c = make_computer(Lang::ZhCN, s, NOW);
-    CHECK(!c.cpu.valid);
-    CHECK_EQ(c.footer, std::string("尚未采样 · 等待电脑连接"));
-    CHECK(c.footer_tone == Tone::Off);
-    // The Agent says a metric is unavailable.
-    s = online_snapshot();
-    s.cpu = "不可用"; s.network = "不可用";
-    c = make_computer(Lang::ZhCN, s, NOW);
-    CHECK(!c.cpu.valid && c.memory.valid);
-    CHECK_EQ(c.rx, std::string("--"));
-    CHECK_EQ(c.tx, std::string("0.3 MB/s"));
-    s.cpu = "99.9%"; c = make_computer(Lang::EnUS, s, NOW);
-    CHECK_EQ(c.cpu.text, std::string("100%"));
-    CHECK(ascii(c.footer));
-}
-
 // ---- T15 ----
 static void t15_power_view() {
     PowerView v = make_power(Lang::ZhCN, fresh_power(), NOW);
@@ -991,6 +1005,160 @@ static void t19_charge_view() {
     }
 }
 
+// ---- T24 ----
+static void t24_pages() {
+    const PageOrder d = default_pages();
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-"));
+    CHECK(home_view(d) == View::Switch);
+    CHECK(nav_views(d) == (std::vector<View>{View::Switch, View::Overview}));
+    // The home page is the first shown one, not the first slot.
+    PageOrder o = d;
+    CHECK(pages_toggle(o, 0));                       // hide Switch
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-"));
+    CHECK(home_view(o) == View::Overview);
+    CHECK(nav_views(o) == std::vector<View>{View::Overview});
+    // The last shown page cannot be hidden.
+    CHECK(!pages_toggle(o, 1));
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-"));
+    CHECK(pages_toggle(o, 2));                       // show Clock
+    CHECK(pages_toggle(o, 1));                       // now Overview can go
+    CHECK(home_view(o) == View::Clock);
+    CHECK(!pages_toggle(o, 4) && !pages_toggle(o, 99));
+    // Moves swap with the neighbour; the ends and slots out of range are refused and change nothing.
+    o = d;
+    CHECK(pages_move(o, 1, -1));
+    CHECK_EQ(serialize_pages(o), std::string("O+S+C-P-"));
+    CHECK(home_view(o) == View::Overview);
+    CHECK(pages_move(o, 0, +1));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-"));
+    CHECK(!pages_move(o, 0, -1));
+    CHECK(!pages_move(o, 3, +1));
+    CHECK(!pages_move(o, 4, -1) && !pages_move(o, 7, +1) && !pages_move(o, 1, 0) && !pages_move(o, 1, 2) && !pages_move(o, 2, -2));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-"));
+    CHECK(pages_move(o, 3, -1));                     // Power moves up past the hidden Clock: still hidden, still not in the navigation
+    CHECK_EQ(serialize_pages(o), std::string("S+O+P-C-"));
+    CHECK(nav_views(o) == (std::vector<View>{View::Switch, View::Overview}));
+    // Every order and every non-empty choice round-trips; the navigation is the shown ones in order, each once.
+    std::array<View, 4> perm = {View::Switch, View::Overview, View::Clock, View::Power};
+    std::sort(perm.begin(), perm.end());
+    int seen = 0;
+    do {
+        for (int mask = 1; mask < 16; ++mask) {
+            PageOrder p{};
+            for (size_t i = 0; i < 4; ++i) p[i] = {perm[i], ((mask >> i) & 1) != 0};
+            PageOrder q = default_pages();
+            CHECK(parse_pages(serialize_pages(p), q));
+            CHECK_EQ(serialize_pages(q), serialize_pages(p));
+            const auto nav = nav_views(q);
+            CHECK_EQ(nav.size(), static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(mask))));
+            CHECK(!nav.empty() && nav.front() == home_view(q));
+            std::set<View> once(nav.begin(), nav.end());
+            CHECK_EQ(once.size(), nav.size());
+            ++seen;
+        }
+    } while (std::next_permutation(perm.begin(), perm.end()));
+    CHECK_EQ(seen, 24 * 15);
+    for (const char *bad : {"", "S+O+C-", "S+O+C-P-X+", "S+S+C-P-", "S+O+C-Q-", "S*O+C-P-", "S-O-C-P-", "s+o+c-p-", "S+O+C-P", "S+O+C-P-\n", "SOCP", "S+O+C-P-S+"}) {
+        PageOrder q = default_pages();
+        q[0].shown = false; q[2].shown = true;   // not the default, to see that a refused text leaves it alone
+        const std::string before = serialize_pages(q);
+        const bool taken = parse_pages(bad, q);
+        if (taken) std::fprintf(stderr, "pages text accepted: [%s]\n", bad);
+        CHECK(!taken);
+        CHECK_EQ(serialize_pages(q), before);
+    }
+}
+// ---- T27 ----
+static void t27_sources() {
+    struct Port { const char *id; SourceIcon icon; const char *tag; };
+    for (Port p : {Port{"mac-usbc", SourceIcon::UsbC, "USB-C"}, Port{"usb-c", SourceIcon::UsbC, "USB-C"}, Port{"USBC2", SourceIcon::UsbC, "USB-C"},
+                   Port{"pc_type-c", SourceIcon::UsbC, "USB-C"}, Port{"typec", SourceIcon::UsbC, "USB-C"}, Port{"thunderbolt3", SourceIcon::UsbC, "USB-C"},
+                   Port{"hdmi1", SourceIcon::Hdmi, "HDMI"}, Port{"HDMI-2", SourceIcon::Hdmi, "HDMI"}, Port{"mbp.hdmi", SourceIcon::Hdmi, "HDMI"},
+                   Port{"dp", SourceIcon::Dp, "DisplayPort"}, Port{"mini-dp2", SourceIcon::Dp, "DisplayPort"}, Port{"DisplayPort1", SourceIcon::Dp, "DisplayPort"},
+                   Port{"adp", SourceIcon::Monitor, ""}, Port{"dpms", SourceIcon::Monitor, ""}, Port{"hdmix", SourceIcon::Monitor, ""}, Port{"vga", SourceIcon::Monitor, ""},
+                   Port{"", SourceIcon::Monitor, ""}, Port{"mac", SourceIcon::Monitor, ""}, Port{"usb", SourceIcon::Monitor, ""}, Port{"c", SourceIcon::Monitor, ""}}) {
+        if (port_icon(p.id) != p.icon) std::fprintf(stderr, "port of [%s]\n", p.id);
+        CHECK(port_icon(p.id) == p.icon);
+        CHECK_EQ(port_tag(p.id), std::string(p.tag));
+    }
+    Snapshot s = online_snapshot();
+    s.actions[0] = {"to-mini", "切到 Mac mini", "u2720", "mac-dp", 1};
+    s.actions[1] = {"to-m1", "", "u2720", "m1-hdmi", 1};
+    s.actions[2] = {"to-m4", "MacBook M4", "u2720", "m4-usbc", 1};
+    s.action_count = 3;
+    SourceNames names;
+    auto v = make_sources(Lang::ZhCN, s, names);
+    CHECK_EQ(v.size(), static_cast<size_t>(3));
+    CHECK_EQ(v[0].name, std::string("切到 Mac mini")); CHECK(v[0].icon == SourceIcon::Dp); CHECK_EQ(v[0].tag, std::string("DisplayPort")); CHECK(!v[0].renamed);
+    CHECK_EQ(v[0].id, std::string("to-mini"));
+    CHECK_EQ(v[1].name, std::string("to-m1"));        // no label: the id, never a blank tile
+    CHECK(v[1].icon == SourceIcon::Hdmi);
+    CHECK(v[0].enabled && v[0].sub.empty());
+    // Local names and icons.
+    CHECK(set_source_name(names, "to-mini", "Mac mini"));
+    CHECK(set_source_icon(names, "to-mini", SourceIcon::Desktop));
+    CHECK(set_source_icon(names, "to-m4", SourceIcon::Laptop));
+    v = make_sources(Lang::ZhCN, s, names);
+    CHECK_EQ(v[0].name, std::string("Mac mini")); CHECK(v[0].icon == SourceIcon::Desktop); CHECK(v[0].renamed);
+    CHECK_EQ(v[0].tag, std::string("DisplayPort"));   // the port tag stays: it is a fact about the cable
+    CHECK_EQ(v[2].name, std::string("MacBook M4")); CHECK(v[2].icon == SourceIcon::Laptop);
+    // "" brings the App name back; an entry with neither a name nor an icon is dropped.
+    CHECK(set_source_name(names, "to-mini", ""));
+    v = make_sources(Lang::ZhCN, s, names);
+    CHECK_EQ(v[0].name, std::string("切到 Mac mini")); CHECK(v[0].icon == SourceIcon::Desktop);
+    CHECK(set_source_icon(names, "to-mini", SourceIcon::Auto));
+    CHECK_EQ(names.size(), static_cast<size_t>(1));
+    reset_source(names, "to-m4");
+    CHECK(names.empty());
+    reset_source(names, "nothing-here");
+    SourceNames one;                                   // a name taken back, with no icon: nothing is left
+    CHECK(set_source_name(one, "a", "x"));
+    CHECK(set_source_name(one, "a", ""));
+    CHECK(one.empty());
+    // Names: 1 to 32 bytes of printable text.
+    for (const std::string &bad : {std::string(33, 'a'), std::string("tab\there"), std::string("new\nline"), std::string("\x7f"), std::string("\xe4\xb8"), std::string(1, '\0')})
+        CHECK(!set_source_name(names, "to-m1", bad));
+    CHECK(names.empty());
+    CHECK(set_source_name(names, "to-m1", std::string(32, 'z')));
+    CHECK(set_source_name(names, "to-m1", "\xe7\x94\xb5\xe8\xa7\x86"));   // UTF-8 from the App later: allowed
+    CHECK(!set_source_name(names, "", "x") && !set_source_icon(names, "", SourceIcon::Tv));
+    CHECK(!set_source_name(names, "bad\x1fid", "x") && !set_source_name(names, std::string(49, 'i'), "x"));
+    // A local entry for a source that is not sent any more is not shown; offline sources are disabled.
+    CHECK(set_source_name(names, "gone", "Old PC"));
+    s.agent_ready = false;
+    v = make_sources(Lang::ZhCN, s, names);
+    CHECK_EQ(v.size(), static_cast<size_t>(3));
+    for (const auto &x : v) CHECK(x.name != "Old PC" && !x.enabled && x.sub == "Agent 未连接");
+    CHECK_EQ(make_sources(Lang::EnUS, s, names)[0].sub, std::string("Agent offline"));
+    s.action_count = 99;
+    CHECK_EQ(make_sources(Lang::ZhCN, s, names).size(), static_cast<size_t>(12));
+    // At most 12 entries: a 13th source is refused, the ones there can still change.
+    SourceNames full;
+    for (int i = 0; i < 12; ++i) CHECK(set_source_name(full, "id" + std::to_string(i), "n" + std::to_string(i)));
+    CHECK(!set_source_name(full, "id12", "n12"));
+    CHECK(!set_source_icon(full, "id12", SourceIcon::Tv));
+    CHECK(set_source_icon(full, "id3", SourceIcon::Tv));
+    CHECK_EQ(full.size(), static_cast<size_t>(12));
+    // Stored text: round-trips; damage reads as nothing.
+    const SourceNames back = parse_sources(serialize_sources(full));
+    CHECK_EQ(back.size(), static_cast<size_t>(12));
+    CHECK_EQ(serialize_sources(back), serialize_sources(full));
+    CHECK(parse_sources("").empty());
+    const std::string good = serialize_sources(names);
+    CHECK_EQ(parse_sources(good).size(), names.size());
+    std::string many;
+    for (int i = 0; i < 13; ++i) many += "id" + std::to_string(i) + "\x1f" "n\x1f" "auto\x1e";
+    for (const std::string &bad : {std::string("a\x1fname\x1f" "banana\x1e"), std::string("a\x1fx\x1f" "auto\x1e" "a\x1fy\x1f" "auto\x1e"), std::string("\x1fx\x1f" "auto\x1e"),
+                                   std::string("a\x1fx\x1e"), std::string("a\x1fx\x1f" "auto"), std::string("a\x1fx\ty\x1f" "auto\x1e"), many,
+                                   std::string("a\x1f\x1f" "auto\x1e"), good + std::string(5000, 'x'), std::string("a\x1fx\x1f" "auto\x1f" "extra\x1e")}) {
+        const bool taken = !parse_sources(bad).empty();
+        if (taken) std::fprintf(stderr, "sources text accepted: %zu bytes\n", bad.size());
+        CHECK(!taken);
+    }
+    for (SourceIcon i : kIconChoices) CHECK(i != SourceIcon::Auto);
+    CHECK_EQ(kIconChoices.size(), static_cast<size_t>(8));
+}
+
 int main() {
     t1_palettes_readable();
     t2_contrast_maths();
@@ -1005,7 +1173,6 @@ int main() {
     t11_ring();
     t12_clock();
     t13_percent();
-    t14_computer();
     t15_power_view();
     t16_connect();
     t17_actions();
@@ -1016,6 +1183,10 @@ int main() {
     t21_ring_info();
     t22_quiet_hours();
     t23_time();
+    t24_pages();
+    t25_appearance_upgrade();
+    t26_night_theme();
+    t27_sources();
     if (failures) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设计语言 夜航仪表</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 880px; height: 560px; box-sizing: border-box; padding: 36px 40px; display: flex; gap: 36px; background: #000000; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+    <div>
+      <div style="font-size: 28px; font-weight: 700">夜航仪表</div>
+      <div style="margin-top: 4px; font-size: 14px; color: #9fb4be">纯黑底，细线、刻度、发光的选中态。像飞机夜间的仪表盘：安静，重点亮。</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 44px; border-radius: 10px; background: #000000; box-shadow: inset 0 0 0 1px #15212b"></div><span style="font-size: 12px; color: #9fb4be">底 #000000</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 44px; border-radius: 10px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b"></div><span style="font-size: 12px; color: #9fb4be">卡片 #070B10</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 44px; border-radius: 10px; background: #15212b"></div><span style="font-size: 12px; color: #9fb4be">细线 #15212B</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 44px; border-radius: 10px; background: {{accent}}; box-shadow: 0 0 18px {{accentGlowColor}}"></div><span style="font-size: 12px; color: #9fb4be">强调 {{accentName}}</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 28px; border-radius: 8px; background: #2fd8ff"></div><span style="font-size: 12px; color: #9fb4be">网络</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 28px; border-radius: 8px; background: #59f0a6"></div><span style="font-size: 12px; color: #9fb4be">App</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 28px; border-radius: 8px; background: #ffb547"></div><span style="font-size: 12px; color: #9fb4be">电源</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 28px; border-radius: 8px; background: #b18cff"></div><span style="font-size: 12px; color: #9fb4be">时间</span></div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: baseline; gap: 14px"><span style="font-family: Montserrat, sans-serif; font-weight: 300; font-size: 48px; line-height: 1">14:32</span><span style="font-size: 13px; color: #7f97a3">数字：Montserrat 细体（设备已有 24、48 和 72 号时钟字）</span></div>
+      <div style="display: flex; align-items: baseline; gap: 14px"><span style="font-size: 20px; font-weight: 500">切换输入源</span><span style="font-size: 13px; color: #7f97a3">中文：思源黑体子集 20、28 号</span></div>
+      <div style="display: flex; align-items: baseline; gap: 14px"><span style="font-family: Montserrat, sans-serif; font-size: 12px; letter-spacing: 2px; color: #7f97a3">DISPLAYPORT</span><span style="font-size: 13px; color: #7f97a3">小标签：英文大写，字距放宽</span></div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center">
+      <span style="height: 48px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; font-size: 16px; background: {{accentSoft}}; box-shadow: inset 0 0 0 1.5px {{accentLine}}, 0 0 18px {{accentGlowColor}}">选中</span>
+      <span style="height: 48px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">普通</span>
+      <span style="height: 28px; padding: 0 12px; border-radius: 14px; display: flex; align-items: center; font-size: 14px; font-weight: 500; color: #000000; background: {{accent}}">当前</span>
+      <span style="font-size: 14px; color: #59f0a6">已确认</span>
+      <span style="font-size: 14px; color: #ffb547">已发送（未确认）</span>
+    </div>
+  </div>
+
+  <div style="width: 300px; flex: none; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.65; color: #9fb4be">
+    <div style="font-size: 16px; font-weight: 500; color: #e8f3f7">能在设备上做出来</div>
+    <div>只用 LVGL 能画的：圆弧、刻度、细线、圆角矩形、阴影发光。不用模糊和大面积渐变。</div>
+    <div>纯黑底在 AMOLED 上最省电，也不烧屏。底纹网格只有 2.5% 亮度，实现时可以去掉。</div>
+    <div>四角是圆角，内容离边至少 44 px，顶栏离边 52 px。</div>
+    <div>按钮和行至少 56 px 高（规则 D9）。</div>
+    <div>文字只用字库里有的字：没有度数符号，温度写“度”；没有实心圆点字符，圆点用画的。</div>
+    <div>主题四套：夜航（纯黑，默认）和原来的薄荷、海洋、暖橙。强调色另选。四种语义色不随强调色变。</div>
+    <div style="margin-top: 6px; font-size: 16px; font-weight: 500; color: #e8f3f7">导航</div>
+    <div>底部按钮就是打开的页面（切换、总览、时钟、电源），按设置里的顺序排，最后是设置。第一个就是首页。电脑的 CPU、内存、网络页去掉。</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":880,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.accent ?? '#2fd8ff';
+    const rgb = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).join(',');
+    return { accent: a, accentName: a.toUpperCase(), accentSoft: 'rgba(' + rgb + ',0.12)', accentLine: 'rgba(' + rgb + ',0.6)', accentGlowColor: 'rgba(' + rgb + ',0.32)' };
+  }
+}
+</script>
+</body>
+</html>

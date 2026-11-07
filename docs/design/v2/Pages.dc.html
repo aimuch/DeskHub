@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设置 页面与首页</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size: 40px 40px; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+
+  <div style="position: absolute; left: 52px; right: 52px; top: 20px; height: 28px; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; gap: 14px; align-items: center">
+      <svg width="24" height="22" viewBox="0 0 24 24" fill="none" stroke="#2fd8ff" stroke-width="2" stroke-linecap="round" role="img" aria-label="Wi-Fi 已连接"><path d="M2 9a15 15 0 0 1 20 0"></path><path d="M5.5 12.5a10 10 0 0 1 13 0"></path><path d="M9 16a5 5 0 0 1 6 0"></path><path d="M12 19.5h.01"></path></svg>
+      <svg width="24" height="22" viewBox="0 0 24 24" fill="none" stroke="#59f0a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="App 在线"><rect x="2.5" y="3.5" width="19" height="12.5" rx="2.5"></rect><path d="M8.5 20.5h7M12 16v4.5"></path></svg>
+    </div>
+    <div role="img" aria-label="电量 96%" style="width: 44px; height: 20px; box-sizing: border-box; border: 1.5px solid #59f0a6; border-radius: 6px; position: relative; display: flex; align-items: center; justify-content: center">
+      <div style="position: absolute; left: 2px; top: 2px; bottom: 2px; width: 34px; border-radius: 3px; background: rgba(89,240,166,0.35)"></div>
+      <span style="position: relative; font-family: Montserrat, sans-serif; font-weight: 600; font-size: 12px">96</span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 44px; right: 44px; top: 58px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <a href="Settings.dc.html" aria-label="返回" style="width: 44px; height: 44px; margin-left: -10px; border-radius: 22px; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a>
+      <span style="flex: 1; font-size: 22px; font-weight: 500">页面与首页</span>
+    </div>
+    <div style="height: 58px; box-sizing: border-box; padding: 0 8px 0 14px; display: flex; align-items: center; gap: 10px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="width: 18px; font-family: Montserrat, sans-serif; font-size: 13px; color: #5c7480">1</span>
+      <span style="font-size: 18px; color: #e8f3f7">切换</span><span style="height: 22px; padding: 0 8px; border-radius: 11px; display: flex; align-items: center; font-size: 12px; font-weight: 500; color: #000000; background: {{accent}}">首页</span>
+      <span style="flex: 1"></span>
+      <span role="switch" aria-checked="true" style="position: relative; width: 44px; height: 26px; border-radius: 13px; flex: none; background: {{accent}}"><span style="position: absolute; top: 3px; left: 22px; background: #000000; width: 20px; height: 20px; border-radius: 10px"></span></span>
+      <button type="button" aria-label="上移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 0.3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button><button type="button" aria-label="下移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    </div>
+    <div style="height: 58px; box-sizing: border-box; padding: 0 8px 0 14px; display: flex; align-items: center; gap: 10px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="width: 18px; font-family: Montserrat, sans-serif; font-size: 13px; color: #5c7480">2</span>
+      <span style="font-size: 18px; color: #e8f3f7">总览</span>
+      <span style="flex: 1"></span>
+      <span role="switch" aria-checked="true" style="position: relative; width: 44px; height: 26px; border-radius: 13px; flex: none; background: {{accent}}"><span style="position: absolute; top: 3px; left: 22px; background: #000000; width: 20px; height: 20px; border-radius: 10px"></span></span>
+      <button type="button" aria-label="上移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button><button type="button" aria-label="下移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    </div>
+    <div style="height: 58px; box-sizing: border-box; padding: 0 8px 0 14px; display: flex; align-items: center; gap: 10px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="width: 18px; font-family: Montserrat, sans-serif; font-size: 13px; color: #5c7480">3</span>
+      <span style="font-size: 18px; color: #5c7480">时钟</span>
+      <span style="flex: 1"></span>
+      <span role="switch" aria-checked="false" style="position: relative; width: 44px; height: 26px; border-radius: 13px; flex: none; background: #15212b"><span style="position: absolute; top: 3px; left: 3px; background: #5c7480; width: 20px; height: 20px; border-radius: 10px"></span></span>
+      <button type="button" aria-label="上移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button><button type="button" aria-label="下移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    </div>
+    <div style="height: 58px; box-sizing: border-box; padding: 0 8px 0 14px; display: flex; align-items: center; gap: 10px; border-radius: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="width: 18px; font-family: Montserrat, sans-serif; font-size: 13px; color: #5c7480">4</span>
+      <span style="font-size: 18px; color: #5c7480">电源</span>
+      <span style="flex: 1"></span>
+      <span role="switch" aria-checked="false" style="position: relative; width: 44px; height: 26px; border-radius: 13px; flex: none; background: #15212b"><span style="position: absolute; top: 3px; left: 3px; background: #5c7480; width: 20px; height: 20px; border-radius: 10px"></span></span>
+      <button type="button" aria-label="上移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button><button type="button" aria-label="下移" style="all: unset; width: 40px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1px #15212b; opacity: 0.3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9fb4be" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    </div>
+    <div style="font-size: 13px; line-height: 1.6; color: #7f97a3">打开的页面按这个顺序排在底部，最后是设置。第一个就是首页：开机、唤醒和息屏后回到它。至少留一个。</div>
+  </div>
+  <nav aria-label="主导航" style="position: absolute; left: 44px; right: 44px; bottom: 18px; height: 60px; box-sizing: border-box; padding: 4px; display: flex; gap: 4px; border-radius: 30px; background: #05080c; box-shadow: inset 0 0 0 1px #15212b">
+    <a href="Main.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">切换</a>
+    <a href="HomeRing.dc.html" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #9fb4be">总览</a>
+    <a href="Settings.dc.html" aria-current="page" style="flex: 1; min-width: 0; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: {{accent}}; background: {{accentSoft}}; box-shadow: inset 0 0 0 1px {{accentLine}}">设置</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.accent ?? '#2fd8ff';
+    const rgb = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).join(',');
+    return { accent: a, accentSoft: 'rgba(' + rgb + ',0.12)', accentLine: 'rgba(' + rgb + ',0.6)', accentGlow: '0 0 20px rgba(' + rgb + ',0.32)' };
+  }
+}
+</script>
+</body>
+</html>

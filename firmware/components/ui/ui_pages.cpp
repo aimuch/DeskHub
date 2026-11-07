@@ -26,18 +26,23 @@ struct Shell {
     lv_obj_t *left{}, *right{}, *wifi{}, *pc{}, *pc_screen{}, *pc_neck{}, *pc_base{}, *usb{}, *bolt{}, *box{}, *body{}, *tip{}, *fill{}, *digits{}, *nav{}, *hint{};
     int bolt_ink_w = 0, bolt_ofs_x = 0;   // the bolt glyph: width of its ink and where the ink starts in its box
     std::array<lv_obj_t *, 2> wifi_cut{}, pc_cut{}, bat_cut{};  // the slash: a line in the colour of the background under a thin one
-    std::array<lv_obj_t *, 4> nav_btn{}, nav_label{};
+    std::array<lv_obj_t *, 5> nav_btn{}, nav_label{};
+    std::array<Page, 5> nav_page{};
+    int nav_count = 0;
 } sh;
 struct Ring { std::array<lv_obj_t *, 4> seg{}, glow{}; lv_obj_t *track{}; } ring;
 int notice_y = 226;   // where the line under the ring of the home page is in the body
 struct Widgets {
-    lv_obj_t *clock{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{};
-    lv_obj_t *cpu_gauge{}, *mem_gauge{}, *cpu_value{}, *mem_value{}, *rx{}, *tx{}, *footer{}, *error{};
+    lv_obj_t *clock{}, *seconds{}, *date{}, *notice{}, *notice_dot{}, *meta{}, *clock_hit{}, *minute_dot{}, *error{};
+    std::array<lv_obj_t *, 4> clock_dot{};
     lv_obj_t *soc_gauge{}, *soc_value{}, *soc_title{}, *soc_charge{}, *soc_note{}, *strip{};
     lv_obj_t *protect_head{}, *protect_note{}, *protect_button{}, *protect_label{}, *protect_error{};
     lv_obj_t *bat_v{}, *bat_note{}, *usb_v{}, *usb_note{}, *temp_v{}, *temp_note{}, *charge_card{};
     lv_obj_t *brightness{}, *detail{}, *slider{};
     lv_obj_t *first_action{};
+    std::vector<lv_obj_t *> switch_rows, switch_tiles, switch_icons;
+    std::array<std::array<lv_obj_t *, 3>, 4> pages_ctrl{};
+    std::array<lv_obj_t *, 9> icon_btn{};
     std::vector<lv_obj_t *> connect_values;
     lv_obj_t *wifi_change_button{}, *wifi_change_note{};
     std::array<lv_obj_t *, 6> swatch{};
@@ -61,6 +66,35 @@ void on_size(lv_event_t *e) { Appearance a = current_appearance(); a.size = stat
 void on_protect(lv_event_t *) { request_protect_toggle(); }
 void on_percent(lv_event_t *e) { Appearance a = current_appearance(); a.show_percent = data_of(e) == 0; apply_appearance(a); }
 void on_ring(lv_event_t *e) { Appearance a = current_appearance(); a.ring = static_cast<RingTier>(data_of(e)); apply_appearance(a); }
+void on_pages_toggle(lv_event_t *e) { request_pages_toggle(data_of(e)); }
+void on_pages_up(lv_event_t *e) { request_pages_move(data_of(e), -1); }
+void on_pages_down(lv_event_t *e) { request_pages_move(data_of(e), +1); }
+void on_style(lv_event_t *e) { request_switch_style(static_cast<SwitchStyle>(data_of(e))); }
+void on_source(lv_event_t *e) { request_source_edit(static_cast<size_t>(data_of(e))); }
+void on_icon(lv_event_t *e) { request_source_icon(static_cast<SourceIcon>(data_of(e))); }
+void on_restore(lv_event_t *) { request_source_restore(); }
+Str view_name(View v) {
+    switch (v) {
+    case View::Switch: return Str::NavActions;
+    case View::Clock: return Str::NavClock;
+    case View::Power: return Str::NavPower;
+    case View::Overview: break;
+    }
+    return Str::NavOverview;
+}
+Str icon_name(SourceIcon i) {
+    switch (i) {
+    case SourceIcon::Hdmi: return Str::IconHdmi;
+    case SourceIcon::Dp: return Str::IconDp;
+    case SourceIcon::UsbC: return Str::IconUsbC;
+    case SourceIcon::Laptop: return Str::IconLaptop;
+    case SourceIcon::Desktop: return Str::IconDesktop;
+    case SourceIcon::Console: return Str::IconConsole;
+    case SourceIcon::Tv: return Str::IconTv;
+    default: break;
+    }
+    return Str::IconMonitor;
+}
 
 // ---- small building blocks ----
 lv_obj_t *heading(lv_obj_t *parent, const std::string &text, uint32_t rgb) {
@@ -132,37 +166,15 @@ lv_obj_t *setting_row(lv_obj_t *parent, const std::string &name, const std::stri
     return b;
 }
 
-// ---- action cards (Home and Actions) ----
-lv_obj_t *action_card(lv_obj_t *parent, size_t index, int width, int height, const ActionView &a) {
-    const uint32_t tones[] = {P().accent, P().wifi, P().clock, P().power};
-    auto *b = button(parent, on_action, data(static_cast<int>(index)), width, height);
-    if (a.enabled && index == 0) {
-        lv_obj_set_style_border_width(b, 2, 0);
-        lv_obj_set_style_border_color(b, hex(P().accent), 0);
-        lv_obj_set_style_bg_color(b, hex(P().selected), 0);
-    }
-    if (!a.enabled) lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
-    const int ty = a.enabled ? (height - lh(look.body)) / 2 : 8;
-    auto *t = label_at(b, a.label, 20, ty, width - 54, look.body, a.enabled ? (index == 0 ? P().accent : P().ink) : P().muted);
-    single_line(t, lh(look.body));
-    if (!a.enabled) {
-        auto *s = label_at(b, a.sub, 20, height - lh(look.caption) - 6, width - 40, look.caption, P().muted);
-        single_line(s, lh(look.caption));
-    }
-    auto *d = dot(b, 10, a.enabled ? tones[index % 4] : P().edge, a.enabled);
-    lv_obj_set_pos(d, width - 26, height / 2 - 5);
-    if (!a.enabled) lv_obj_add_state(b, LV_STATE_DISABLED);
-    return b;
-}
-
 // ---- Home ----
 void build_home(lv_obj_t *body, const Frame &f) {
     // With no actions nothing is drawn under the ring (docs/design Dev-HomeEmpty): the ring is larger, and the ring with the line
     // under it sits in the middle of the body, so that no blank band is left.
-    const auto actions = make_actions(look.lang, f.s);
-    const bool none = actions.empty();
-    const int d = none ? 252 : 216, x = (kContentW - d) / 2, g = 4, width = (ring_px(look.appearance.ring).home * d + 108) / 216;
-    const int y = none ? (kBodyH - (d + 10 + lh(look.caption))) / 2 : 0;   // top of the ring in the body; 10: the gap to the line
+    // The overview has the ring only (docs/design v2 HomeRing): the input sources have a page of their own. The ring and the line
+    // under it sit in the middle of the body (as Dev-HomeEmpty did), so that no blank band is left.
+    (void)f;
+    const int d = 252, x = (kContentW - d) / 2, g = 4, width = (ring_px(look.appearance.ring).home * d + 108) / 216;
+    const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;   // top of the ring in the body; 10: the gap to the line
     auto *track = arc_segment(body, d, 0, 360, P().track, width, LV_OPA_COVER);
     ring.track = track;
     lv_obj_set_pos(track, x, y);
@@ -205,13 +217,6 @@ void build_home(lv_obj_t *body, const Frame &f) {
     lv_obj_set_style_radius(w.notice_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(w.notice_dot, LV_OPA_COVER, 0);
     lv_obj_add_flag(w.notice_dot, LV_OBJ_FLAG_HIDDEN);
-    const int top = 256, h = 80;
-    // With no actions the home page draws nothing in their place: the ring and the header icons already say what is missing.
-    for (size_t i = 0; i < std::min<size_t>(2, actions.size()); ++i) {
-        auto *b = action_card(body, i, 210, h, actions[i]);
-        lv_obj_set_pos(b, static_cast<int>(i) * 222, top);
-        if (i == 0) w.first_action = b;
-    }
 }
 std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
     ring_line = false;
@@ -226,7 +231,6 @@ std::string notice_for(const Frame &f, Tone &tone, bool &ring_line) {
     tone = Tone::Off;
     const std::string n = notice_text(look.lang, f.s.command, f.now_ms, f.command_changed_ms);
     if (!n.empty()) return n;
-    if (!f.s.agent_ready && f.s.sampled_ms != 0 && !metrics_fresh(f.s, f.now_ms)) { tone = Tone::Warn; return T(Str::MetricsExpired); }
     ring_line = true;   // nothing else to say: name the first dark segment, or say where to tap (docs/design Dev-RingInfo)
     return ring_note(look.lang, make_ring_info(look.lang, f.s, f.power, f.now_ms));
 }
@@ -260,24 +264,72 @@ void refresh_home(const Frame &f) {
     }
 }
 
-// ---- Clock ----
+// ---- Clock (docs/design v2 HomeClock) ----
+constexpr int kDial = 300;   // the tick ring
 void build_clock(lv_obj_t *body) {
-    w.clock = label_at(body, "--:--", 0, 60, kContentW, &font_clock_72, P().ink);
+    const int x = (kContentW - kDial) / 2, y = (kBodyH - kDial) / 2, cx = kContentW / 2, cy = y + kDial / 2;
+    auto *ticks = tick_ring(body, kDial, P().edge, P().muted);
+    lv_obj_set_pos(ticks, x, y);
+    w.minute_dot = holder(body, 10, 10);   // where the minute hand would be, in the accent
+    lv_obj_set_style_radius(w.minute_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(w.minute_dot, hex(P().accent), 0);
+    lv_obj_set_style_bg_opa(w.minute_dot, LV_OPA_COVER, 0);
+    lv_obj_add_flag(w.minute_dot, LV_OBJ_FLAG_HIDDEN);
+    const int clock_h = lv_font_get_line_height(&font_clock_72);
+    w.clock = label_at(body, "--:--", 0, cy - clock_h + 6, kContentW, &font_clock_72, P().ink);
     centered(w.clock);
-    w.date = label_at(body, "", 0, 60 + 70, kContentW, look.title, P().ink);
+    w.seconds = label_at(body, "", 0, cy - 30, 40, &lv_font_montserrat_24, P().accent);
+    lv_obj_add_flag(w.seconds, LV_OBJ_FLAG_HIDDEN);
+    w.date = label_at(body, "", 0, cy + 10, kContentW, look.body, P().muted);
     centered(w.date);
-    auto *line = holder(body, 56, 3);
-    lv_obj_set_pos(line, (kContentW - 56) / 2, 60 + 70 + lh(look.title) + 8);
-    lv_obj_set_style_bg_color(line, hex(P().accent), 0);
-    lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(line, 2, 0);
-    w.meta = label_at(body, "", 0, 60 + 70 + lh(look.title) + 20, kContentW, look.caption, P().muted);
+    single_line(w.date, lh(look.body));
+    // Four dots in the colours of the ring: lit when that channel is healthy (make_ring), with its name.
+    const Str names[4] = {Str::ClockDotWifi, Str::ClockDotAgent, Str::ClockDotPower, Str::ClockDotTime};
+    int widths[4], total = 0;
+    for (int i = 0; i < 4; ++i) {
+        lv_point_t size{};
+        lv_text_get_size(&size, T(names[i]).c_str(), look.caption, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        widths[i] = 8 + 5 + size.x;
+        total += widths[i] + (i ? 12 : 0);
+    }
+    const int dots_y = cy + 10 + lh(look.body) + 8;
+    int dx = cx - total / 2;
+    for (int i = 0; i < 4; ++i) {
+        w.clock_dot[static_cast<size_t>(i)] = dot(body, 8, P().edge);
+        lv_obj_set_pos(w.clock_dot[static_cast<size_t>(i)], dx, dots_y + (lh(look.caption) - 8) / 2);
+        auto *l = label_at(body, T(names[i]), dx + 13, dots_y, widths[i] - 13 + 2, look.caption, P().muted);
+        single_line(l, lh(look.caption));
+        dx += widths[i] + 12;
+    }
+    w.meta = label_at(body, "", 40, dots_y + lh(look.caption) + 6, kContentW - 80, look.caption, P().muted);
     centered(w.meta);
+    single_line(w.meta, lh(look.caption));
 }
 void refresh_clock(const Frame &f) {
     ClockView c = make_clock(look.lang, f.s.time_valid, f.wall);
-    set_text(w.clock, f.c.layout.show_seconds && c.valid ? c.hhmm + ":" + c.seconds : c.hhmm);
+    set_text(w.clock, c.hhmm);
+    const bool secs = f.c.layout.show_seconds && c.valid;
+    set_hidden(w.seconds, !secs);
+    if (secs) {
+        set_text(w.seconds, c.seconds);
+        lv_point_t size{};
+        lv_text_get_size(&size, c.hhmm.c_str(), &font_clock_72, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int sx = (kContentW + size.x) / 2 + 4;
+        if (lv_obj_get_x(w.seconds) != sx) lv_obj_set_x(w.seconds, sx);
+    }
     set_text(w.date, c.date);
+    if (c.valid) {
+        struct tm t{};
+        localtime_r(&f.wall, &t);
+        const float a = static_cast<float>(t.tm_min) * 6.0f * 3.14159265f / 180.0f, r = kDial / 2.0f - 22;
+        const int x = kContentW / 2 + static_cast<int>(std::lround(std::sin(a) * r)) - 5, y = (kBodyH - kDial) / 2 + kDial / 2 - static_cast<int>(std::lround(std::cos(a) * r)) - 5;
+        if (lv_obj_get_x(w.minute_dot) != x || lv_obj_get_y(w.minute_dot) != y) lv_obj_set_pos(w.minute_dot, x, y);
+    }
+    set_hidden(w.minute_dot, !c.valid);
+    const RingView r = make_ring(f.s, f.power, f.now_ms);
+    const bool lit[4] = {r.wifi, r.agent, r.power, r.time};
+    const uint32_t colors[4] = {P().wifi, P().agent, P().power, P().clock};
+    for (size_t i = 0; i < 4; ++i) set_bg(w.clock_dot[i], lit[i] ? colors[i] : P().edge);
     const std::string &q = f.s.time_quality;
     Str source = Str::TimeValid;
     if (q == "manual") source = Str::TimeSourceUsb;
@@ -286,74 +338,84 @@ void refresh_clock(const Frame &f) {
     set_text(w.meta, T(c.valid ? source : Str::TimeInvalidHint));
 }
 
-// ---- Actions ----
+// ---- the switch page (docs/design v2 Main, MainIcons) ----
 void build_actions(lv_obj_t *body, const Frame &f) {
-    heading(body, T(Str::NavActions), P().accent);
-    const auto actions = make_actions(look.lang, f.s);
-    if (actions.empty()) {   // a line of text, not a card: there is nothing to tap here
+    w.switch_rows.clear(); w.switch_tiles.clear(); w.switch_icons.clear();
+    heading(body, T(Str::SwitchTitle), P().accent);
+    const auto sources = make_sources(look.lang, f.s, f.sources);
+    if (sources.empty()) {   // a line of text, not a card: there is nothing to tap here
         caption(body, T(Str::NoActions), P().ink);
         caption(body, T(Str::NoActionsHint), P().muted);
+        w.notice = caption(body, "", P().muted);
         return;
     }
-    for (size_t i = 0; i < actions.size(); ++i) {
-        auto *b = action_card(body, i, kContentW, std::max(80, lh(look.body) + lh(look.caption) + 20), actions[i]);
-        if (i == 0) w.first_action = b;
+    const size_t n = sources.size();
+    if (look.appearance.style == SwitchStyle::List) {
+        const int h = std::max(76, lh(look.body) + lh(look.caption) + 20);
+        for (size_t i = 0; i < n; ++i) {
+            const SourceView &v = sources[i];
+            auto *b = button(body, on_action, data(static_cast<int>(i)), kContentW, h);
+            lv_obj_set_style_radius(b, 18, 0);
+            if (!v.enabled) { lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0); lv_obj_add_state(b, LV_STATE_DISABLED); }
+            auto *icon = source_icon(b, v.icon, 34, v.enabled ? P().ink : P().muted, 2);
+            lv_obj_set_pos(icon, 18, (h - 34) / 2);
+            const int ty = (h - lh(look.body) - lh(look.caption)) / 2;
+            auto *name = label_at(b, v.name, 68, ty, kContentW - 68 - 24, look.body, v.enabled ? P().ink : P().muted);
+            single_line(name, lh(look.body));
+            const std::string sub = v.enabled ? v.tag : v.sub;
+            auto *tag = label_at(b, sub, 68, ty + lh(look.body), kContentW - 68 - 24, look.caption, P().muted);
+            single_line(tag, lh(look.caption));
+            w.switch_rows.push_back(b);
+            w.switch_icons.push_back(icon);
+            if (i == 0) w.first_action = b;
+        }
+    } else {
+        // Up to three sources side by side, more in two columns that scroll.
+        const int cols = n <= 3 ? static_cast<int>(n) : 2, gap = 10, tw = (kContentW - (cols - 1) * gap) / cols;
+        const int th = n <= 3 ? 196 : 140, isz = n <= 3 ? 72 : 52;
+        const int rows = static_cast<int>((n + static_cast<size_t>(cols) - 1) / static_cast<size_t>(cols));
+        auto *grid = holder(body, kContentW, rows * th + (rows - 1) * gap);
+        for (size_t i = 0; i < n; ++i) {
+            const SourceView &v = sources[i];
+            auto *b = button(grid, on_action, data(static_cast<int>(i)), tw, th);
+            lv_obj_set_pos(b, static_cast<int>(i % static_cast<size_t>(cols)) * (tw + gap), static_cast<int>(i / static_cast<size_t>(cols)) * (th + gap));
+            lv_obj_set_style_radius(b, 22, 0);
+            if (!v.enabled) { lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0); lv_obj_add_state(b, LV_STATE_DISABLED); }
+            // A tile is narrow: the name stops at 20 px, as the navigation does, so "MacBook M1" fits three in a row.
+            const lv_font_t *nf = nav_font();
+            const int ny = th - lh(nf) - lh(look.caption) - 12;
+            auto *icon = source_icon(b, v.icon, isz, v.enabled ? P().ink : P().muted, n <= 3 ? 3 : 2);
+            lv_obj_set_pos(icon, (tw - isz) / 2, std::max(8, (ny - isz) / 2 + 2));   // in the middle of the room over the name
+            auto *name = label_at(b, v.name, 8, ny, tw - 16, nf, v.enabled ? P().ink : P().muted);
+            centered(name);
+            single_line(name, lh(nf));
+            auto *tag = label_at(b, v.enabled ? v.tag : v.sub, 8, ny + lh(nf), tw - 16, look.caption, P().muted);
+            centered(tag);
+            single_line(tag, lh(look.caption));
+            w.switch_tiles.push_back(b);
+            w.switch_icons.push_back(icon);
+            if (i == 0) w.first_action = b;
+        }
     }
+    w.notice = caption(body, "", P().muted);
 }
-void refresh_actions(const Frame &) {}
-
-// ---- Computer ----
-void build_computer(lv_obj_t *body) {
-    heading(body, T(Str::ComputerTitle), P().accent);
-    auto *row = holder(body, kContentW, 172);
-    const uint32_t tint[2] = {P().wifi, P().clock};
-    lv_obj_t **gauges[2] = {&w.cpu_gauge, &w.mem_gauge};
-    lv_obj_t **values[2] = {&w.cpu_value, &w.mem_value};
-    const Str names[2] = {Str::Cpu, Str::Memory};
-    for (int i = 0; i < 2; ++i) {
-        auto *c = panel(row, 210, 172, P().card, P().edge);
-        lv_obj_set_pos(c, i * 222, 0);
-        *gauges[i] = gauge(c, 128, 12, tint[i]);
-        lv_obj_set_pos(*gauges[i], 40, 8);
-        *values[i] = label_at(c, "--", 0, 8 + 64 - lh(look.title) / 2, 208, look.title, P().ink);
-        centered(*values[i]);
-        auto *n = label_at(c, T(names[i]), 0, 138, 208, look.caption, tint[i]);
-        centered(n);
-    }
-    const int rate_h = std::max(60, lh(look.caption) + lh(look.body) + 14);
-    auto *rates = holder(body, kContentW, rate_h);
-    const Str rate_names[2] = {Str::Receive, Str::Send};
-    const char *icons[2] = {LV_SYMBOL_DOWNLOAD, LV_SYMBOL_UPLOAD};
-    lv_obj_t **vals[2] = {&w.rx, &w.tx};
-    for (int i = 0; i < 2; ++i) {
-        auto *c = panel(rates, 210, rate_h, P().card, P().edge, 20);
-        lv_obj_set_pos(c, i * 222, 0);
-        label_at(c, icons[i], 14, (rate_h - 24) / 2, 30, &lv_font_montserrat_24, tint[i]);
-        label_at(c, T(rate_names[i]), 52, 4, 150, look.caption, P().muted);
-        *vals[i] = label_at(c, "--", 52, 4 + lh(look.caption), 154, look.body, P().ink);
-        single_line(*vals[i], lh(look.body));
-    }
-    w.footer = caption(body, "", P().muted);
-    w.error = caption(body, "", P().power);
-}
-void refresh_computer(const Frame &f) {
-    const ComputerView v = make_computer(look.lang, f.s, f.now_ms);
-    gauge_set(w.cpu_gauge, v.cpu.valid, v.cpu.percent, P().wifi);
-    gauge_set(w.mem_gauge, v.memory.valid, v.memory.percent, P().clock);
-    set_text(w.cpu_value, v.cpu.text);
-    set_text(w.mem_value, v.memory.text);
-    set_text(w.rx, v.rx);
-    set_text(w.tx, v.tx);
-    set_text(w.footer, v.footer);
-    set_ink(w.footer, tone_color(v.footer_tone == Tone::Ok ? Tone::Off : v.footer_tone));
-    set_optional_text(w.error, dynamic_text(look.lang, f.s.error));
+void refresh_actions(const Frame &f) {
+    if (!w.notice) return;
+    Tone tone;
+    bool ring_line = false;
+    std::string n = notice_for(f, tone, ring_line);
+    if (ring_line) n.clear();   // the ring is not on this page: only a command result or an error is said here
+    set_optional_text(w.notice, n);
+    set_ink(w.notice, tone_color(tone));
 }
 
 // ---- Settings ----
 void build_settings(lv_obj_t *body) {
     heading(body, T(Str::SettingsTitle), P().accent);
     struct Row { Str name, sub; Page page; uint32_t tone; };
-    const Row rows[] = {{Str::SettingDisplay, Str::SettingDisplaySub, Page::Display, P().accent},
+    const Row rows[] = {{Str::SettingPages, Str::SettingPagesSub, Page::Pages, P().accent},
+                        {Str::SettingSources, Str::SettingSourcesSub, Page::Sources, P().wifi},
+                        {Str::SettingDisplay, Str::SettingDisplaySub, Page::Display, P().accent},
                         {Str::SettingAppearance, Str::SettingAppearanceSub, Page::Appearance, P().clock},
                         {Str::SettingConnection, Str::SettingConnectionSub, Page::Connect, P().wifi},
                         {Str::SettingPower, Str::SettingPowerSub, Page::Power, P().power},
@@ -377,6 +439,137 @@ void build_settings(lv_obj_t *body) {
         label_at(b, LV_SYMBOL_RIGHT, kContentW - 36, (h - 14) / 2 - 2, 20, &lv_font_montserrat_14, P().muted);
     }
 }
+
+// ---- Pages (docs/design v2 Pages): shown or not, the order; the first shown one is the home page ----
+void build_pages(lv_obj_t *body, const Frame &f) {
+    heading(body, T(Str::SettingPages), P().accent);
+    const PageOrder &o = look.appearance.pages;
+    const View home = home_view(o);
+    const int h = std::max(64, lh(look.body) + 20);
+    for (size_t i = 0; i < o.size(); ++i) {
+        auto *row = card(body, h);
+        lv_obj_set_style_radius(row, 18, 0);
+        auto *num = label_at(row, std::to_string(i + 1), 12, (h - lh(look.caption)) / 2 - 1, 20, look.caption, P().muted);
+        single_line(num, lh(look.caption));
+        auto *name = label_at(row, T(view_name(o[i].view)), 36, (h - lh(look.body)) / 2 - 1, 120, look.body, o[i].shown ? P().ink : P().muted);
+        single_line(name, lh(look.body));
+        lv_label_set_long_mode(name, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(name, LV_SIZE_CONTENT);
+        if (o[i].shown && o[i].view == home) {
+            lv_obj_update_layout(name);
+            auto *tag = pill(row, T(Str::PagesHome), P().bg, P().accent, P().accent, look.caption);
+            lv_obj_update_layout(tag);   // its height is known only after a layout pass
+            lv_obj_set_pos(tag, 36 + lv_obj_get_width(name) + 8, (h - lv_obj_get_height(tag)) / 2 - 1);
+        }
+        // the switch, then up and down: 56 px targets that do not overlap
+        auto *sw = button(row, on_pages_toggle, data(static_cast<int>(i)), 60, 56);
+        lv_obj_set_pos(sw, kContentW - 2 - 56 - 2 - 56 - 4 - 60, (h - 2 - 56) / 2);
+        flat(sw);
+        auto *track = holder(sw, 44, 26);
+        lv_obj_center(track);
+        lv_obj_set_style_radius(track, 13, 0);
+        lv_obj_set_style_bg_color(track, hex(o[i].shown ? P().accent : P().edge), 0);
+        lv_obj_set_style_bg_opa(track, LV_OPA_COVER, 0);
+        auto *knob = holder(track, 20, 20);
+        lv_obj_set_pos(knob, o[i].shown ? 21 : 3, 3);
+        lv_obj_set_style_radius(knob, 10, 0);
+        lv_obj_set_style_bg_color(knob, hex(o[i].shown ? P().bg : P().muted), 0);
+        lv_obj_set_style_bg_opa(knob, LV_OPA_COVER, 0);
+        lv_obj_t *moves[2] = {nullptr, nullptr};
+        for (int k = 0; k < 2; ++k) {
+            auto *b = button(row, k == 0 ? on_pages_up : on_pages_down, data(static_cast<int>(i)), 56, 56);
+            lv_obj_set_pos(b, kContentW - 2 - 56 - (k == 0 ? 56 + 2 : 0), (h - 2 - 56) / 2);
+            lv_obj_set_style_radius(b, 14, 0);
+            auto *arrow = label(b, k == 0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN, 24, &lv_font_montserrat_14, P().muted);
+            lv_obj_center(arrow);
+            const bool end = (k == 0 && i == 0) || (k == 1 && i + 1 == o.size());
+            if (end) { lv_obj_add_state(b, LV_STATE_DISABLED); lv_obj_set_style_opa(b, LV_OPA_30, 0); }
+            moves[k] = b;
+        }
+        w.pages_ctrl[i] = {sw, moves[0], moves[1]};
+    }
+    caption(body, T(Str::PagesHint), P().muted);
+    w.error = caption(body, "", P().power);
+    set_optional_text(w.error, f.last_error);
+}
+// ---- Input sources (docs/design v2 Sources): the style of the switch page, and each source ----
+std::vector<lv_obj_t *> g_style_buttons;
+void build_sources(lv_obj_t *body, const Frame &f) {
+    heading(body, T(Str::SettingSources), P().accent);
+    g_style_buttons.clear();
+    segmented(body, {T(Str::StyleList), T(Str::StyleIcons)}, static_cast<int>(look.appearance.style), on_style,
+              {static_cast<int>(SwitchStyle::List), static_cast<int>(SwitchStyle::Icons)}, {look.body, look.body}, &g_style_buttons);
+    const auto sources = make_sources(look.lang, f.s, f.sources);
+    if (sources.empty()) {
+        caption(body, T(Str::NoActions), P().ink);
+        caption(body, T(Str::NoActionsHint), P().muted);
+    }
+    const int h = std::max(64, lh(look.body) + 20);
+    for (size_t i = 0; i < sources.size(); ++i) {
+        const SourceView &v = sources[i];
+        auto *b = button(body, on_source, data(static_cast<int>(i)), kContentW, h);
+        lv_obj_set_style_radius(b, 18, 0);
+        auto *icon = source_icon(b, v.icon, 28, P().muted, 2);
+        lv_obj_set_pos(icon, 16, (h - 28) / 2);
+        auto *name = label_at(b, v.name, 56, (h - lh(look.body)) / 2 - 1, 210, look.body, P().ink);
+        single_line(name, lh(look.body));
+        auto *tag = label_at(b, v.tag, 270, (h - lh(look.caption)) / 2 - 1, 110, look.caption, P().muted);
+        lv_obj_set_style_text_align(tag, LV_TEXT_ALIGN_RIGHT, 0);
+        single_line(tag, lh(look.caption));
+        label_at(b, LV_SYMBOL_RIGHT, kContentW - 36, (h - 14) / 2 - 2, 20, &lv_font_montserrat_14, P().muted);
+    }
+    caption(body, T(Str::SourcesHint), P().muted);
+    w.error = caption(body, "", P().power);
+    set_optional_text(w.error, f.last_error);
+}
+// ---- Edit a source (docs/design v2 SourceEdit): the name through the keyboard, the icon from eight ----
+std::string g_edit_name;
+void on_rename(lv_event_t *) { rename_start(g_edit_name); }
+void build_source_edit(lv_obj_t *body, const Frame &f) {
+    w.icon_btn = {};
+    heading(body, T(Str::SourceEditTitle), P().accent);
+    const auto sources = make_sources(look.lang, f.s, f.sources);
+    const SourceView *v = nullptr;
+    for (const auto &s : sources) if (s.id == f.edit_id) v = &s;
+    if (!v) { caption(body, T(Str::SourceGone), P().muted); return; }
+    g_edit_name = v->name;
+    const int h = std::max(64, lh(look.body) + 20);
+    auto *row = button(body, on_rename, data(0), kContentW, h);
+    lv_obj_set_style_radius(row, 18, 0);
+    auto *key = label_at(row, T(Str::SourceName), 16, (h - lh(look.caption)) / 2 - 1, 70, look.caption, P().muted);
+    single_line(key, lh(look.caption));
+    auto *name = label_at(row, v->name, 90, (h - lh(look.body)) / 2 - 1, kContentW - 90 - 50, look.body, P().ink);
+    single_line(name, lh(look.body));
+    label_at(row, LV_SYMBOL_KEYBOARD, kContentW - 44, (h - 24) / 2 - 2, 32, &lv_font_montserrat_24, P().muted);
+    auto *tag = label(body, v->tag, kContentW, look.caption, P().muted);
+    single_line(tag, lh(look.caption));
+    section(body, T(Str::SourceIconTitle));
+    const int gap = 8, bw = (kContentW - 3 * gap) / 4, bh = std::max(72, 34 + lh(look.caption) + 10);
+    auto *grid = holder(body, kContentW, 2 * bh + gap);
+    for (size_t i = 0; i < kIconChoices.size(); ++i) {
+        const SourceIcon ic = kIconChoices[i];
+        const bool on = ic == v->icon;
+        auto *b = button(grid, on_icon, data(static_cast<int>(ic)), bw, bh);
+        lv_obj_set_pos(b, static_cast<int>(i % 4) * (bw + gap), static_cast<int>(i / 4) * (bh + gap));
+        lv_obj_set_style_radius(b, 16, 0);
+        select(b, on, false);
+        auto *icon = source_icon(b, ic, 30, on ? P().accent : P().muted, 2);
+        lv_obj_set_pos(icon, (bw - 30) / 2 - 1, 6);
+        auto *l = label_at(b, T(icon_name(ic)), 2, 40, bw - 6, look.caption, on ? P().accent : P().muted);
+        centered(l);
+        single_line(l, lh(look.caption));
+        w.icon_btn[static_cast<size_t>(ic)] = b;
+    }
+    auto *restore = button(body, on_restore, data(0), kContentW, 56);
+    lv_obj_set_style_radius(restore, 18, 0);
+    auto *rl = label(restore, T(Str::SourceRestore), kContentW - 24, look.body, P().muted);
+    centered(rl);
+    single_line(rl, lh(look.body));
+    lv_obj_center(rl);
+    w.error = caption(body, "", P().power);
+    set_optional_text(w.error, f.last_error);
+}
+void refresh_own_error(const Frame &f) { if (w.error) set_optional_text(w.error, f.last_error); }
 
 // ---- Power ----
 void build_power(lv_obj_t *body, PowerTab tab, const Frame &f) {
@@ -530,21 +723,24 @@ void build_appearance(lv_obj_t *body, const Frame &f) {
     const Appearance &a = current_appearance();
     heading(body, T(Str::AppearanceTitle), P().clock);
     section(body, T(Str::KeyTheme));
-    auto *themes = holder(body, kContentW, 56);
-    const Str theme_names[3] = {Str::ThemeMint, Str::ThemeOcean, Str::ThemeAmber};
-    for (int i = 0; i < 3; ++i) {
-        const Palette &tp = theme_palette(static_cast<ThemeId>(i));
-        auto *b = button(themes, on_theme, data(i), 136, 56);
-        lv_obj_set_pos(b, i * 148, 0);
+    auto *themes = holder(body, kContentW, 2 * 56 + 8);
+    const ThemeId ids[4] = {ThemeId::Night, ThemeId::Mint, ThemeId::Ocean, ThemeId::Amber};
+    const Str theme_names[4] = {Str::ThemeNight, Str::ThemeMint, Str::ThemeOcean, Str::ThemeAmber};
+    for (int i = 0; i < 4; ++i) {
+        const Palette &tp = theme_palette(ids[i]);
+        const bool on = a.theme == ids[i];
+        auto *b = button(themes, on_theme, data(static_cast<int>(ids[i])), 212, 56);
+        lv_obj_set_pos(b, (i % 2) * 220, (i / 2) * 64);
         lv_obj_set_style_radius(b, 18, 0);
-        select(b, a.theme == static_cast<ThemeId>(i), false);
-        auto *bar = holder(b, 56, 10);
-        lv_obj_set_pos(bar, 38, 8);
-        lv_obj_set_style_radius(bar, 5, 0);
-        lv_obj_set_style_bg_color(bar, hex(tp.accent), 0);
-        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-        auto *l = label_at(b, T(theme_names[i]), 0, 24, 134, look.caption, a.theme == static_cast<ThemeId>(i) ? P().accent : P().ink);
-        centered(l);
+        select(b, on, false);
+        auto *swatch = holder(b, 30, 30);   // the theme's background with its accent: what the screen will look like
+        lv_obj_set_pos(swatch, 14, 12);
+        lv_obj_set_style_radius(swatch, 9, 0);
+        lv_obj_set_style_bg_color(swatch, hex(tp.card), 0);
+        lv_obj_set_style_bg_opa(swatch, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(swatch, hex(tp.accent), 0);
+        lv_obj_set_style_border_width(swatch, 3, 0);
+        auto *l = label_at(b, T(theme_names[i]), 54, (54 - lh(look.caption)) / 2, 150, look.caption, on ? P().accent : P().ink);
         single_line(l, lh(look.caption));
     }
     section(body, T(Str::KeyAccent));
@@ -850,18 +1046,24 @@ void build_shell(lv_obj_t *screen) {
 
     sh.nav = panel(screen, kContentW, 64, p.card, p.edge, 32);
     lv_obj_set_pos(sh.nav, kMargin, kNavTop);
-    const Str names[4] = {Str::NavOverview, Str::NavActions, Str::NavComputer, Str::NavSettings};
-    const Page targets[4] = {Page::Home, Page::Actions, Page::Computer, Page::Settings};
-    for (int i = 0; i < 4; ++i) {
-        sh.nav_btn[static_cast<size_t>(i)] = button(sh.nav, on_page, data(static_cast<int>(targets[i])), 104, 56);
-        lv_obj_set_pos(sh.nav_btn[static_cast<size_t>(i)], 3 + i * 107, 3);
-        lv_obj_set_style_radius(sh.nav_btn[static_cast<size_t>(i)], 28, 0);
-        lv_obj_set_style_border_width(sh.nav_btn[static_cast<size_t>(i)], 1, 0);
-        auto *l = label(sh.nav_btn[static_cast<size_t>(i)], T(names[i]), 100, nav_font(), p.muted);
+    const auto views = nav_views(look.appearance.pages);
+    sh.nav_count = static_cast<int>(views.size()) + 1;
+    const int n = sh.nav_count, each = (kContentW - 8 - 3 * (n - 1)) / n;
+    // Five buttons are narrow: the English names drop to the small font there.
+    const lv_font_t *font = n >= 5 && look.lang == Lang::EnUS ? &btr_ui_16 : nav_font();
+    for (int i = 0; i < n; ++i) {
+        const size_t k = static_cast<size_t>(i);
+        const bool settings = i == n - 1;
+        sh.nav_page[k] = settings ? Page::Settings : page_of(views[k]);
+        sh.nav_btn[k] = button(sh.nav, on_page, data(static_cast<int>(sh.nav_page[k])), each, 56);
+        lv_obj_set_pos(sh.nav_btn[k], 3 + i * (each + 3), 3);
+        lv_obj_set_style_radius(sh.nav_btn[k], 28, 0);
+        lv_obj_set_style_border_width(sh.nav_btn[k], 1, 0);
+        auto *l = label(sh.nav_btn[k], T(settings ? Str::NavSettings : view_name(views[k])), each - 4, font, p.muted);
         centered(l);
-        single_line(l, lh(nav_font()));
+        single_line(l, lh(font));
         lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
-        sh.nav_label[static_cast<size_t>(i)] = l;
+        sh.nav_label[k] = l;
     }
     sh.hint = label_at(screen, LV_SYMBOL_DOWN, 230, 386, 20, &lv_font_montserrat_14, p.accent);
     lv_obj_add_flag(sh.hint, LV_OBJ_FLAG_HIDDEN);
@@ -909,8 +1111,12 @@ void refresh_shell(const Frame &f, Page page, bool pairing_active) {
         if (lv_obj_get_x(sh.digits) != centre - 21) lv_obj_set_x(sh.digits, centre - 21);
     }
     cut_shown(sh.bat_cut, h.battery.kind == BatteryView::Kind::None);
-    const int active = page == Page::Home || page == Page::Clock ? 0 : page == Page::Actions ? 1 : page == Page::Computer ? 2 : 3;
-    for (int i = 0; i < 4; ++i) {
+    // The lit button: the page itself when it is in the navigation; any other page belongs to Settings, except the clock
+    // that idling shows, which lights nothing when it is not in the navigation.
+    int active = -1;
+    for (int i = 0; i < sh.nav_count; ++i) if (sh.nav_page[static_cast<size_t>(i)] == page) active = i;
+    if (active < 0 && page != Page::Clock && page != Page::Home && page != Page::Actions) active = sh.nav_count - 1;
+    for (int i = 0; i < sh.nav_count; ++i) {
         const bool on = i == active;
         auto *b = sh.nav_btn[static_cast<size_t>(i)];
         set_bg(b, on ? p.selected : p.card);
@@ -948,8 +1154,10 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     switch (page) {
     case Page::Home: build_home(body, f); break;
     case Page::Actions: build_actions(body, f); break;
-    case Page::Computer: build_computer(body); break;
     case Page::Settings: build_settings(body); break;
+    case Page::Pages: build_pages(body, f); break;
+    case Page::Sources: build_sources(body, f); break;
+    case Page::SourceEdit: build_source_edit(body, f); break;
     case Page::Power: build_power(body, tab, f); break;
     case Page::Connect: build_connect(body, f); break;
     case Page::Appearance: build_appearance(body, f); break;
@@ -967,8 +1175,8 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     switch (page) {
     case Page::Home: refresh_home(f); break;
     case Page::Actions: refresh_actions(f); break;
-    case Page::Computer: refresh_computer(f); break;
     case Page::Settings: break;
+    case Page::Pages: case Page::Sources: case Page::SourceEdit: refresh_own_error(f); break;
     case Page::Power: refresh_power(tab, f); break;
     case Page::Connect: refresh_connect(f); break;
     case Page::Appearance: refresh_appearance(f); break;
@@ -1254,4 +1462,33 @@ std::string home_first_action_label() {
     return "";
 }
 lv_obj_t *accent_swatch(int index) { return index >= 0 && index < 6 ? w.swatch[static_cast<size_t>(index)] : nullptr; }
+int nav_count() { return sh.nav ? sh.nav_count : 0; }
+std::string nav_text(int i) { return i >= 0 && i < sh.nav_count && sh.nav_label[static_cast<size_t>(i)] ? lv_label_get_text(sh.nav_label[static_cast<size_t>(i)]) : ""; }
+bool nav_area(int i, int *x1, int *y1, int *x2, int *y2) { return i >= 0 && i < sh.nav_count && area_of(sh.nav_btn[static_cast<size_t>(i)], x1, y1, x2, y2); }
+bool pages_control_area(int slot, int which, int *x1, int *y1, int *x2, int *y2) {
+    if (current_page() != Page::Pages || slot < 0 || slot > 3 || which < 0 || which > 2) return false;
+    auto *o = w.pages_ctrl[static_cast<size_t>(slot)][static_cast<size_t>(which)];
+    if (!o) return false;
+    lv_obj_scroll_to_view_recursive(o, LV_ANIM_OFF);
+    lv_obj_update_layout(screen_object());
+    return area_of(o, x1, y1, x2, y2);
+}
+bool icon_choice_area(int icon, int, int *x1, int *y1, int *x2, int *y2) {
+    if (current_page() != Page::SourceEdit || icon < 1 || icon > 8) return false;
+    auto *o = w.icon_btn[static_cast<size_t>(icon)];
+    if (!o) return false;
+    lv_obj_scroll_to_view_recursive(o, LV_ANIM_OFF);
+    lv_obj_update_layout(screen_object());
+    return area_of(o, x1, y1, x2, y2);
+}
+bool clock_dot_lit(int i) {
+    if (current_page() != Page::Clock || i < 0 || i > 3 || !w.clock_dot[static_cast<size_t>(i)]) return false;
+    return !lv_color_eq(lv_obj_get_style_bg_color(w.clock_dot[static_cast<size_t>(i)], LV_PART_MAIN), hex(P().edge));
+}
+int switch_row_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_rows.size()) : 0; }
+int switch_tile_count() { return current_page() == Page::Actions ? static_cast<int>(w.switch_tiles.size()) : 0; }
+int switch_icon(int i) {
+    if (current_page() != Page::Actions || i < 0 || static_cast<size_t>(i) >= w.switch_icons.size()) return -1;
+    return static_cast<int>(source_icon_of(w.switch_icons[static_cast<size_t>(i)]));
+}
 }  // namespace dh::ui::detail

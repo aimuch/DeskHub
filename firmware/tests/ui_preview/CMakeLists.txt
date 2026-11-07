@@ -16,7 +16,7 @@ add_subdirectory("${LVGL_ROOT}" lvgl)
 # The real UI sources, the baseline display policy, and the simulated services in harness.cpp.
 set(UI "${FIRMWARE}/components/ui")
 add_executable(deskhub_ui_preview harness.cpp
-  "${UI}/ui.cpp" "${UI}/ui_wifi.cpp" "${UI}/ui_kit.cpp" "${UI}/ui_pages.cpp" "${UI}/ui_model.cpp" "${UI}/ui_theme.cpp" "${UI}/ui_text.cpp"
+  "${UI}/ui.cpp" "${UI}/ui_wifi.cpp" "${UI}/ui_kit.cpp" "${UI}/ui_pages.cpp" "${UI}/ui_model.cpp" "${UI}/ui_theme.cpp" "${UI}/ui_text.cpp" "${UI}/ui_icons.cpp" "${UI}/ui_rename.cpp"
   "${FIRMWARE}/components/core/policy.cpp" "${FIRMWARE}/components/charge/charge_policy.cpp" "${FIRMWARE}/components/audio/audio_policy.cpp"
   "${UI}/btr_ui_16.c" "${UI}/btr_ui_20.c" "${UI}/btr_ui_28.c" "${UI}/font_clock_72.c")
 target_include_directories(deskhub_ui_preview PRIVATE stubs
