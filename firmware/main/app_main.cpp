@@ -132,6 +132,15 @@ cJSON *handle(cJSON *request) {
         bool rtc=dh::board_rtc_write(parsed);dh::network_reconfigure();
         auto *o=result(true),*r=cJSON_AddObjectToObject(o,"result");cJSON_AddBoolToObject(r,"saved",true);cJSON_AddNumberToObject(r,"config_revision",dh::secrets().revision);cJSON_AddBoolToObject(r,"rtc_written",rtc);auto fingerprint=dh::update_key_fingerprint(dh::secrets().update_public_key_pem);if(fingerprint.empty())cJSON_AddNullToObject(r,"update_key_fingerprint");else cJSON_AddStringToObject(r,"update_key_fingerprint",fingerprint.c_str());return o;
     }
+    if(op=="update_key") {
+        // The key that signs Bluetooth updates (docs/desktop-app-design.md 13.11, K1): only over USB, never over Bluetooth.
+        if(cJSON_GetArraySize(request)!=2)return result(false,"INVALID_ARGUMENT","只要 public_key_pem 一个字段");
+        const auto pem=field(request,"public_key_pem");
+        if(!dh::update_public_key_valid(pem))return result(false,"INVALID_ARGUMENT","更新公钥必须为 P-256 SPKI PEM");
+        if(dh::save_update_key(pem)!=ESP_OK)return result(false,"CONFIG_COMMIT_FAILED","公钥未保存，原有公钥已保留");
+        auto *o=result(true),*r=cJSON_AddObjectToObject(o,"result");cJSON_AddBoolToObject(r,"saved",true);
+        cJSON_AddStringToObject(r,"fingerprint",dh::update_key_fingerprint(pem).c_str());return o;
+    }
     if(op=="sound_test") {
         // Plays the test tone once and says what the call did. A program cannot hear it: the person listens.
         const bool available=dh::audio::available(),played=dh::audio::test();
@@ -192,5 +201,15 @@ extern "C" void app_main() {
     if(dh::board_display_init()==ESP_OK)dh::ui_start();
     dh::audio::init();   // a task of its own: the codec is created there, so a missing speaker never delays the start
     dh::network_start();dh::wifi_change::init();dh::agent_start();dh::management_start();dh::pairing_device::start();start_task(housekeeping,"dh_power",6144,5);
+    {   // The firmware update over Bluetooth asks management (docs/desktop-app-design.md 13.11): ble_link cannot depend on it.
+        dh::ble::UpdateHooks h;
+        h.allowed=[](std::string &why){return dh::update_allowed(why);};
+        h.verify=[](const std::string &envelope,void *){dh::ble::update::Checked c;dh::UpdateManifest m;
+            if(dh::verify_update_envelope(envelope,m,c.why)){c.ok=true;c.version=m.version;c.sha256=m.hash;c.size=m.size;c.why.clear();}
+            return c;};
+        h.key_fingerprint=[](){return dh::update_key_fingerprint(dh::secrets().update_public_key_pem);};
+        h.active=[](bool on){dh::external_update(on);};
+        dh::ble::set_update_hooks(h);
+    }
     probe_start();   // measurement only in test builds (components/probe); does nothing in a release build
 }

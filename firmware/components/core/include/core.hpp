@@ -55,6 +55,8 @@ esp_err_t save_config(const ConfigDraft &);
 esp_err_t save_managed_config(DisplayConfig, uint64_t generation);
 enum class NetworkOwner { None, Pairing, WifiChange };
 esp_err_t save_secrets(const Secrets &, NetworkOwner writer = NetworkOwner::None);
+// Only the update key (USB, docs/desktop-app-design.md 13.11): dh_trust/update_key, the place save_secrets uses. The caller checks the PEM.
+esp_err_t save_update_key(const std::string &pem);
 // Radio ownership also excludes durable config/reset writers and OTA start.
 // Acquisition waits for the current normal Wi-Fi iteration to finish.
 bool network_acquire(NetworkOwner);

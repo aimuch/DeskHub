@@ -1,3 +1,4 @@
+#include <atomic>
 #include "management.hpp"
 #include "config_wire.hpp"
 #include "update_policy.hpp"
@@ -33,7 +34,9 @@ struct Journal {
 };
 static Journal journal;
 static std::string boot_id,config_error;
-static bool journal_healthy=true,self_test_pending=false;
+static bool journal_healthy=true;
+// Read by the Bluetooth update from another task (update_allowed): atomic.
+static std::atomic<bool> self_test_pending{false},agent_update_active{false},bluetooth_update_active{false};
 static int64_t self_test_deadline=0;
 static uint32_t failed_revision=0;
 static int64_t failed_config_at=0;
@@ -156,7 +159,12 @@ static bool image_header(const std::vector<unsigned char> &prefix,const UpdateMa
     esp_image_header_t header{};esp_app_desc_t app{};memcpy(&header,prefix.data(),sizeof(header));memcpy(&app,prefix.data()+sizeof(header)+sizeof(esp_image_segment_header_t),sizeof(app));
     return header.magic==ESP_IMAGE_HEADER_MAGIC&&header.chip_id==ESP_CHIP_ID_ESP32S3&&app.magic_word==ESP_APP_DESC_MAGIC_WORD&&memchr(app.version,0,sizeof(app.version))&&m.version==app.version&&memchr(app.project_name,0,sizeof(app.project_name))&&strcmp(app.project_name,"deskhub")==0;
 }
+static void install_job(cJSON *job,const Secrets &s);
 static void install(cJSON *job,const Secrets &s){
+    if(bluetooth_update_active||!cJSON_IsObject(job))return;   // one update at a time (13.11 U5)
+    agent_update_active=true;install_job(job,s);agent_update_active=false;
+}
+static void install_job(cJSON *job,const Secrets &s){
     auto job_id=text(job,"job_id"),package=text(job,"package_id"),path=text(job,"image_path"),expiry=text(job,"expires_at");
     if(!valid_update_id(job_id)||!valid_update_hash(package)||!valid_update_path(package,path)||job_id==journal.job_id)return;
     // Claim the transition under Core's mutex before any journal or flash write.
@@ -254,6 +262,21 @@ static void task(void *){
 }
 } // namespace
 bool update_public_key_valid(const std::string &pem){psa_crypto_init();mbedtls_pk_context key;mbedtls_pk_init(&key);bool ok=open_key(pem,key);mbedtls_pk_free(&key);return ok;}
+bool update_allowed(std::string &why){
+    if(agent_update_active||bluetooth_update_active){why="UPDATE_BUSY";return false;}
+    if(self_test_pending){why="UPDATE_SELF_TEST_PENDING";return false;}
+    if(!journal_healthy||!core_storage_healthy()){why="UPDATE_STORAGE_FAULT";return false;}
+    if(!stable_power()){why="UPDATE_POWER_UNSTABLE";return false;}
+    why.clear();return true;
+}
+bool verify_update_envelope(const std::string &json,UpdateManifest &m,std::string &error){
+    psa_crypto_init();
+    auto *o=parse_json_strict(json.c_str(),json.size());
+    bool ok=o&&manifest(o,secrets(),m,error);
+    if(!o)error="INVALID_UPDATE_MANIFEST";
+    cJSON_Delete(o);return ok;
+}
+void external_update(bool active){bluetooth_update_active=active;}
 std::string update_key_fingerprint(const std::string &pem){
     psa_crypto_init();mbedtls_pk_context key;mbedtls_pk_init(&key);unsigned char encoded[256],digest[32];std::string result;
     if(open_key(pem,key)){int length=mbedtls_pk_write_pubkey_der(&key,encoded,sizeof(encoded));if(length>0&&sha(encoded+sizeof(encoded)-length,length,digest))result=hex(digest,32);}

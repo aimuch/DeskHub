@@ -264,6 +264,15 @@ esp_err_t save_secrets(const Secrets &input, NetworkOwner writer) {
     else {credentials.token.clear();trust_read_fault=!read_trusted_key(credentials.update_public_key_pem);state.error="PAIRING_COMMIT_FAILED：请重新通过USB配置";}
     return e;
 }
+esp_err_t save_update_key(const std::string &pem) {
+    if (pem.empty() || pem.size() > 2048 || pem.find("PRIVATE KEY") != std::string::npos) return ESP_ERR_INVALID_ARG;
+    StorageGuard storage;
+    nvs_handle_t trust;
+    esp_err_t e = nvs_open("dh_trust", NVS_READWRITE, &trust);
+    if (e == ESP_OK) { e = nvs_set_str(trust, "update_key", pem.c_str()); if (e == ESP_OK) e = nvs_commit(trust); nvs_close(trust); }
+    if (e == ESP_OK) { Guard g; credentials.update_public_key_pem = pem; trust_read_fault = false; }
+    return e;
+}
 static esp_err_t reset_config_locked() {
     if(radio_owner!=NetworkOwner::None)return ESP_ERR_INVALID_STATE;
     if (!storage_ready) return ESP_ERR_INVALID_STATE;
