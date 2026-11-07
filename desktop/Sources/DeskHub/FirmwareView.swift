@@ -100,12 +100,22 @@ final class FirmwareModel: ObservableObject {
         link.onUpdateLog = { note($0) }
         note("waiting for the touch screen")
         var started = false
+        var blockedFor = 0, waited = 0
         autoTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] t in
             Task { @MainActor in
                 guard let self else { t.invalidate(); return }
                 if !started {
+                    waited += 1
+                    if waited % 10 == 0 { note("waiting: link \(link.state)\(link.problem.map { " | \($0)" } ?? "") | \(link.diagnostics)") }
                     if let why = self.bluetoothBlocker(link) {
-                        if case .connected = link.state { note("blocked: \(why)"); t.invalidate() }
+                        // Connected but not ready: wait up to 20 s (the info and the characteristics come a moment later), then say why.
+                        if case .connected = link.state {
+                            blockedFor += 1
+                            if blockedFor >= 20 {
+                                note("blocked: \(why) | info \(link.info.map { "\($0.device) \($0.firmware) key [\($0.updateKey)]" } ?? "none") | mine [\(self.key?.fingerprint ?? "none")] | update characteristic \(link.hasUpdateCharacteristic)")
+                                t.invalidate()
+                            }
+                        }
                         return
                     }
                     started = true

@@ -84,8 +84,7 @@ let result = FlashRun(package: folder, port: port, tool: tool).run { e in
     case .probing: print("识别芯片…"); record.add(["event": "probing"])
     case .writing(let f):
         let pct = Int(f * 100)
-        if pct / 10 != record.lastPercent / 10 || pct == 100 { print("写入 \(pct)%"); record.add(["event": "writing", "percent": pct]) }
-        record.lastPercent = pct
+        if pct / 10 > record.lastPercent / 10 { print("写入 \(pct)%"); record.add(["event": "writing", "percent": pct]); record.lastPercent = pct }   // each tenth once
     case .restarting: print("写入和 esptool 校验通过，等设备重启…"); record.add(["event": "restarting"])
     case .confirmed(let id): print("已刷入 \(id.version)（读回确认，\(id.deviceID)）"); record.add(["event": "confirmed", "device_id": id.deviceID, "version": id.version])
     case .log(let l): record.add(["event": "esptool", "line": String(l.prefix(300))])

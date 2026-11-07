@@ -23,6 +23,7 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
 
     @Published private(set) var state: State = .notPaired
     @Published private(set) var problem: String?
+    var diagnostics = ""
     @Published private(set) var info: DeviceInfo?           // what the device said about itself at the last connection
     // ---- the firmware update over Bluetooth (docs/desktop-app-design.md 13.11) ----
     enum UpdatePhase: Equatable {
@@ -184,7 +185,10 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
         switch c.state {
         case .poweredOn:
-            if let id = remembered, let p = c.retrievePeripherals(withIdentifiers: [id]).first { connect(p) }
+            let found = remembered.map { c.retrievePeripherals(withIdentifiers: [$0]) } ?? []
+            let linked = c.retrieveConnectedPeripherals(withServices: [Self.service])
+            diagnostics = "poweredOn remembered=\(remembered?.uuidString ?? "none") retrieved=\(found.map(\.identifier.uuidString)) connected=\(linked.map(\.identifier.uuidString))"
+            if let p = found.first { connect(p) }
             else { state = .notPaired }
         case .unauthorized: state = .unavailable("DeskHub 没有蓝牙权限：在 系统设置 › 隐私与安全性 › 蓝牙 里打开")
         case .poweredOff: state = .unavailable("这台 Mac 的蓝牙关着")
