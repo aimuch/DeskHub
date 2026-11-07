@@ -52,7 +52,9 @@ func reply(cur: UInt16, max: UInt16 = 14, vcp: UInt8 = 0x60, result: UInt8 = 0, 
 do {
     if case .success(let v) = DDCReply.parseVCPFields(reply(cur: 0x0F0F), vcp: 0x60) { check(v.current == 0x0F0F && v.maximum == 14, "a good reply") } else { check(false, "a good reply is taken") }
     // the real one from the U2720QM (2026-11-07)
-    if case .success(let v) = DDCReply.parseVCPFields([0x6e, 0x88, 0x02, 0x00, 0x60, 0x00, 0x00, 0x0e, 0x0f, 0x0f, 0x0f ^ 0x0f ^ 0x0e ^ 0x60 ^ 0x02 ^ 0x88 ^ 0x6e ^ 0x50], vcp: 0x60) {
+    // the checksum typed on its own line: Swift 6.0 to 6.2 (Xcode 16, CI) do not infer UInt8 for a chain of ^ inside the literal
+    let u2720sum: UInt8 = 0x0f ^ 0x0f ^ 0x0e ^ 0x60 ^ 0x02 ^ 0x88 ^ 0x6e ^ 0x50
+    if case .success(let v) = DDCReply.parseVCPFields([0x6e, 0x88, 0x02, 0x00, 0x60, 0x00, 0x00, 0x0e, 0x0f, 0x0f, u2720sum], vcp: 0x60) {
         check(v.current == 0x0F0F, "the U2720QM reply")
     } else { check(false, "the U2720QM reply is taken") }
     var bad = reply(cur: 15); bad[10] ^= 1

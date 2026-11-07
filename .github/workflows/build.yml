@@ -29,12 +29,14 @@ jobs:
       - name: Host tests (rules, protocol, view models)
         shell: bash
         run: |
+          . "$IDF_PATH/export.sh"   # a job container does not run the image entrypoint: cmake comes from here
           cmake -S firmware/tests -B build-tests -G Ninja
           cmake --build build-tests --parallel
           ctest --test-dir build-tests --output-on-failure
       - name: Screen tests (the real UI code on native LVGL)
         shell: bash
         run: |
+          . "$IDF_PATH/export.sh"   # a job container does not run the image entrypoint: cmake comes from here
           cmake -S firmware/tests/ui_preview -B build-preview -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build-preview --target deskhub_ui_preview --parallel
           build-preview/deskhub_ui_preview
