@@ -1,0 +1,26 @@
+{
+  "version": "0.3.21",
+  "date": "2026-11-07",
+  "build_dir": "firmware/build-0.3.21（ESP-IDF v6.0.2，-D SDKCONFIG=build-0.3.21/sdkconfig，配置来自 sdkconfig.defaults）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.20": [
+    "总览（用户 2026-11-07；docs/design/v2 OverviewLarge、OverviewLargeNote）：去掉圆环下的提示（“点圆环看说明”和暗段的名字）；圆环直径 252 → 316，放在主体正中；时间用 72 号数字字体，日期用正文字号；错误、升级进度、切源结果显示在圆环里，代替日期",
+    "切源页图标样式（用户 2026-11-07，照片：三个源太靠上，下面空）：只有一行时砖块往下长，填到切源结果那一行上面；4 个以上仍是两列可滚动"
+  ],
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.21-esp32s3.zip",
+      "size_bytes": 2750873,
+      "sha256": "bd468f927ae6bb03ca8a5634aacabc141171f71af858a81444c75b637cf52b0e",
+      "app_image_bytes": 4468320,
+      "app_image_sha256": "20a704b236e8be874c04cc0db8caee247e6aa97a5f1ab0f8b0ade574e1a32d6d"
+    }
+  },
+  "checks_done": [
+    "主机测试 18 组全部通过；界面流程全部通过（A27/A41 大圆环、消息代替日期；A24 说明页；A19 粗细 18/29/41；switch_styles 砖块填满）",
+    "变异检查：27 条过时的片段对上现在的代码后，9 个脚本重跑：header_home_ui 19/19、ring_ui 14/14 和 13/13、time_options_ui 8/8 和 21/21、header_ui 24/24 和 19/20、pages_ui 31/31 和 22/22、charge_ui 23/23 和 17/17、factory_reset_ui 7/7、sound_ui 28/28、time_ui 25/25 和 17/17"
+  ],
+  "known_gap": "header_ui 的“电池数字按文字框居中、不按墨迹居中”没有被测试抓到；在 0.3.20 的代码上同样没有抓到，是以前就有的漏洞，和这一版无关",
+  "flashed": false,
+  "not_tested": ["真机"]
+}
