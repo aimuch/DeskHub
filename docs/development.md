@@ -79,7 +79,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/`（`harness.cpp`、`CMakeLists.txt`） | 界面 v2：页面与首页、切换页样式、输入源名字和图标、夜航主题，去掉电脑指标（T24 到 T27、A28 到 A34） |
 | `firmware/sdkconfig.defaults`、`firmware/main/`（`app_main.cpp`、`CMakeLists.txt`）、`firmware/components/board_support/`（`lvgl_psram.c`、`CMakeLists.txt`） | 蓝牙连 App（0.3.18）：NimBLE 和 H2 的内存布局进正式配置；蓝牙最先启动；LVGL 分配器从测试探针移到 board_support；USB 和电源任务栈放 PSRAM，USB 请求交给 flash_worker，任务起不来时写进状态 |
 | `firmware/tests/`（`ble_protocol_test.cpp`、`CMakeLists.txt`、`ui_preview/`） | 蓝牙协议 B1 到 B6；界面 A35 到 A39 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.18，各两处 |
+| `firmware/tests/`（`ui_model_test.cpp`、`ui_preview/harness.cpp`） | 秒和表针可选（0.3.19）：外观文字第 9 段的 T5、T25；界面 A40；时间页的“手动校时”检查改在大数字下做 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.19，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 

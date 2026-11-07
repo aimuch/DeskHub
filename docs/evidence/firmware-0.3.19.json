@@ -1,0 +1,33 @@
+{
+  "version": "0.3.19",
+  "date": "2026-11-07",
+  "build_dir": "firmware/build-0.3.19（ESP-IDF v6.0.2，-D SDKCONFIG=build-0.3.19/sdkconfig，配置来自 sdkconfig.defaults）",
+  "compiler_warnings": 0,
+  "changes_since_0.3.18": [
+    "秒和表针可选（用户 2026-11-07；docs/design/v2 OverviewSeconds、ClockHands、AppearanceTime）",
+    "外观页多两项：“时间显示秒”（默认隐藏）、“时钟表针”（默认显示）",
+    "秒是设备设置 layout.show_seconds（App 也能改），保存经过 flash_worker；表针存在外观文字第 9 段 hands/nohands，0.3.18 以前存的读成显示表针",
+    "显示秒时，总览和时钟页的时间后面加强调色秒数，两者一起居中",
+    "表针：时针、分针正文色，秒针强调色（只在显示秒时），数字变小放在中心下方；时间未知时回到大数字和校时提示"
+  ],
+  "problem_found_while_building": "第一次构建没加 -D SDKCONFIG，用了 git 忽略的旧 firmware/sdkconfig（没有 H2 内存布局），镜像大了 331 KB。删掉重编；这个包没有刷过",
+  "packages": {
+    "usb_bundle": {
+      "file": "dist/deskhub-0.3.19-esp32s3.zip",
+      "size_bytes": 2751387,
+      "sha256": "b29c8bfaa7f09f8917d71758c7cf1e244b366c6165078d7154f302231e386bcf",
+      "app_image_bytes": 4468752,
+      "app_image_sha256": "67799576f9b68c40441d6992c943a59c62a249c2cab477ae27995852b471291f"
+    }
+  },
+  "checks_done": [
+    "主机测试 18 组全部通过（ui_view_models 加了外观第 9 段）",
+    "界面流程全部通过（新增 A40 time_options：默认值、两个开关、保存失败、重启读回、时间未知、14:31:25 的表针角度、英文）",
+    "变异检查 scripts/mutation/time_options_ui.py：8/8、21/21"
+  ],
+  "flashed": false,
+  "not_tested": [
+    "真机上的样子和刷新（每秒重画表针）",
+    "真机上的内存"
+  ]
+}
