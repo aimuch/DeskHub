@@ -116,7 +116,7 @@ lv_obj_t *build_ring_info(lv_obj_t *layer, const RingInfoView &, void (*on_close
 bool ring_info_open();
 bool ring_info_dot_filled(int row);   // the dot of a row of the open sheet is filled (the segment is lit)
 bool notice_dot_shown();             // the dot before the line under the ring
-int body_scroll_y();
+int body_scroll_y();     // -1 when there is no body (deleted with the screen, not built yet)
 void remember_scroll(int y);
 
 // ---- ui.cpp: what the pages ask for ----
@@ -219,5 +219,6 @@ bool rename_open();
 void rename_back();
 void rename_erase();
 int pairing_bar_percent();          // length of the countdown bar in percent, -1 without a pairing page
+void forget_body();     // the body was deleted with the screen: the next build makes a new one
 void reset_for_test();  // drops the screen, timer and every piece of state, so a test can call ui_start() again
 }  // namespace dh::ui::detail

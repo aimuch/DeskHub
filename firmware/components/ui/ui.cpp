@@ -122,7 +122,9 @@ void rebuild_shell() {
     if (wifi_opened()) wifi_close();
     wifi_reset();
     rename_reset();
+    if (body_scroll_y() >= 0) remember_scroll(body_scroll_y());   // a new look keeps the place on the page
     lv_obj_clean(screen);
+    forget_body();   // deleted with the screen: nothing may read it until build_page makes the next one
     pairing_view = nullptr;
     build_shell(screen);
     body = holder(screen, kContentW, kBodyH);
@@ -232,7 +234,7 @@ void update() {
     Frame f = make_frame(s, c, now, desired == Page::Connect);
     if (need_build) {
         const bool same = page == desired;
-        if (same) remember_scroll(body_scroll_y());
+        if (same && body_scroll_y() >= 0) remember_scroll(body_scroll_y());   // after a new look the body is gone: keep what rebuild_shell remembered
         else appearance_error.clear();
         page = desired;
         tab = desired_tab;
@@ -556,6 +558,7 @@ void reset_for_test() {
     lv_screen_load(next_blank);
     wifi_reset();
     if (screen) lv_obj_delete(screen);
+    forget_body();
     if (blank) lv_obj_delete(blank);
     blank = next_blank;
     lv_obj_clean(lv_layer_top());

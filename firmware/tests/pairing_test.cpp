@@ -330,13 +330,13 @@ static void i1_input() {
     CHECK(valid_setup_code("000000") && valid_setup_code("624819"));
     for (const char *bad : {"", "12345", "1234567", "12345a", "12 456", "٣٤٥٦٧٨", "12345\n", "+12345", "-12345", "1.2345"}) CHECK(!valid_setup_code(bad));
     int64_t t = 0;
-    CHECK(parse_utc("2026-10-28T12:34:56Z", t) && t == 1793190896);
-    CHECK(parse_utc("2024-02-29T00:00:00Z", t) && parse_utc("2099-12-31T23:59:59Z", t));
+    CHECK(pairing::parse_utc("2026-10-28T12:34:56Z", t) && t == 1793190896);
+    CHECK(pairing::parse_utc("2024-02-29T00:00:00Z", t) && pairing::parse_utc("2099-12-31T23:59:59Z", t));
     for (const char *bad : {"", "2026-10-28", "2026-10-28 12:34:56Z", "2026-10-28T12:34:56", "2026-10-28T12:34:56+00:00", "2026-10-28t12:34:56z", "2023-12-31T23:59:59Z",
                             "2100-01-01T00:00:00Z", "2026-13-01T00:00:00Z", "2026-00-10T00:00:00Z", "2026-02-29T00:00:00Z", "2026-04-31T00:00:00Z", "2026-10-00T00:00:00Z",
                             "2026-10-32T00:00:00Z", "2026-10-28T24:00:00Z", "2026-10-28T12:60:00Z", "2026-10-28T12:34:60Z", "2026-10-28T12:34:5Z", "26-10-28T12:34:56Z",
                             "2026-10-28T12:34:56Z ", " 2026-10-28T12:34:56Z", "2026-10-28T12:34:56.123Z", "20261028T123456Z"})
-        CHECK(!parse_utc(bad, t));
+        CHECK(!pairing::parse_utc(bad, t));
     CHECK(hotspot_name("deskhub-44bd8d60c598") == "DeskHub-C598" && hotspot_name("deskhub-aabbccddee0f") == "DeskHub-EE0F");
     for (const char *odd : {"", "x", "zz", "deskhub-", "not hex at all!", "é"}) { const std::string n = hotspot_name(odd); CHECK(valid_ssid(n) && n.rfind("DeskHub-", 0) == 0 && n.size() == 12); }
 }

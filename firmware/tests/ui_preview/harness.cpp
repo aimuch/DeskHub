@@ -99,6 +99,7 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -945,6 +946,7 @@ static void case_time_options() {   // A40
     goto_view(Page::Appearance);
     EXPECT(click_after("时钟表针", "隐藏")); step(); step();
     EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands" && !detail::current_appearance().clock_hands);
+    EXPECT(detail::body_scroll_y() > 0);   // a new look rebuilds the screen and keeps the place on the page (the choice is at the bottom)
     EXPECT(chosen_after("时钟表针", "隐藏"));
     goto_view(Page::Clock);
     h = hands_now();

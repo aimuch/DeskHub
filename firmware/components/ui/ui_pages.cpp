@@ -1258,7 +1258,8 @@ void shift_shell(int dx) {
 
 // ---------------------------------------------------------------- pages
 void remember_scroll(int y) { g_scroll = y; }
-int body_scroll_y() { return g_body ? lv_obj_get_scroll_y(g_body) : 0; }
+int body_scroll_y() { return g_body ? lv_obj_get_scroll_y(g_body) : -1; }
+void forget_body() { g_body = nullptr; }
 
 void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     g_body = body;

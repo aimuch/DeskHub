@@ -77,7 +77,7 @@ int remaining_seconds(int64_t now_ms, int64_t deadline_ms, int64_t window_ms) {
 }
 std::string format_countdown(int seconds) {
     seconds = std::max(0, std::min(seconds, 99 * 60 + 59));
-    char buf[8];
+    char buf[24];   // "99:59" at most; room for any int, so that GCC sees no truncation
     snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
     return buf;
 }
