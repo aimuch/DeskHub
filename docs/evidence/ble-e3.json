@@ -1,0 +1,50 @@
+{
+  "experiment": "E3：加密蓝牙连接时的内存（docs/desktop-app-design.md 13.5）",
+  "date": "2026-11-07",
+  "device": "deskhub-44bd8d60c598",
+  "build": "测试版：0.3.17 + sdkconfig.probe_h2 + sdkconfig.probe_e3（firmware/build-probe-e3）。做完已刷回 0.3.17，读回 ui_alive true、Wi-Fi 已连接",
+  "mac": "scripts/ble_e3/（Swift，手工打包的 .app，带蓝牙权限说明，用 open 启动）",
+  "method": [
+    "设备：LE Secure Connections 数字比较配对，绑定存 NVS；测试版在串口打印 6 位数字并自己确认（正式版不会这样）。所有特征要求加密并认证",
+    "Mac：扫描、连接、读一个加密特征让 macOS 配对；之后每 100 ms 写 100 字节，设备原样通知回来，测往返时间；第 5 分钟主动断开再连，看绑定是否有效；共 10 分钟（从第一条回显算起）",
+    "串口：scripts/ble_e3/measure.py 采集 900 秒，每 5 秒一行内存；中途用 USB 改 4 次主题；同时记录 ESP-IDF 的错误和警告"
+  ],
+  "first_try": "第一次配对没有在 30 秒内确认（Mac 测试程序还在等授权，计时也算错了），配对超时（加密状态 13），没有绑定。修正测试程序（计时从第一条回显开始，2 秒没回的算丢失）后重跑。记录在 ble-e3/device-try1-pairing-timeout.jsonl",
+  "results": {
+    "pairing": "数字比较 520617，用户在 Mac 上点配对；加密 status 0、authenticated 1、bonded 1",
+    "reconnect": "第 5 分钟断开后 4 秒连回，直接用绑定加密，没有再出现数字比较，也没有认证错误",
+    "restarts": 0,
+    "screen_driver_errors": 0,
+    "esp_idf_errors_and_warnings": 0,
+    "internal_heap_free_bytes": {"min": 16059, "max": 16235},
+    "internal_largest_block_min_bytes": 9728,
+    "internal_lowest_since_boot_bytes": 3919,
+    "lowest_note": "3919 是开机时的最低值，配对和收发期间没有再降低",
+    "echoes": {"mac_received": 5947, "device_received": 5965, "write_errors": 0, "lost": 18, "lost_note": "18 条都在配对完成以前"},
+    "round_trip_ms": {"median": 75, "median_per_10s_range": [55, 152], "p95_per_10s_range": [86, 334]},
+    "mtu": 256,
+    "wifi_rssi_dbm": [-78, -62]
+  },
+  "pass_conditions": {
+    "no_restart_10_min": true,
+    "zero_screen_errors": true,
+    "user_saw_screen_ok": "没有问（见 not_tested）",
+    "internal_min_at_least_3kb": true,
+    "largest_block_at_least_4kb": true,
+    "reconnect_without_pairing": true,
+    "median_round_trip_at_most_200ms": true
+  },
+  "conclusion": "E3 通过（数据部分）。加密配对、绑定、重连和持续收发都不会把内部内存压到开机最低值以下；余量和 H2 一样薄（约 16 KB 空闲，开机最低 3.9 KB）。",
+  "not_tested": [
+    "整屏重画的压力比 H2 小：0.3.17 起屏幕颜色存在界面自己的设置里，USB 改主题只让当前页重建",
+    "用户没有确认测试中的画面",
+    "设备重启以后用旧绑定重连（只测了断开重连）",
+    "配对窗口、在屏幕上确认数字、删除绑定（正式代码才有）",
+    "以后才申请内存的功能：换 Wi-Fi 扫描、连公网的 TLS、放音",
+    "长时间（几小时）运行"
+  ],
+  "side_effects": [
+    "Mac 的蓝牙设置里留下了配对记录 DeskHub-probe，可以删除",
+    "设备 NVS 里留下了 NimBLE 的绑定记录；0.3.17 不读它，恢复出厂会删掉"
+  ]
+}

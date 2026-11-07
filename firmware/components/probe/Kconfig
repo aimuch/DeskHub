@@ -23,4 +23,14 @@ config DESKHUB_PROBE_BLE_EARLY
         Tells whether BLE fails for lack of memory in total, or only because the display and Wi-Fi have split the
         internal memory first.
 
+config DESKHUB_PROBE_BLE_SECURE
+    bool "Experiment E3: encrypted pairing and an echo characteristic"
+    depends on DESKHUB_PROBE_BLE && BT_NIMBLE_SECURITY_ENABLE && BT_NIMBLE_SM_SC
+    default n
+    help
+        docs/desktop-app-design.md 13.5. LE Secure Connections with numeric comparison and bonding. The six digits are
+        printed on the console and accepted by the probe itself: a test build only, never a release. Every
+        characteristic needs an encrypted, authenticated link. A write to the echo characteristic is notified back
+        unchanged, so the Mac can measure the round trip while the display and Wi-Fi run.
+
 endmenu

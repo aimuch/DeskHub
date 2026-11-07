@@ -1,0 +1,7 @@
+# Test build only: experiment E3 (docs/desktop-app-design.md 13.5). H2, plus encrypted pairing (numeric comparison),
+# bonding kept in NVS, and an echo characteristic. Use together with sdkconfig.probe_h2.
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=y
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_SM_LEGACY=n
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_DESKHUB_PROBE_BLE_SECURE=y
