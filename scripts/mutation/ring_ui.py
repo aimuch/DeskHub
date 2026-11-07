@@ -33,15 +33,17 @@ PAGES = [
     ("a tap on the ring does nothing", PG, "        else request_ring_info();\n    }, data(0), d, d);", "        else (void)0;\n    }, data(0), d, d);"),
     ("a tap on the clock opens the sheet", PG, "request_page(Page::Clock);\n        else request_ring_info();", "request_ring_info();\n        else request_ring_info();"),
     ("the clock area is not where the clock is", PG, "if (at.x >= clock.x1 && at.x <= clock.x2 && at.y >= clock.y1 && at.y <= clock.y2) request_page(Page::Clock);", "if (false) request_page(Page::Clock);"),
-    ("the line is not the last thing it can be", PG, "    ring_line = true;   // nothing else to say", "    ring_line = false;   // nothing else to say"),
-    ("the dot is never shown", PG, "const bool dot = ring_line && info.first_problem >= 0 && !n.empty();", "const bool dot = false;"),
+    # 0.3.21: no line under the ring; a message takes the place of the date (docs/design v2 OverviewLargeNote)
+    ("a message does not hide the date", PG, "    set_hidden(w.date, !n.empty());\n", "    set_hidden(w.date, false);\n"),
+    ("a message is never shown", PG, "    set_hidden(w.notice, n.empty());\n", "    set_hidden(w.notice, true);\n"),
+    ("the date stays hidden after a message", PG, "    set_hidden(w.date, !n.empty());\n", "    if (!n.empty()) set_hidden(w.date, true);\n"),
     ("the sheet has no close button", PG, "    auto *b = button(box, [](lv_event_t *) {\n        close_ring_sheet();\n        if (closed) closed();\n    }, data(0), 360, 56);", "    auto *b = button(box, [](lv_event_t *) {\n    }, data(0), 360, 56);"),
     ("a tap outside does not close the sheet", PG, "        if (lv_event_get_target(e) != lv_event_get_current_target(e)) return;   // a tap on the sheet itself stays on the sheet\n        close_ring_sheet();", "        (void)e;\n        return;\n        close_ring_sheet();"),
     ("the sheet does not absorb a tap", PG, "    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);   // a tap on the sheet stays on the sheet; only the space around it closes it\n", ""),
     ("the sheet never closes", PG, "    lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);\n    lv_obj_delete_async(d);\n}\nlv_obj_t *build_ring_info", "    (void)d;\n}\nlv_obj_t *build_ring_info"),
     ("the sheet shows the row of the wrong segment", PG, "        const RingRow &r = v.row[i];", "        const RingRow &r = v.row[(i + 1) % 4];"),
     ("a dark row is drawn full", PG, "lv_obj_set_style_bg_opa(dot, r.ok ? LV_OPA_COVER : LV_OPA_TRANSP, 0);", "lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);"),
-    ("the sheet opens from an old snapshot", UI, "build_ring_info(screen, make_ring_info(look.lang, snapshot(), board_power(), monotonic_ms()),", "build_ring_info(screen, make_ring_info(look.lang, Snapshot{}, board_power(), monotonic_ms()),"),
+    ("the sheet opens from an old snapshot", UI, "    Snapshot s = snapshot();\n    overlay_ble(s);\n    build_ring_info(", "    Snapshot s{};\n    overlay_ble(s);\n    build_ring_info("),
 ]
 
 

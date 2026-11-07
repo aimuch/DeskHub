@@ -21,9 +21,9 @@ MODEL = [
 ]
 
 PAGES = [
-    ("the switch sets the opposite", UI, "last_error = audio::set_enabled(on) ?", "last_error = audio::set_enabled(!on) ?"),
+    ("the switch sets the opposite", UI, "flashed(false, [&] { return audio::set_enabled(on); }) ?", "flashed(false, [&] { return audio::set_enabled(!on); }) ?"),
     ("a failed save is not said", UI, ": std::string(tr(look.lang, Str::SoundNotSaved));", ": std::string();"),
-    ("a good save is said to have failed", UI, "last_error = audio::set_enabled(on) ? std::string() :", "last_error = !audio::set_enabled(on) ? std::string() :"),
+    ("a good save is said to have failed", UI, "last_error = flashed(false, [&] { return audio::set_enabled(on); }) ? std::string() :", "last_error = !flashed(false, [&] { return audio::set_enabled(on); }) ? std::string() :"),
     ("the switch works with no speaker", UI, "    note_activity();\n    if (!audio::available()) return;\n    last_error", "    note_activity();\n    last_error"),
     ("listen needs the sound on", UI, "if (audio::available()) audio::test();", "if (audio::available() && audio::enabled()) audio::test();"),
     ("listen does nothing", UI, "if (audio::available()) audio::test();", "if (false) audio::test();"),
@@ -40,8 +40,8 @@ PAGES = [
     ("the night is always said to the speaker", UI, "audio::on_command(s.command, quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)),", "audio::on_command(s.command, true,"),
     ("the same text sounds on every tick", UI, "        seen_command = s.command; command_changed_ms = now;\n        // A new result", "        command_changed_ms = now;\n        // A new result"),
     # the volume
-    ("a level is not stored", UI, "const bool ok = audio::set_volume(level);", "const bool ok = true; (void)level;"),
-    ("a level is stored one too high", UI, "const bool ok = audio::set_volume(level);", "const bool ok = audio::set_volume(level + 1);"),
+    ("a level is not stored", UI, "const bool ok = flashed(false, [&] { return audio::set_volume(level); });", "const bool ok = true; (void)level;"),
+    ("a level is stored one too high", UI, "const bool ok = flashed(false, [&] { return audio::set_volume(level); });", "const bool ok = flashed(false, [&] { return audio::set_volume(level + 1); });"),
     ("a new level is not heard", UI, "    if (ok) audio::test();\n    rebuilding = true;", "    rebuilding = true;"),
     ("a failed level is heard", UI, "    if (ok) audio::test();\n    rebuilding = true;", "    audio::test();\n    rebuilding = true;"),
     ("a failed level is not said", UI, "    last_error = ok ? std::string() : std::string(tr(look.lang, Str::SoundNotSaved));\n    if (ok) audio::test();", "    last_error = std::string();\n    if (ok) audio::test();"),

@@ -46,8 +46,8 @@ RULES = [
 PAGES = [
     ("the settings page has no row", PG, "                        {Str::SettingTime, Str::SettingTimeSub, Page::Time, P().clock},\n", ""),
     ("the zone goes the wrong way", PG, "request_time_zone(data_of(e) ? 1 : -1);", "request_time_zone(data_of(e) ? -1 : 1);"),
-    ("the zone is not saved", UI, "last_error = tr(look.lang, save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);\n    desired = Page::Time;", "last_error = tr(look.lang, Str::Saved);\n    desired = Page::Time;"),
-    ("a failed save of the zone is not said", UI, "save_config(c) == ESP_OK ? Str::Saved : Str::SaveFailed);\n    desired = Page::Time;", "save_config(c) == ESP_OK ? Str::Saved : Str::Saved);\n    desired = Page::Time;"),
+    ("the zone is not saved", UI, "last_error = tr(look.lang, flashed(ESP_FAIL, [&] { return save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);\n    desired = Page::Time;", "last_error = tr(look.lang, Str::Saved);\n    desired = Page::Time;"),
+    ("a failed save of the zone is not said", UI, "save_config(c); }) == ESP_OK ? Str::Saved : Str::SaveFailed);\n    desired = Page::Time;", "save_config(c); }) == ESP_OK ? Str::Saved : Str::Saved);\n    desired = Page::Time;"),
     ("the page shows the wrong zone", PG, "tz_label(f.c.tz_minutes), 64,", "tz_label(480), 64,"),
     ("the numbers change the time at once", PG, "time_draft_step(g_time_draft, g_time_field, data_of(e) ? 1 : -1); request_time_redraw();", "time_draft_step(g_time_draft, g_time_field, data_of(e) ? 1 : -1); request_time_save(time_draft_utc(g_time_draft, config().tz_minutes));"),
     ("the steps go the wrong way", PG, "time_draft_step(g_time_draft, g_time_field, data_of(e) ? 1 : -1);", "time_draft_step(g_time_draft, g_time_field, data_of(e) ? -1 : 1);"),

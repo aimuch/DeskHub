@@ -11,13 +11,13 @@ from _engine import firmware_main
 
 UI = "components/ui/ui.cpp"
 M = [
-    ("the sound is kept", UI, "const bool sound = audio::reset_settings(), shown", "const bool sound = true, shown"),
-    ("the appearance is kept in the store", UI, "shown = store_clear();", "shown = true;"),
+    ("the sound is kept", UI, "const bool sound = flashed(false, [] { return audio::reset_settings(); }), shown", "const bool sound = true, shown"),
+    ("the appearance is kept in the store", UI, "shown = flashed(false, [] { return store_clear() && ble::forget_all(); });", "shown = true;"),
     ("the screen keeps the old appearance", UI, "        if (shown) { appearance = Appearance{}; sources.clear(); look = make_look(appearance); look_dirty = true; }\n", ""),
     ("a failed erase is said to be done", UI, "sound && shown ? Str::ResetDone : Str::ResetPartial", "sound || shown || true ? Str::ResetDone : Str::ResetPartial"),
     ("a failed sound erase is not said", UI, "sound && shown ? Str::ResetDone", "(sound || true) && shown ? Str::ResetDone"),
     ("a failed appearance erase is not said", UI, "sound && shown ? Str::ResetDone", "sound ? Str::ResetDone"),
-    ("a failed configuration erase still forgets them", UI, "    if (reset_config() == ESP_OK) {\n", "    if (reset_config() == ESP_OK || true) {\n"),
+    ("a failed configuration erase still forgets them", UI, "    if (flashed(ESP_FAIL, [] { return reset_config(); }) == ESP_OK) {\n", "    if (flashed(ESP_FAIL, [] { return reset_config(); }) == ESP_OK || true) {\n"),
 ]
 
 if __name__ == "__main__":

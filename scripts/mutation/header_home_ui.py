@@ -23,12 +23,15 @@ PAGES = [
     ("the bolt is in the colour of the fill", PG, "sh.bolt = label_at(sh.box, LV_SYMBOL_CHARGE, 0, bolt_y, bolt_adv + 2, bolt_font, p.ink);", "sh.bolt = label_at(sh.box, LV_SYMBOL_CHARGE, 0, bolt_y, bolt_adv + 2, bolt_font, p.card);"),
     # the home page without actions
     # v2: the overview has the ring only, always 252 px in the middle of the body (docs/design v2 HomeRing)
-    ("the ring stays small", PG, "const int d = 252, x =", "const int d = 216, x ="),
-    ("the ring stays at the top", PG, "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;", "const int y = 0;"),
-    ("the ring is not in the middle of the space", PG, "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;", "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 4;"),
-    ("the line stays at the old place", PG, "    notice_y = y + d + 10;", "    notice_y = 226;"),
-    ("the dot stays at the old place", PG, "notice_y + (lh(look.caption) - 10) / 2);", "226 + (lh(look.caption) - 10) / 2);"),
-    ("the clock stays at the old place", PG, "y + d / 2 - 68);", "40);"),
+    # the overview of 0.3.21 (docs/design v2 OverviewLarge): the ring fills the body, the time and the date are larger
+    ("the ring stays small", PG, "const int d = 316, x =", "const int d = 252, x ="),
+    ("the ring stays at the top", PG, "const int y = (kBodyH - d) / 2;   // top of the ring in the body", "const int y = 0;   // top of the ring in the body"),
+    ("the ring leaves room for a line under it", PG, "const int y = (kBodyH - d) / 2;   // top of the ring in the body", "const int y = (kBodyH - (d + 10 + lh(look.caption))) / 2;   // top of the ring in the body"),
+    ("the time stays small", PG, 'w.clock = label_at(hit, "--:--", 0, 0, kHomeTextW, &font_clock_72, P().ink);', 'w.clock = label_at(hit, "--:--", 0, 0, kHomeTextW, &lv_font_montserrat_48, P().ink);'),
+    ("the date stays small", PG, "w.date = label_at(hit, \"\", 0, time_h + 4, kHomeTextW, look.body, P().muted);\n    centered(w.date);\n    single_line(w.date, lh(look.body));",
+     "w.date = label_at(hit, \"\", 0, time_h + 4, kHomeTextW, look.caption, P().muted);\n    centered(w.date);\n    single_line(w.date, lh(look.caption));"),
+    ("one row of tiles keeps its old height", PG, "th = std::max(196, kBodyH - static_cast<int>(lv_obj_get_y(grid)) - below);", "th = 196; (void)below;"),
+    ("the time is not in the middle of the ring", PG, "lv_obj_set_pos(hit, (kContentW - kHomeTextW) / 2, y + d / 2 - block_h / 2);", "lv_obj_set_pos(hit, (kContentW - kHomeTextW) / 2, y + 20);"),
     ("the touch area of the ring stays small", PG, "    }, data(0), d, d);\n    lv_obj_set_pos(ring_hit, x, y);", "    }, data(0), 216, 216);\n    lv_obj_set_pos(ring_hit, x, y);"),
     ("the thickness does not follow the ring", PG, "width = (ring_px(look.appearance.ring).home * d + 108) / 216;", "width = ring_px(look.appearance.ring).home;"),
 ]
