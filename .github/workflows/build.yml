@@ -1,0 +1,81 @@
+# Every push builds the device firmware and the desktop App and runs their tests. The packages are attached to the run
+# (Actions › the run › Artifacts). A tag v* also makes a GitHub release with them.
+#   firmware: deskhub-<version>-esp32s3.zip (USB package: images + flash.py)
+#   App:      DeskHub-<version>.dmg and DeskHub-<version>.zip (Apple silicon; ad-hoc signed, not notarized)
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # only used by the release step, on tags
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v6.0.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the firmware (sdkconfig.defaults, nothing local)
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          cd firmware
+          idf.py -B build -DSDKCONFIG=build/sdkconfig build
+      - name: Host tests (rules, protocol, view models)
+        shell: bash
+        run: |
+          cmake -S firmware/tests -B build-tests -G Ninja
+          cmake --build build-tests --parallel
+          ctest --test-dir build-tests --output-on-failure
+      - name: Screen tests (the real UI code on native LVGL)
+        shell: bash
+        run: |
+          cmake -S firmware/tests/ui_preview -B build-preview -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-preview --target deskhub_ui_preview --parallel
+          build-preview/deskhub_ui_preview
+      - name: Package
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          python scripts/package_firmware.py --build firmware/build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: dist/deskhub-*-esp32s3.zip
+          if-no-files-found: error
+
+  desktop:
+    runs-on: macos-15   # Apple silicon
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checks of the App's rules
+        working-directory: desktop
+        run: swift run core-check
+      - name: DMG and ZIP
+        run: desktop/scripts/make_release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: |
+            desktop/build/DeskHub-*.dmg
+            desktop/build/DeskHub-*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [firmware, desktop]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/firmware/*
+            packages/desktop/*
