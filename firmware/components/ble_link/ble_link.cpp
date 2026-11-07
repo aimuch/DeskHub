@@ -7,6 +7,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "flash_worker.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/stream_buffer.h"
@@ -50,9 +51,10 @@ int64_t now_ms();
 void set_command(const std::string &text);
 
 // ---- the firmware update over Bluetooth (13.11) ----
-// The NimBLE task only checks the order (update::Session) and copies the data into a buffer in PSRAM. One task with an
-// internal-memory stack (flash writes need one; ECDSA needs more stack than NimBLE's) checks the signature, writes the
-// other slot, hashes, and finishes. It is made at the first update and kept.
+// The NimBLE task only checks the order (update::Session) and copies the data into a buffer in PSRAM. One task with a
+// PSRAM stack reads the buffer and hashes; every flash operation and the signature check run on flash_worker's internal
+// stack (flash writes need one, ECDSA needs more than NimBLE's 4 KB). An internal 8 KB stack of its own could not be had
+// after start-up (2026-11-07: UPDATE_NO_MEMORY on the device). It is made at the first update and kept.
 update::Session session;                  // under mu
 constexpr size_t kStreamBytes = 32 * 1024;
 StreamBufferHandle_t stream = nullptr;
@@ -106,7 +108,7 @@ void writer_task(void *) {
     psa_hash_operation_t hash = PSA_HASH_OPERATION_INIT;
     static uint8_t buf[2048];
     auto drop = [&](const char *why) {
-        if (open) esp_ota_abort(handle);
+        if (open) flash_run([&] { esp_ota_abort(handle); });
         open = false;
         psa_hash_abort(&hash);
         hash = PSA_HASH_OPERATION_INIT;
@@ -129,7 +131,8 @@ void writer_task(void *) {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
         if (check_wanted.exchange(false)) {
-            check_result = hooks.verify ? hooks.verify(check_envelope, nullptr) : update::Checked{false, "UPDATE_SIGNATURE_INVALID", "", "", 0};
+            check_result = update::Checked{false, "UPDATE_SIGNATURE_INVALID", "", "", 0};
+            if (hooks.verify) flash_run([&] { check_result = hooks.verify(check_envelope, nullptr); });   // ECDSA on the worker's stack
             check_envelope.clear();
             xSemaphoreGive(check_done);
         }
@@ -144,7 +147,8 @@ void writer_task(void *) {
                 size = session.manifest().size;
             }
             part = esp_ota_get_next_update_partition(nullptr);
-            const bool ok = part && esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &handle) == ESP_OK && psa_hash_setup(&hash, PSA_ALG_SHA_256) == PSA_SUCCESS;
+            const bool ok = part && flashed(ESP_FAIL, [&] { return esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &handle); }) == ESP_OK &&
+                            psa_hash_setup(&hash, PSA_ALG_SHA_256) == PSA_SUCCESS;
             open = ok;
             if (ok && hooks.active) hooks.active(true);
             {
@@ -153,7 +157,7 @@ void writer_task(void *) {
                 notify_locked(ok ? update_json("ready") : update_json("failed", "UPDATE_BEGIN_FAILED"));
             }
             if (ok) show_update("writing", 0);
-            else { if (handle) esp_ota_abort(handle); psa_hash_abort(&hash); hash = PSA_HASH_OPERATION_INIT; }
+            else { if (handle) flash_run([&] { esp_ota_abort(handle); }); psa_hash_abort(&hash); hash = PSA_HASH_OPERATION_INIT; }
         }
         size_t n;
         while (open && (n = xStreamBufferReceive(stream, buf, sizeof(buf), 0)) > 0) {
@@ -165,10 +169,10 @@ void writer_task(void *) {
                 consumed = take;
                 if (prefix.size() == update::kPrefix) {
                     if (!update::image_prefix_ok(prefix.data(), prefix.size(), version)) { drop("UPDATE_IMAGE_MISMATCH"); break; }
-                    if (esp_ota_write(handle, prefix.data(), prefix.size()) != ESP_OK) { drop("UPDATE_WRITE_FAILED"); break; }
+                    if (flashed(ESP_FAIL, [&] { return esp_ota_write(handle, prefix.data(), prefix.size()); }) != ESP_OK) { drop("UPDATE_WRITE_FAILED"); break; }
                 }
             }
-            if (consumed < n && esp_ota_write(handle, buf + consumed, n - consumed) != ESP_OK) { drop("UPDATE_WRITE_FAILED"); break; }
+            if (consumed < n && flashed(ESP_FAIL, [&] { return esp_ota_write(handle, buf + consumed, n - consumed); }) != ESP_OK) { drop("UPDATE_WRITE_FAILED"); break; }
             written += n;
             if (written - acked >= update::kAckEvery || written == size) {
                 acked = written;
@@ -186,10 +190,10 @@ void writer_task(void *) {
             hash = PSA_HASH_OPERATION_INIT;
             if (!hashed || sha != hex) { drop("UPDATE_HASH_MISMATCH"); continue; }   // U9
             show_update("verifying", 99);
-            const esp_err_t ended = esp_ota_end(handle);
+            const esp_err_t ended = flashed(ESP_FAIL, [&] { return esp_ota_end(handle); });
             open = false;
             if (ended != ESP_OK) { if (hooks.active) hooks.active(false); show_update("idle", 0); { std::lock_guard<std::mutex> lock(mu); session.reset(); notify_locked(update_json("failed", "UPDATE_IMAGE_INVALID")); } continue; }
-            if (esp_ota_set_boot_partition(part) != ESP_OK) { if (hooks.active) hooks.active(false); show_update("idle", 0); { std::lock_guard<std::mutex> lock(mu); session.reset(); notify_locked(update_json("failed", "UPDATE_BOOT_SELECTION_FAILED")); } continue; }
+            if (flashed(ESP_FAIL, [&] { return esp_ota_set_boot_partition(part); }) != ESP_OK) { if (hooks.active) hooks.active(false); show_update("idle", 0); { std::lock_guard<std::mutex> lock(mu); session.reset(); notify_locked(update_json("failed", "UPDATE_BOOT_SELECTION_FAILED")); } continue; }
             show_update("rebooting", 100);
             notify(update_json("rebooting"));
             set_command("固件已升级到 " + version + "，正在重启");
@@ -204,8 +208,8 @@ bool ensure_writer() {
     if (!storage) return false;
     stream = xStreamBufferCreateStatic(kStreamBytes, 1, storage, &stream_state);
     check_done = xSemaphoreCreateBinary();
-    // An internal-memory stack: flash writes need one, and the ECDSA check needs more than NimBLE's.
-    if (!stream || !check_done || xTaskCreate(writer_task, "dh_ota", 8192, nullptr, 5, &writer) != pdPASS) { writer = nullptr; return false; }
+    // A PSRAM stack: the flash and the ECDSA check go to flash_worker.
+    if (!stream || !check_done || xTaskCreateWithCaps(writer_task, "dh_ota", 6144, nullptr, 5, &writer, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) { writer = nullptr; return false; }
     return true;
 }
 
