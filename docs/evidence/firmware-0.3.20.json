@@ -22,8 +22,17 @@
   "checks_done": [
     "本机（macOS）：主机测试 18 组、界面流程全部通过",
     "容器 espressif/idf:v6.0.2（arm64，和 CI 同一个镜像，不走入口脚本，和 Actions 一样）：固件编译、主机测试 18 组、界面流程、打包全部通过",
-    "容器里用 AddressSanitizer 编界面测试：全部通过，没有内存错误"
+    "容器里用 AddressSanitizer 编界面测试：全部通过，没有内存错误",
+    "CI（GitHub Actions run 42364497406，x86_64 容器和 macos-15）：固件和 App 全部通过"
   ],
-  "flashed": false,
-  "not_tested": ["真机", "CI 的 x86_64 机器和 macos-15 上的 App 检查（推送后看）"]
+  "flashed": true,
+  "not_tested": [
+    "你在屏幕上看秒和表针、换外观后页面停在原处（还没有你的确认）",
+    "真机上的内存"
+  ],
+  "device": "deskhub-44bd8d60c598",
+  "flash": {
+    "how": "用户说“刷”后，用包里的 flash.py（IDF 自带 esptool）经 /dev/cu.usbmodem20101 刷入，esptool 校验哈希通过",
+    "read_back": "第一次读超时（刚开机），15 秒后读到：0.3.20、ui_alive true、Wi-Fi 已连接、电量 100%（firmware-0.3.20-status.json）"
+  }
 }
