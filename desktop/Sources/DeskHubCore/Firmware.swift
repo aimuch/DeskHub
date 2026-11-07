@@ -25,11 +25,21 @@ public struct FirmwareImage: Equatable, Sendable {
     public var path: String
     public var size: Int
     public var sha256: String
+    public init(offset: UInt32, path: String, size: Int, sha256: String) {
+        self.offset = offset
+        self.path = path
+        self.size = size
+        self.sha256 = sha256
+    }
 }
 
 public struct FirmwarePackage: Equatable, Sendable {
     public var version: String
     public var images: [FirmwareImage]   // sorted by offset
+    public init(version: String, images: [FirmwareImage]) {
+        self.version = version
+        self.images = images
+    }
     public var totalBytes: Int { images.reduce(0) { $0 + $1.size } }
 }
 
@@ -232,17 +242,31 @@ public enum EsptoolOutput {
         output.range(of: #"Chip type:\s*ESP32-S3\b"#, options: .regularExpression) != nil &&
             output.range(of: #"Detected flash size:\s*16\s*MB\b"#, options: .regularExpression) != nil
     }
-    // "Writing at 0x00463000 [...] 62.0% 2768896/4468752 bytes...": the fraction of the whole package written, 0...1
+    // The fraction of the whole package written, 0...1, from a progress line of the image being written:
+    //   older esptool: "Writing at 0x00463000 [...] 62.0% 2768896/4468752 bytes..."
+    //   esptool 5.6.0: "Writing at 0x0045e000 ━━━━━╸ 99.6% 4.24MB/4.26MB [45s]" (megabytes rounded: the percent counts)
     public static func progress(_ line: String, package: FirmwarePackage) -> Double? {
-        guard let re = try? NSRegularExpression(pattern: #"Writing at 0x([0-9a-fA-F]+)\b.*?\b(\d+)/(\d+) bytes"#),
-              let m = re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-              let a = Range(m.range(at: 1), in: line), let w = Range(m.range(at: 2), in: line),
-              let address = UInt32(line[a], radix: 16), let written = Int(line[w]) else { return nil }
-        guard let image = package.images.first(where: { img in
+        let range = NSRange(line.startIndex..., in: line)
+        guard let at = try? NSRegularExpression(pattern: #"Writing at 0x([0-9a-fA-F]+)\b"#),
+              let m = at.firstMatch(in: line, range: range), let a = Range(m.range(at: 1), in: line),
+              let address = UInt32(line[a], radix: 16) else { return nil }
+        // The image whose partition holds the address; or, at the end of an image, the address just after it (esptool says
+        // "Writing at 0x00011000 ... 100%" for the 8 KB at 0xf000).
+        let inside = package.images.first { img in
             let slot = FirmwareRules.layout.first { $0.offset == img.offset }
             return address >= img.offset && Int(address) < Int(img.offset) + (slot?.max ?? img.size)
-        }), package.totalBytes > 0 else { return nil }
+        }
+        guard let image = inside ?? package.images.first(where: { Int($0.offset) + $0.size == Int(address) }), package.totalBytes > 0 else { return nil }
+        var written: Double?
+        if let bytes = try? NSRegularExpression(pattern: #"\b(\d+)/(\d+) bytes"#), let b = bytes.firstMatch(in: line, range: range),
+           let w = Range(b.range(at: 1), in: line), let n = Double(line[w]) {
+            written = n
+        } else if let pct = try? NSRegularExpression(pattern: #"\s(\d{1,3}(?:\.\d+)?)%"#), let p = pct.firstMatch(in: line, range: range),
+                  let r = Range(p.range(at: 1), in: line), let v = Double(line[r]) {
+            written = Double(image.size) * v / 100
+        }
+        guard let written else { return nil }
         let before = package.images.filter { $0.offset < image.offset }.reduce(0) { $0 + $1.size }
-        return min(1, Double(before + min(written, image.size)) / Double(package.totalBytes))
+        return min(1, (Double(before) + min(written, Double(image.size))) / Double(package.totalBytes))
     }
 }

@@ -423,7 +423,27 @@ do {
         check(EsptoolOutput.progress("Writing at 0x00020800 [==>   ] 50.0% 2048/4096 bytes...", package: pkg) == (2048 + 3072 + 8192 + 2048) / total, "half of the app")
         check(EsptoolOutput.progress("Writing at 0x00021000 [=====] 100.0% 9999/4096 bytes...", package: pkg) == 1, "never past 1")
         check(EsptoolOutput.progress("Hash of data verified.", package: pkg) == nil && EsptoolOutput.progress("Writing at 0x00700000 1/2 bytes", package: pkg) == nil, "other lines")
+        // esptool 5.6.0 as it really prints (2026-11-07, the run on the device): a bar, the percent, megabytes, seconds
+        check(EsptoolOutput.progress("Writing at 0x00020800 ━━━━━━━━━━━━━━╸               50.0% 0.00MB/0.00MB [00s] ", package: pkg) == (2048 + 3072 + 8192 + 2048) / total, "5.6.0: half of the app")
+        check(EsptoolOutput.progress("Writing at 0x00000000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% 0.00MB/0.00MB [00s] ", package: pkg) == 2048 / total, "5.6.0: the first image done")
+        check(EsptoolOutput.progress("Writing at 0x00462e60 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.0% 4.26MB/4.26MB [45s] ", package: pkg) == 1, "5.6.0: the end")
+        check(EsptoolOutput.progress("Writing at 0x00021000 ━━━ 140.0% 1MB/1MB [01s] ", package: pkg) == 1, "5.6.0: never past 1")
     } else { check(false, "the fake package for progress") }
+    // The real run on the device (docs/evidence/usb-flash-e2e/run-0.3.21.json): every progress line of esptool 5.6.0 is read,
+    // the progress never goes back, and it ends at 1. The images of the 0.3.21 package, as its manifest says.
+    let pkg = FirmwarePackage(version: "0.3.21", images: [
+        FirmwareImage(offset: 0x0, path: "bootloader/bootloader.bin", size: 22608, sha256: ""),
+        FirmwareImage(offset: 0x8000, path: "partition_table/partition-table.bin", size: 3072, sha256: ""),
+        FirmwareImage(offset: 0xF000, path: "ota_data_initial.bin", size: 8192, sha256: ""),
+        FirmwareImage(offset: 0x20000, path: "deskhub.bin", size: 4468320, sha256: "")])
+    if let d = FileManager.default.contents(atPath: "../docs/evidence/usb-flash-e2e/run-0.3.21.json"),
+       let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let events = o["events"] as? [[String: Any]] {
+        let lines = events.compactMap { $0["line"] as? String }.filter { $0.hasPrefix("Writing at") }
+        let read = lines.compactMap { EsptoolOutput.progress($0, package: pkg) }
+        check(lines.count > 1000 && read.count == lines.count, "every progress line of the run is read: \(read.count) of \(lines.count)")
+        check(zip(read, read.dropFirst()).allSatisfy { $0 <= $1 + 1e-9 }, "the progress never goes back")
+        check(read.last == 1 && (read.first ?? 1) < 0.01, "from the start to 1")
+    } else { check(false, "the record of the run on the device is there") }
 }
 
 if failures > 0 {

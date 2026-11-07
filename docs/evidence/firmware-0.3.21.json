@@ -21,6 +21,20 @@
     "变异检查：27 条过时的片段对上现在的代码后，9 个脚本重跑：header_home_ui 19/19、ring_ui 14/14 和 13/13、time_options_ui 8/8 和 21/21、header_ui 24/24 和 19/20、pages_ui 31/31 和 22/22、charge_ui 23/23 和 17/17、factory_reset_ui 7/7、sound_ui 28/28、time_ui 25/25 和 17/17"
   ],
   "known_gap": "header_ui 的“电池数字按文字框居中、不按墨迹居中”没有被测试抓到；在 0.3.20 的代码上同样没有抓到，是以前就有的漏洞，和这一版无关",
-  "flashed": false,
-  "not_tested": ["真机"]
+  "flashed": true,
+  "not_tested": [
+    "你在屏幕上看大圆环和填满的图标（还没有你的确认）",
+    "App 的窗口里点“刷入”（命令行走的是同一段代码；窗口本身没在真机上点过）",
+    "真机上的内存"
+  ],
+  "device": "deskhub-44bd8d60c598",
+  "flash": {
+    "how": "用户说“刷”后，用桌面 App 的刷机代码（命令行 deskhub-flash，和 App 的固件页同一个 Flasher 模块）经 /dev/cu.usbmodem20101 刷入；esptool 5.6.0 从 App 里复制到 Application Support 运行",
+    "steps": "离线核对包（4 个镜像、SHA-256、ESP32-S3、版本）→ 刷前 USB 读到 0.3.20 → flash-id 识别 ESP32-S3、16 MB → 写入 45.7 秒，esptool 校验哈希通过 → 重启后 USB 读回 0.3.21，设备编号没变",
+    "record": "usb-flash-e2e/run-0.3.21.json（每一行 esptool 输出和每一步的时间；全程 101.8 秒）"
+  },
+  "problems_found": [
+    "esptool 5.6.0 的进度行是“Writing at 0x… ━━ 99.6% 4.24MB/4.26MB [45s]”，不是旧的“a/b bytes”，App 一直显示 0% 直到写完。已改为按百分比读，结尾地址也算；core-check 用这次运行记下的 4398 行回放，进度从 0 涨到 1，不倒退（不用再刷一次来验证）",
+    "从 DMG 安装的 App 带隔离标记，macOS 会拦下 App 里的 esptool 并弹出没人看到的确认框。现在 App 运行自己写到 Application Support 的副本（核对 SHA-256）"
+  ]
 }
