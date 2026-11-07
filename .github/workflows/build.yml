@@ -76,8 +76,23 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: packages
+      - name: Release notes (versions and SHA-256 of every file)
+        shell: bash
+        run: |
+          {
+            echo "触摸屏固件：$(ls packages/firmware | sed -n 's/^deskhub-\(.*\)-esp32s3\.zip$/\1/p')"
+            echo "桌面 App：$(ls packages/desktop | sed -n 's/^DeskHub-\(.*\)\.dmg$/\1/p')（Apple 芯片；ad-hoc 签名，没有公证：第一次打开在 Finder 里右键 → 打开）"
+            echo
+            echo "固件可以在 App 的 设置 → 固件 里用 USB 刷，或者用蓝牙升级；也可以解压后运行包里的 flash.py。"
+            echo
+            echo '```'
+            (cd packages && sha256sum firmware/* desktop/*)
+            echo '```'
+          } > notes.md
+          cat notes.md
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: notes.md
           files: |
             packages/firmware/*
             packages/desktop/*
