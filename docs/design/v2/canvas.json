@@ -160,6 +160,30 @@
       "h": 480,
       "title": "总览 · 有消息时代替日期",
       "radius": 72
+    },
+    "Usage.dc.html": {
+      "x": 0,
+      "y": 4900,
+      "w": 480,
+      "h": 480,
+      "title": "用量 · Magpie（App 每 15 秒发一次）",
+      "radius": 72
+    },
+    "UsageStale.dc.html": {
+      "x": 560,
+      "y": 4900,
+      "w": 480,
+      "h": 480,
+      "title": "用量 · 60 秒没收到：数据过期，数字变暗",
+      "radius": 72
+    },
+    "PagesUsage.dc.html": {
+      "x": 1120,
+      "y": 4900,
+      "w": 480,
+      "h": 480,
+      "title": "页面与首页 · 第 5 个页面“用量”，最多打开 4 个",
+      "radius": 72
     }
   },
   "order": [
@@ -181,7 +205,10 @@
     "ClockHands.dc.html",
     "AppearanceTime.dc.html",
     "OverviewLarge.dc.html",
-    "OverviewLargeNote.dc.html"
+    "OverviewLargeNote.dc.html",
+    "Usage.dc.html",
+    "UsageStale.dc.html",
+    "PagesUsage.dc.html"
   ],
   "notes": {
     "rowHome": {
@@ -239,6 +266,13 @@
       "x": 0,
       "y": 3940,
       "text": "总览：圆环和时间、日期放大，去掉圆环下的提示（用户 2026-11-07）。错误、升级进度、切源结果显示在圆环里，代替日期",
+      "kind": "title1",
+      "maxW": 1600
+    },
+    "rowUsage": {
+      "x": 0,
+      "y": 4700,
+      "text": "用量页：本机 Magpie 的额度和今日用量（用户 2026-11-08）。不发 API Key、账号、请求内容",
       "kind": "title1",
       "maxW": 1600
     }

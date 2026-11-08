@@ -15,6 +15,10 @@
 // B5  What goes out is well formed: the switch request and the info are valid JSON with exactly the fields, ids
 //     escaped. The result line names the input and the outcome, and the reason when there is one (K3: "confirmed" only
 //     for confirmed).
+// B7  The usage message (docs/desktop-app-design.md 13.12 G1): {"op":"usage","ok":false} exactly, or ok:true with exactly
+//     its fields: provider and plan of 0 to 16 [a-z0-9._-]; 0 to 2 windows of exactly {m 1..525600, r 0..100, s 0..31536000};
+//     calls, errors (not more than calls), tokens (up to 1e15), ttft (up to 600000 ms); the latest model of 0 to 32 bytes
+//     without control characters, its status 0..999, its time up to 3600000 ms, its age up to 31536000 s. Whole numbers only.
 // B6  The current input (the user asked 2026-11-07 that the active source stands out): {"op":"current","id":...} names
 //     the input the App read back from the monitor, or "" when it does not know (K3: no mark without a read-back). Strict
 //     like the rest; an id not in the list the App sent counts as unknown.
@@ -208,8 +212,54 @@ static void b6_current() {
     CHECK(current_in({}, "a").empty());
 }
 
+
+static const char *kUsage =
+    R"({"op":"usage","ok":true,"p":"codex","plan":"plus","w":[{"m":300,"r":100,"s":15120},{"m":10080,"r":37,"s":300000}],"c":128,"e":2,"t":1234567,"f":820,"lm":"gpt-6.1-sol","ls":200,"lms":3200,"la":120})";
+static std::string swap(const std::string &from, const std::string &to) {
+    std::string s = kUsage;
+    const size_t at = s.find(from);
+    if (at == std::string::npos) { std::fprintf(stderr, "no [%s] in the sample\n", from.c_str()); return s; }
+    return s.replace(at, from.size(), to);
+}
+static void b7_usage() {
+    Message m = P(kUsage);
+    CHECK(m.op == Op::Usage && m.usage.ok);
+    CHECK(m.usage.provider == "codex" && m.usage.plan == "plus");
+    CHECK(m.usage.windows.size() == 2 && m.usage.windows[0] == (UsageWindow{300, 100, 15120}) && m.usage.windows[1] == (UsageWindow{10080, 37, 300000}));
+    CHECK(m.usage.calls == 128 && m.usage.errors == 2 && m.usage.tokens == 1234567 && m.usage.ttft_ms == 820);
+    CHECK(m.usage.latest_model == "gpt-6.1-sol" && m.usage.latest_status == 200 && m.usage.latest_ms == 3200 && m.usage.latest_age_s == 120);
+    m = P(R"({"op":"usage","ok":false})");
+    CHECK(m.op == Op::Usage && !m.usage.ok);
+    // the edges that are fine
+    CHECK(P(swap(R"("w":[{"m":300,"r":100,"s":15120},{"m":10080,"r":37,"s":300000}])", R"("w":[])")).op == Op::Usage);
+    CHECK(P(swap(R"("lm":"gpt-6.1-sol")", R"("lm":"")")).op == Op::Usage);
+    CHECK(P(swap(R"("p":"codex","plan":"plus")", R"("p":"","plan":"")")).op == Op::Usage);
+    CHECK(P(swap(R"("t":1234567)", R"("t":1000000000000000)")).op == Op::Usage);
+    CHECK(P(swap(R"("e":2)", R"("e":128)")).op == Op::Usage);
+    CHECK(P(swap(R"("lm":"gpt-6.1-sol")", R"("lm":"模型名")")).usage.latest_model == "模型名");
+    // refused
+    for (const std::string &s : {
+             std::string(R"({"op":"usage","ok":false,"c":1})"), std::string(R"({"op":"usage"})"), std::string(R"({"op":"usage","ok":1})"),
+             swap(R"("ok":true)", R"("ok":"yes")"), swap(R"(,"la":120)", ""), swap(R"("la":120)", R"("la":120,"x":1)"),
+             swap(R"("p":"codex")", R"("p":"Codex")"), swap(R"("p":"codex")", R"("p":"co dex")"), swap(R"("plan":"plus")", R"("plan":"abcdefghijklmnopq")"),
+             swap(R"("p":"codex")", R"("p":7)"),
+             swap(R"("w":[{"m":300,"r":100,"s":15120},)", R"("w":[{"m":300,"r":100,"s":15120},{"m":300,"r":100,"s":15120},)"),
+             swap(R"({"m":300,"r":100,"s":15120})", R"({"m":300,"r":100})"), swap(R"({"m":300,"r":100,"s":15120})", R"({"m":300,"r":100,"s":15120,"x":0})"),
+             swap(R"("m":300)", R"("m":0)"), swap(R"("m":300)", R"("m":525601)"), swap(R"("r":100)", R"("r":101)"), swap(R"("r":100)", R"("r":-1)"),
+             swap(R"("r":100)", R"("r":99.5)"), swap(R"("s":15120)", R"("s":31536001)"), swap(R"("w":[)", R"("w":{"a":)"),
+             swap(R"("e":2)", R"("e":129)"), swap(R"("c":128)", R"("c":-1)"), swap(R"("c":128)", R"("c":1.5)"),
+             swap(R"("t":1234567)", R"("t":1000000000000001)"), swap(R"("f":820)", R"("f":600001)"),
+             swap(R"("lm":"gpt-6.1-sol")", R"("lm":"abcdefghijabcdefghijabcdefghijabc")"), swap(R"("lm":"gpt-6.1-sol")", R"("lm":"a\nb")"),
+             swap(R"("ls":200)", R"("ls":1000)"), swap(R"("lms":3200)", R"("lms":3600001)"), swap(R"("la":120)", R"("la":31536001)"),
+             swap(R"("lm":"gpt-6.1-sol")", R"("lm":null)")}) {
+        const bool refused = bad(s);
+        if (!refused) std::fprintf(stderr, "  that was: %s\n", s.c_str());
+        CHECK(refused);
+    }
+}
 int main() {
     b6_current();
+    b7_usage();
     b1_parse();
     b2_list();
     b3_requests();

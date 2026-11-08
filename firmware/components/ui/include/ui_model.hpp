@@ -2,6 +2,7 @@
 // View models of the device UI: everything the screen says, computed from the snapshot, the power state and the
 // config, with no LVGL. The rules in docs/rules.md (K3: unknown stays unknown, stale stays stale) live here, so
 // they can be tested exhaustively on the host. The LVGL layer only draws what these structures say.
+#include "ble_protocol.hpp"
 #include "board.hpp"
 #include "charge_policy.hpp"
 #include "core.hpp"
@@ -23,8 +24,9 @@ enum class RingTier { Thin, Standard, Thick };
 struct RingPx { int home, gauge; };
 RingPx ring_px(RingTier);  // Thin 12/7, Standard 20/11 (what it was before the tiers), Thick 28/15
 // ---- pages (docs/design v2 Pages): which pages are in the navigation, in which order; the first shown one is the home page ----
-enum class View : uint8_t { Switch, Overview, Clock, Power };
-constexpr size_t kViewCount = 4;
+enum class View : uint8_t { Switch, Overview, Clock, Power, Usage };
+constexpr size_t kMaxShownPages = 4;   // the navigation holds 4 pages and Settings (13.12 G7)
+constexpr size_t kViewCount = 5;
 struct PageSlot { View view; bool shown; };
 using PageOrder = std::array<PageSlot, kViewCount>;
 PageOrder default_pages();                          // Switch and Overview shown, Clock and Power hidden
@@ -124,6 +126,26 @@ struct TimeDraft { int year = 2026, month = 1, day = 1, hour = 0, minute = 0; };
 TimeDraft time_draft(bool time_valid, time_t utc_now, int tz_minutes);    // the local time now; a start when the time is not known
 void time_draft_step(TimeDraft &, int field, int delta);                  // wraps, except the year (2024 to 2099); the day stays in its month
 std::string time_draft_utc(const TimeDraft &, int tz_minutes);            // "2026-11-05T06:32:00Z"; empty for a time that does not exist or that the core refuses
+
+// ---- the Usage page (docs/design v2 Usage, UsageStale; docs/desktop-app-design.md 13.12) ----
+std::string short_count(uint64_t);   // 128, 1.2K, 12.3K, 1.2M, 1.2B
+struct QuotaCard {
+    std::string label;   // "5 小时", "7 天"
+    int remaining = 0;   // percent
+    std::string reset;   // "4 小时 12 分后重置", "周三 09:40 重置", "重置时间未知"
+};
+struct UsageView {
+    enum class State { Waiting, Offline, Fresh, Stale } state = State::Waiting;
+    std::string title;           // "Codex · plus"
+    std::string status;          // "15 秒前更新", "数据过期 · 3 分钟前", "Magpie 没有运行", "等 App 发来用量"
+    bool dim = false;            // stale: the numbers are drawn dim
+    std::vector<QuotaCard> quotas;
+    std::string calls, tokens, success, ttft;     // "—" when there is nothing to say
+    std::string model, code, latency, ago;        // the latest request
+    bool failed = false;                          // its status is not 2xx or 3xx
+};
+// u: the last usage the App sent, or nullptr when none came yet; age_ms: how long ago it came.
+UsageView make_usage(Lang, const ble::Usage *u, int64_t age_ms, bool time_valid, time_t now);
 
 // ---- gauges ----
 struct Gauge { bool valid = false; float percent = 0; std::string text = "--"; };

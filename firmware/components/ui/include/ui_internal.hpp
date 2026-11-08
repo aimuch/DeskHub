@@ -18,7 +18,7 @@ LV_FONT_DECLARE(font_clock_72);
 
 namespace dh::ui::detail {
 // Home is the status overview and Actions is the switch page (the names are older than the v2 design).
-enum class Page : uint8_t { Home, Actions, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time, Pages, Sources, SourceEdit };
+enum class Page : uint8_t { Home, Actions, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time, Pages, Sources, SourceEdit, Usage };
 Page page_of(View);   // the page that shows a view of the navigation
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
@@ -69,6 +69,9 @@ struct Frame {
     ble::Status ble;                      // the Bluetooth link to the App
     size_t ble_sources = 0;
     std::string current_id;               // the input the App read back from the monitor; "" when not known
+    bool has_usage = false;               // the Usage page (13.12): the last usage the App sent
+    ble::Usage usage;
+    int64_t usage_age_ms = 0;
     bool confirm_forget = false;          // "forget computers" was tapped once
 };
 

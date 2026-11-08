@@ -293,6 +293,15 @@ void open_pairing() { ++pairing_opens; mock.pairing_open = true; mock.pairing_le
 void close_pairing() { ++pairing_closes; mock.pairing_open = false; mock.pairing_left_ms = 0; mock.confirm_pending = false; }
 void answer_digits(bool same) { answers.push_back(same); mock.confirm_pending = false; }
 bool forget_all() { FLASH_WRITE("ble::forget_all"); ++forgets; mock.bonds = 0; mock.connected = mock.secure = false; return true; }
+bool has_mock_usage = false;
+Usage mock_usage;
+int64_t mock_usage_at = 0;   // monotonic ms when it came
+bool usage(Usage &out, int64_t &age_ms) {
+    if (!has_mock_usage) return false;
+    out = mock_usage;
+    age_ms = mock_ms - mock_usage_at;
+    return true;
+}
 }  // namespace dh::ble
 static void reset_ble() {
     dh::ble::mock = {};
@@ -302,6 +311,8 @@ static void reset_ble() {
     dh::ble::requests_sent.clear();
     dh::ble::answers.clear();
     dh::ble::pairing_opens = dh::ble::pairing_closes = dh::ble::forgets = 0;
+    dh::ble::has_mock_usage = false;
+    dh::ble::mock_usage = {};
 }
 
 // Radio service simulated at its public boundary; LVGL input and widgets are real.
@@ -675,13 +686,13 @@ static void save_png_source(const std::string &name) {
 
 using detail::Page;
 using detail::PowerTab;
-static const std::array<std::pair<Page, PowerTab>, 16> kViews = {{
+static const std::array<std::pair<Page, PowerTab>, 17> kViews = {{
     {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Pages, PowerTab::Level}, {Page::Settings, PowerTab::Level},
     {Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Readings}, {Page::Power, PowerTab::Protect}, {Page::Connect, PowerTab::Level},
     {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}, {Page::Time, PowerTab::Level},
-    {Page::Sources, PowerTab::Level}, {Page::SourceEdit, PowerTab::Level}}};
+    {Page::Sources, PowerTab::Level}, {Page::SourceEdit, PowerTab::Level}, {Page::Usage, PowerTab::Level}}};
 static const char *view_name(size_t i) {
-    static const char *n[] = {"home", "actions", "pages", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time", "sources", "source-edit"};
+    static const char *n[] = {"home", "actions", "pages", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time", "sources", "source-edit", "usage"};
     return n[i];
 }
 
@@ -698,24 +709,24 @@ static void case_pages_and_home() {
     check_layout("pages"); check_targets("pages");
     // show the clock: stored, and the navigation grows at once
     EXPECT(tap_area(detail::pages_control_area, 2, 0));
-    EXPECT(stored_text.find("|S+O+C+P-|") != std::string::npos);
+    EXPECT(stored_text.find("|S+O+C+P-U-|") != std::string::npos);
     EXPECT(nav_line() == "切源,总览,时钟,设置");
     EXPECT(detail::current_page() == Page::Pages);
     // move the overview up: it is the home page now
     EXPECT(tap_area(detail::pages_control_area, 1, 1));
-    EXPECT(stored_text.find("|O+S+C+P-|") != std::string::npos);
+    EXPECT(stored_text.find("|O+S+C+P-U-|") != std::string::npos);
     EXPECT(nav_line() == "总览,切源,时钟,设置");
     EXPECT(has("首页"));
     // hide down to one page; the last one cannot be hidden, and the page says so
     EXPECT(tap_area(detail::pages_control_area, 1, 0));            // hide Switch
     EXPECT(tap_area(detail::pages_control_area, 2, 0));            // hide Clock
     const std::string one = stored_text;
-    EXPECT(one.find("|O+S-C-P-|") != std::string::npos && nav_line() == "总览,设置");
+    EXPECT(one.find("|O+S-C-P-U-|") != std::string::npos && nav_line() == "总览,设置");
     EXPECT(tap_area(detail::pages_control_area, 0, 0));            // hide Overview: refused
     EXPECT(stored_text == one && nav_line() == "总览,设置" && has("至少留一个页面"));
     // the ends do nothing
     EXPECT(tap_area(detail::pages_control_area, 0, 1));
-    EXPECT(tap_area(detail::pages_control_area, 3, 2));
+    EXPECT(tap_area(detail::pages_control_area, 4, 2));            // the last row is the fifth now (Usage)
     EXPECT(stored_text == one);
     // a failed save keeps the old order and says so
     store_ok = false;
@@ -958,7 +969,7 @@ static void case_time_options() {   // A40
     // hands off: the large digits again, with the seconds after them
     goto_view(Page::Appearance);
     EXPECT(click_after("时钟表针", "隐藏")); step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|nohands" && !detail::current_appearance().clock_hands);
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|nohands" && !detail::current_appearance().clock_hands);
     EXPECT(detail::body_scroll_y() > 0);   // a new look rebuilds the screen and keeps the place on the page (the choice is at the bottom)
     EXPECT(chosen_after("时钟表针", "隐藏"));
     goto_view(Page::Clock);
@@ -1012,6 +1023,67 @@ static void case_time_options() {   // A40
     goto_view(Page::Appearance);
     EXPECT(has("Show seconds") && has("Clock hands"));
     check_layout("appearance-time-en");
+}
+// ---- A42: the Usage page (docs/design v2 Usage, UsageStale, PagesUsage; docs/desktop-app-design.md 13.12) ----
+static void give_usage(int64_t age_ms = 0) {
+    dh::ble::Usage u;
+    u.ok = true; u.provider = "codex"; u.plan = "plus";
+    u.windows = {{300, 100, 15120}, {10080, 37, 300000}};
+    u.calls = 128; u.errors = 2; u.tokens = 1234567; u.ttft_ms = 820;
+    u.latest_model = "gpt-6.1-sol"; u.latest_status = 200; u.latest_ms = 3200; u.latest_age_s = 120;
+    dh::ble::mock_usage = u;
+    dh::ble::has_mock_usage = true;
+    dh::ble::mock_usage_at = mock_ms - age_ms;
+}
+static void case_usage_page() {   // A42
+    // hidden by default; the Pages page has a fifth row
+    fresh();
+    EXPECT(nav_line() == "切源,总览,设置");
+    goto_view(Page::Pages);
+    EXPECT(has("用量"));
+    check_layout("pages-usage"); check_targets("pages-usage");
+    EXPECT(tap_area(detail::pages_control_area, 4, 0));            // show Usage
+    EXPECT(stored_text.find("U+") != std::string::npos && nav_line() == "切源,总览,用量,设置");
+    // at most four pages: the fifth is refused and the page says why
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C+P+U-|list|hands");
+    goto_view(Page::Pages);
+    const std::string before = stored_text;
+    EXPECT(tap_area(detail::pages_control_area, 4, 0));
+    EXPECT(stored_text == before && has("最多打开 4 个页面") && nav_line() == "切源,总览,时钟,电源,设置");
+    // G4: nothing came yet
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-U+|list|hands");
+    goto_view(Page::Usage);
+    EXPECT(has("等 App 发来用量") && !has("今天调用"));
+    check_layout("usage-waiting");
+    // fresh numbers
+    give_usage(15000); step();
+    EXPECT(has("Codex · plus") && has("15 秒前更新") && has("5 小时") && has("7 天") && has("100") && has("37"));
+    EXPECT(has("4 小时 11 分后重置") && has("128") && has("1.2M") && has("98.4%") && has("820") && has("gpt-6.1-sol") && has("200") && has("3.2 秒"));
+    EXPECT(has("今天调用") && has("今天 Token") && has("成功率") && has("最近一次"));
+    check_layout("usage"); save_png_source("state-usage");
+    // G3: out of date, the numbers stay but dim
+    give_usage(3 * 60000 + 5000); step();
+    EXPECT(has("数据过期 · 3 分钟前") && has("128"));
+    check_layout("usage-stale"); save_png_source("state-usage-stale");
+    // G2: Magpie is not running: no old numbers
+    dh::ble::mock_usage.ok = false; dh::ble::mock_usage_at = mock_ms; step();
+    EXPECT(has("Magpie 没有运行") && !has("128") && !has("今天调用"));
+    check_layout("usage-offline");
+    // one window, then none: the page still holds together
+    give_usage(); dh::ble::mock_usage.windows.resize(1); step();
+    EXPECT(has("5 小时") && !has("7 天"));
+    check_layout("usage-one-window");
+    give_usage(); dh::ble::mock_usage.windows.clear(); step();
+    EXPECT(!has("5 小时") && has("128"));
+    check_layout("usage-no-window");
+    // a long model name stays on its line
+    give_usage(); dh::ble::mock_usage.latest_model = "abcdefghijabcdefghijabcdefghijab"; dh::ble::mock_usage.latest_status = 429; step();
+    check_layout("usage-long-model");
+    // English, large text
+    fresh("night|-|en-US|large|pct|standard|S+O+C-P-U+|list|hands");
+    give_usage(); goto_view(Page::Usage);
+    EXPECT(nav_line() == "Switch,Status,Usage,Settings" && has("Calls today") && has("5 h"));
+    check_layout("usage-en-large");
 }
 static void case_no_metrics() {
     fresh();
@@ -1229,7 +1301,7 @@ static void case_matrix() {
                     dh::ui_pairing_hide(); step();
                 }
             }
-    EXPECT(views == 4 * 2 * 3 * 16);
+    EXPECT(views == 4 * 2 * 3 * 17);
 }
 static void case_state_fidelity() {
     using detail::header_battery_text;
@@ -1386,14 +1458,14 @@ static void case_appearance() {
     fresh();
     goto_view(Page::Appearance);
     EXPECT(click_text("深海蓝"));
-    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands");
+    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands");
     EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Ocean);
     EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03131c)));
     EXPECT(click_text("English"));
-    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-|list|hands");
+    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-U-|list|hands");
     EXPECT(has("Appearance") && has("Switch") && has("Status") && has("Settings") && !contains("外观"));
     EXPECT(click_text("Large"));
-    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-|list|hands");
+    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-U-|list|hands");
     EXPECT(detail::current_page() == Page::Appearance);  // the page stays
     // a restart restores it
     const std::string saved = stored_text;
@@ -1426,7 +1498,7 @@ static void case_appearance() {
         EXPECT(swatch != nullptr);
         if (swatch) { lv_obj_scroll_to_view_recursive(swatch, LV_ANIM_OFF); lv_obj_update_layout(detail::screen_object()); lv_area_t a; lv_obj_get_coords(swatch, &a); tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2); }
     }
-    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-|list|hands" && detail::look.palette.accent == 0x4fc3f7);
+    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands" && detail::look.palette.accent == 0x4fc3f7);
     // the page of every tier still draws its own choices selected
     fresh("amber|-|zh-CN|small");
     goto_view(Page::Appearance);
@@ -1686,13 +1758,13 @@ static void case_appearance_options() {   // A19
     EXPECT(click_text("隐藏"));
     step(); step();
     EXPECT(chosen("隐藏") && !chosen("显示"));
-    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-|list|hands" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
+    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-U-|list|hands" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
     EXPECT(click_text("显示"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands" && detail::header_battery_text() == "67");
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands" && detail::header_battery_text() == "67");
     EXPECT(click_text("粗"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-|list|hands" && chosen("粗") && !chosen("细"));
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-U-|list|hands" && chosen("粗") && !chosen("细"));
     fresh("mint|-|zh-CN|standard|nopct|thin");      // what is stored is what the page shows as chosen
     goto_view(Page::Appearance);
     EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
@@ -2289,7 +2361,7 @@ int main(int argc, char **argv) {
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
         {"pages_and_home", case_pages_and_home}, {"wake_goes_home", case_wake_goes_home}, {"switch_styles", case_switch_styles},
-        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page}, {"time_options", case_time_options},
+        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page}, {"time_options", case_time_options}, {"usage_page", case_usage_page},
         {"ble_sources", case_ble_sources}, {"ble_pairing", case_ble_pairing}, {"ble_forget", case_ble_forget}, {"flash_worker", case_flash_worker}, {"ble_current", case_ble_current},
         {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;

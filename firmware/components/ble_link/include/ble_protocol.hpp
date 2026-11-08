@@ -9,6 +9,7 @@
 //                             {"op":"sources_end"}
 //                             {"op":"result","req":7,"outcome":"confirmed|sent_unconfirmed|not_sent","detail":"..."}
 //                             {"op":"current","id":"<App id>"}   the input the monitor is on; "" when not known
+//                             {"op":"usage","ok":true,...} / {"op":"usage","ok":false}   Magpie, 13.12
 //   device -> App (events):   {"op":"switch","req":7,"id":"<App id>"}
 #include <cstdint>
 #include <optional>
@@ -21,6 +22,7 @@ constexpr size_t kMaxMessage = 512, kMaxSources = 12, kMaxId = 48, kMaxName = 32
 constexpr int64_t kPairingWindowMs = 120000;   // "pair a computer" accepts a new computer for 2 minutes (K1)
 constexpr int64_t kConfirmMs = 30000;          // the six digits must be confirmed within 30 s (the Mac gives up then too)
 constexpr int64_t kRequestTimeoutMs = 12000;   // the App needs about 4.5 s for a switch and its read-backs
+constexpr int64_t kUsageStaleMs = 60000;       // the App sends the usage every 15 s (13.12 G3)
 
 struct Source {
     std::string id, name, port;   // port: dp1 dp2 hdmi1 hdmi2 usbc other
@@ -33,7 +35,25 @@ struct Result {
     std::string detail;
 };
 
-enum class Op { SourcesBegin, Source, SourcesEnd, Result, Current, Bad };
+// The Usage page (docs/desktop-app-design.md 13.12): what the App read from Magpie on the Mac.
+struct UsageWindow {
+    uint32_t minutes = 0;     // the length of the quota window
+    uint32_t remaining = 0;   // percent left, 0 to 100
+    uint32_t reset_s = 0;     // seconds to its reset when the App sent it; 0: not known
+    bool operator==(const UsageWindow &o) const { return minutes == o.minutes && remaining == o.remaining && reset_s == o.reset_s; }
+};
+struct Usage {
+    bool ok = false;                  // false: Magpie is not running on the Mac
+    std::string provider, plan;
+    std::vector<UsageWindow> windows; // at most 2
+    uint32_t calls = 0, errors = 0;   // today
+    uint64_t tokens = 0;              // today
+    uint32_t ttft_ms = 0;             // today's average time to first token
+    std::string latest_model;
+    uint32_t latest_status = 0, latest_ms = 0, latest_age_s = 0;
+};
+
+enum class Op { SourcesBegin, Source, SourcesEnd, Result, Current, Usage, Bad };
 struct Message {
     Op op = Op::Bad;
     size_t count = 0;        // SourcesBegin
@@ -41,6 +61,7 @@ struct Message {
     Source source;           // Source
     Result result;           // Result
     std::string current;     // Current: an id, or "" for "not known"
+    Usage usage;             // Usage
     std::string error;       // Bad: why
 };
 // Strict: a known op, the fields it needs with the right types, nothing too long, valid UTF-8 without control characters.

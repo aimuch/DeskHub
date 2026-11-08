@@ -286,15 +286,15 @@ static void t5_appearance() {
     CHECK_EQ(combos, 4 * 3 * 2 * 3 * 2 * 3 * 2 * 2);
     Appearance d;
     CHECK(d.show_percent && d.ring == RingTier::Standard && d.theme == ThemeId::Night && d.style == SwitchStyle::List && d.clock_hands);
-    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands"));
+    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands"));
     Appearance a;
     a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large; a.show_percent = false; a.ring = RingTier::Thick;
     a.style = SwitchStyle::Icons;
-    a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}}};
+    a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}, {View::Usage, false}}};
     a.clock_hands = false;
-    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+|icons|nohands"));
+    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+U-|icons|nohands"));
     const Appearance back = parse_appearance(serialize(a));
-    CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+"));
+    CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+U-"));
     const std::vector<std::string> bad = {
         "", "garbage", "mint|-|zh-CN", "mint|-|zh-CN|standard|pct", "mint|-|zh-CN|standard|pct|standard|extra", "mint|zzzzzz|zh-CN|standard|pct|standard",
         "mint|5EE6B8|zh-CN|standard|pct|standard", "mint|5ee6b|zh-CN|standard|pct|standard", "mint|5ee6b8f|zh-CN|standard|pct|standard",
@@ -336,7 +336,7 @@ static void t25_appearance_upgrade() {
         if (p.accent != c.accent) std::fprintf(stderr, "upgrade of %s: accent %06x\n", c.stored, static_cast<unsigned>(p.accent));
         CHECK_EQ(p.accent, c.accent);
         CHECK(p.style == SwitchStyle::List);
-        CHECK_EQ(serialize_pages(p.pages), std::string("S+O+C-P-"));
+        CHECK_EQ(serialize_pages(p.pages), std::string("S+O+C-P-U-"));
     }
     const Appearance six = parse_appearance("mint|-|en-US|large|nopct|thick");
     CHECK(six.lang == Lang::EnUS && six.size == SizeTier::Large && !six.show_percent && six.ring == RingTier::Thick);
@@ -345,7 +345,7 @@ static void t25_appearance_upgrade() {
     // Before 0.3.19 there were no hands: what was stored gets them, as a new device does.
     for (const char *s : {"mint|-|zh-CN|standard", "mint|-|en-US|large|nopct|thick", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|icons"}) CHECK(parse_appearance(s).clock_hands);
     const Appearance nine = parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|nohands");
-    CHECK(!nine.clock_hands && nine.style == SwitchStyle::Icons && nine.lang == Lang::EnUS && serialize_pages(nine.pages) == "C+S-O+P-");
+    CHECK(!nine.clock_hands && nine.style == SwitchStyle::Icons && nine.lang == Lang::EnUS && serialize_pages(nine.pages) == "C+S-O+P-U-");
     CHECK(parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|hands").clock_hands);
 }
 static void t6_font_tiers() {
@@ -1022,45 +1022,49 @@ static void t19_charge_view() {
 // ---- T24 ----
 static void t24_pages() {
     const PageOrder d = default_pages();
-    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-"));
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-"));
     CHECK(home_view(d) == View::Switch);
     CHECK(nav_views(d) == (std::vector<View>{View::Switch, View::Overview}));
     // The home page is the first shown one, not the first slot.
     PageOrder o = d;
     CHECK(pages_toggle(o, 0));                       // hide Switch
-    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-"));
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-"));
     CHECK(home_view(o) == View::Overview);
     CHECK(nav_views(o) == std::vector<View>{View::Overview});
     // The last shown page cannot be hidden.
     CHECK(!pages_toggle(o, 1));
-    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-"));
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-"));
     CHECK(pages_toggle(o, 2));                       // show Clock
     CHECK(pages_toggle(o, 1));                       // now Overview can go
     CHECK(home_view(o) == View::Clock);
-    CHECK(!pages_toggle(o, 4) && !pages_toggle(o, 99));
+    CHECK(!pages_toggle(o, 5) && !pages_toggle(o, 99));
     // Moves swap with the neighbour; the ends and slots out of range are refused and change nothing.
     o = d;
     CHECK(pages_move(o, 1, -1));
-    CHECK_EQ(serialize_pages(o), std::string("O+S+C-P-"));
+    CHECK_EQ(serialize_pages(o), std::string("O+S+C-P-U-"));
     CHECK(home_view(o) == View::Overview);
     CHECK(pages_move(o, 0, +1));
-    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-"));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-"));
     CHECK(!pages_move(o, 0, -1));
-    CHECK(!pages_move(o, 3, +1));
-    CHECK(!pages_move(o, 4, -1) && !pages_move(o, 7, +1) && !pages_move(o, 1, 0) && !pages_move(o, 1, 2) && !pages_move(o, 2, -2));
-    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-"));
+    CHECK(!pages_move(o, 4, +1));
+    CHECK(!pages_move(o, 5, -1) && !pages_move(o, 7, +1) && !pages_move(o, 1, 0) && !pages_move(o, 1, 2) && !pages_move(o, 2, -2));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-"));
     CHECK(pages_move(o, 3, -1));                     // Power moves up past the hidden Clock: still hidden, still not in the navigation
-    CHECK_EQ(serialize_pages(o), std::string("S+O+P-C-"));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+P-C-U-"));
     CHECK(nav_views(o) == (std::vector<View>{View::Switch, View::Overview}));
     // Every order and every non-empty choice round-trips; the navigation is the shown ones in order, each once.
-    std::array<View, 4> perm = {View::Switch, View::Overview, View::Clock, View::Power};
+    std::array<View, 5> perm = {View::Switch, View::Overview, View::Clock, View::Power, View::Usage};
     std::sort(perm.begin(), perm.end());
     int seen = 0;
     do {
-        for (int mask = 1; mask < 16; ++mask) {
+        for (int mask = 1; mask < 32; ++mask) {
             PageOrder p{};
-            for (size_t i = 0; i < 4; ++i) p[i] = {perm[i], ((mask >> i) & 1) != 0};
+            for (size_t i = 0; i < 5; ++i) p[i] = {perm[i], ((mask >> i) & 1) != 0};
             PageOrder q = default_pages();
+            if (__builtin_popcount(static_cast<unsigned>(mask)) > static_cast<int>(kMaxShownPages)) {   // five shown: refused
+                CHECK(!parse_pages(serialize_pages(p), q));
+                continue;
+            }
             CHECK(parse_pages(serialize_pages(p), q));
             CHECK_EQ(serialize_pages(q), serialize_pages(p));
             const auto nav = nav_views(q);
@@ -1071,7 +1075,7 @@ static void t24_pages() {
             ++seen;
         }
     } while (std::next_permutation(perm.begin(), perm.end()));
-    CHECK_EQ(seen, 24 * 15);
+    CHECK_EQ(seen, 120 * 30);
     for (const char *bad : {"", "S+O+C-", "S+O+C-P-X+", "S+S+C-P-", "S+O+C-Q-", "S*O+C-P-", "S-O-C-P-", "s+o+c-p-", "S+O+C-P", "S+O+C-P-\n", "SOCP", "S+O+C-P-S+"}) {
         PageOrder q = default_pages();
         q[0].shown = false; q[2].shown = true;   // not the default, to see that a refused text leaves it alone
@@ -1173,6 +1177,124 @@ static void t27_sources() {
     CHECK_EQ(kIconChoices.size(), static_cast<size_t>(8));
 }
 
+
+// ---- T28: the fifth page (13.12 G7) ----
+static void t28_usage_page_order() {
+    PageOrder d = default_pages();
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-"));          // Usage is there, hidden
+    PageOrder o{};
+    CHECK(parse_pages("S+O+C-P-U+", o) && serialize_pages(o) == "S+O+C-P-U+");
+    // what 0.3.27 and earlier stored: four pages; Usage comes last, hidden
+    CHECK(parse_pages("C+S-O+P+", o) && serialize_pages(o) == "C+S-O+P+U-");
+    for (const char *bad : {"S+O+C+P+U+", "S+O+C-P-U", "S+O+C-P-U+X-", "S+O+C-P-S-", "S-O-C-P-U-", "S+O+C-P-u+", "S+O+C-U-", "S+O+C-P-U-U-"}) {
+        PageOrder keep = default_pages();
+        CHECK(!parse_pages(bad, keep));
+        CHECK_EQ(serialize_pages(keep), std::string("S+O+C-P-U-"));   // untouched
+    }
+    // at most four shown
+    PageOrder four{};
+    CHECK(parse_pages("S+O+C+P+U-", four));
+    CHECK(!pages_toggle(four, 4) && !four[4].shown);                   // a fifth is refused
+    CHECK(pages_toggle(four, 3) && pages_toggle(four, 4) && four[4].shown);   // after one is hidden it may be shown
+    CHECK(nav_views(four).size() == 4);
+    // an Appearance text keeps working both ways
+    Appearance a = parse_appearance("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands");
+    CHECK_EQ(serialize_pages(a.pages), std::string("S+O+C-P-U-"));
+    a.pages[4].shown = true;
+    CHECK(parse_appearance(serialize(a)).pages[4].shown);
+}
+
+// ---- T29: the words of the Usage page (13.12 G2 to G6) ----
+static ble::Usage sample_usage() {
+    ble::Usage u;
+    u.ok = true; u.provider = "codex"; u.plan = "plus";
+    u.windows = {{300, 100, 15120}, {10080, 37, 300000}};
+    u.calls = 128; u.errors = 2; u.tokens = 1234567; u.ttft_ms = 820;
+    u.latest_model = "gpt-6.1-sol"; u.latest_status = 200; u.latest_ms = 3200; u.latest_age_s = 120;
+    return u;
+}
+static void t29_usage_words() {
+    CHECK_EQ(short_count(0), std::string("0"));
+    CHECK_EQ(short_count(128), std::string("128"));
+    CHECK_EQ(short_count(9999), std::string("10.0K"));
+    CHECK_EQ(short_count(1234), std::string("1.2K"));
+    CHECK_EQ(short_count(12345), std::string("12.3K"));
+    CHECK_EQ(short_count(1234567), std::string("1.2M"));
+    CHECK_EQ(short_count(987654321), std::string("987.7M"));
+    CHECK_EQ(short_count(1234567890), std::string("1.2B"));
+    setenv("TZ", "CST-8", 1);
+    tzset();
+    const time_t now = 1794120000;   // 2026-11-08 14:40 CST
+    // G4: nothing yet
+    UsageView w = make_usage(Lang::ZhCN, nullptr, 0, true, now);
+    CHECK(w.state == UsageView::State::Waiting && w.status == "等 App 发来用量" && w.quotas.empty());
+    // fresh
+    ble::Usage u = sample_usage();
+    UsageView v = make_usage(Lang::ZhCN, &u, 15000, true, now);
+    CHECK(v.state == UsageView::State::Fresh && !v.dim && v.status == "15 秒前更新" && v.title == "Codex · plus");
+    CHECK(make_usage(Lang::ZhCN, &u, 2000, true, now).status == "刚刚更新");
+    CHECK(v.quotas.size() == 2 && v.quotas[0].label == "5 小时" && v.quotas[0].remaining == 100 && v.quotas[1].label == "7 天" && v.quotas[1].remaining == 37);
+    CHECK_EQ(v.quotas[0].reset, std::string("4 小时 11 分后重置"));   // 15120 s at the App, 15 s ago: 15105 s left (4 h 11 min 45 s)
+    {   // more than a day away: the day and the time it resets, in local time
+        const time_t at = now + 300000 - 15;
+        struct tm t{};
+        localtime_r(&at, &t);
+        static const char *days[] = {"日", "一", "二", "三", "四", "五", "六"};
+        char want[64];
+        snprintf(want, sizeof(want), "周%s %02d:%02d 重置", days[t.tm_wday], t.tm_hour, t.tm_min);
+        CHECK_EQ(v.quotas[1].reset, std::string(want));
+    }
+    CHECK(v.calls == "128" && v.tokens == "1.2M" && v.success == "98.4%" && v.ttft == "820");
+    CHECK(v.model == "gpt-6.1-sol" && v.code == "200" && v.latency == "3.2 秒" && v.ago == "2 分钟前" && !v.failed);
+    // G5: the time is not set: no weekday; a reset that is not known
+    UsageView nt = make_usage(Lang::ZhCN, &u, 15000, false, now);
+    CHECK_EQ(nt.quotas[1].reset, std::string("3 天后重置"));
+    ble::Usage unknown = u; unknown.windows[0].reset_s = 0;
+    CHECK_EQ(make_usage(Lang::ZhCN, &unknown, 0, true, now).quotas[0].reset, std::string("重置时间未知"));
+    ble::Usage soon = u; soon.windows[0].reset_s = 600;
+    CHECK_EQ(make_usage(Lang::ZhCN, &soon, 0, true, now).quotas[0].reset, std::string("10 分后重置"));
+    CHECK_EQ(make_usage(Lang::ZhCN, &soon, 700000, true, now).quotas[0].reset, std::string("马上重置"));   // it has passed by now
+    // labels of other windows
+    ble::Usage odd = u; odd.windows = {{45, 50, 100}, {1440, 80, 100}};
+    UsageView ov = make_usage(Lang::ZhCN, &odd, 0, true, now);
+    CHECK(ov.quotas[0].label == "45 分钟" && ov.quotas[1].label == "1 天");
+    // G6: no calls today
+    ble::Usage idle = u; idle.calls = 0; idle.errors = 0; idle.ttft_ms = 0; idle.tokens = 0;
+    UsageView iv = make_usage(Lang::ZhCN, &idle, 0, true, now);
+    CHECK(iv.calls == "0" && iv.tokens == "0" && iv.success == "—" && iv.ttft == "—");
+    // the latest request: failed, fast, none
+    ble::Usage f = u; f.latest_status = 429; f.latest_ms = 820; f.latest_age_s = 5;
+    UsageView fv = make_usage(Lang::ZhCN, &f, 0, true, now);
+    CHECK(fv.failed && fv.code == "429" && fv.latency == "820 ms" && fv.ago == "刚才");
+    ble::Usage none = u; none.latest_model.clear(); none.latest_status = 0; none.latest_ms = 0;
+    UsageView nv = make_usage(Lang::ZhCN, &none, 0, true, now);
+    CHECK(nv.model == "—" && !nv.failed && nv.code.empty());
+    ble::Usage hours = u; hours.latest_age_s = 3 * 3600 + 100;
+    CHECK_EQ(make_usage(Lang::ZhCN, &hours, 0, true, now).ago, std::string("3 小时前"));
+    // G3: stale
+    UsageView sv = make_usage(Lang::ZhCN, &u, 3 * 60000 + 5000, true, now);
+    CHECK(sv.state == UsageView::State::Stale && sv.dim && sv.status == "数据过期 · 3 分钟前" && sv.calls == "128");
+    CHECK(make_usage(Lang::ZhCN, &u, ble::kUsageStaleMs, true, now).state == UsageView::State::Fresh);
+    // G2: Magpie is not running: no old numbers
+    ble::Usage off; off.ok = false;
+    UsageView fo = make_usage(Lang::ZhCN, &off, 1000, true, now);
+    CHECK(fo.state == UsageView::State::Offline && fo.status == "Magpie 没有运行" && fo.quotas.empty() && fo.calls == "—");
+    // title without a plan, without a provider
+    ble::Usage np = u; np.plan.clear();
+    CHECK_EQ(make_usage(Lang::ZhCN, &np, 0, true, now).title, std::string("Codex"));
+    np.provider.clear();
+    CHECK_EQ(make_usage(Lang::ZhCN, &np, 0, true, now).title, std::string("Magpie"));
+    // English
+    UsageView e = make_usage(Lang::EnUS, &u, 15000, true, now);
+    CHECK(e.status == "Updated 15 s ago" && e.quotas[0].label == "5 h" && e.quotas[1].label == "7 d" && e.quotas[0].reset == "Resets in 4 h 11 min");
+    CHECK(make_usage(Lang::EnUS, nullptr, 0, true, now).status == "Waiting for the App" && make_usage(Lang::EnUS, &off, 0, true, now).status == "Magpie is not running");
+    // every word is in the font
+    const auto glyphs = font_glyphs();
+    for (const UsageView &x : {w, v, nt, iv, fv, sv, fo, e})
+        for (const std::string &s : {x.status, x.title, x.ago, x.latency, x.success, x.ttft})
+            CHECK(renderable(s, glyphs));
+    for (const QuotaCard &q : v.quotas) CHECK(renderable(q.label, glyphs) && renderable(q.reset, glyphs));
+}
 int main() {
     t1_palettes_readable();
     t2_contrast_maths();
@@ -1186,6 +1308,8 @@ int main() {
     t10_header();
     t11_ring();
     t12_clock();
+    t28_usage_page_order();
+    t29_usage_words();
     t13_percent();
     t15_power_view();
     t16_connect();

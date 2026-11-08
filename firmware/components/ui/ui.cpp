@@ -115,6 +115,7 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.ble_sources = ble::sources().size();
     f.confirm_forget = confirm_forget;
     f.current_id = ble::current();
+    f.has_usage = ble::usage(f.usage, f.usage_age_ms);
     return f;
 }
 
@@ -290,6 +291,7 @@ Page page_of(View v) {
     case View::Switch: return Page::Actions;
     case View::Clock: return Page::Clock;
     case View::Power: return Page::Power;
+    case View::Usage: return Page::Usage;
     case View::Overview: break;
     }
     return Page::Home;
@@ -380,7 +382,9 @@ void request_pages_toggle(int slot) {
     Appearance next = appearance;
     if (slot < 0 || !pages_toggle(next.pages, static_cast<size_t>(slot))) {
         note_activity();
-        appearance_error = tr(look.lang, Str::PagesKeepOne);
+        // which rule refused it: the last shown page stays, or a fifth would not fit the navigation (13.12 G7)
+        const bool showing = slot >= 0 && static_cast<size_t>(slot) < next.pages.size() && !next.pages[static_cast<size_t>(slot)].shown;
+        appearance_error = tr(look.lang, showing ? Str::PagesAtMost : Str::PagesKeepOne);
         rebuilding = true;
         request_update();
         return;

@@ -27,6 +27,7 @@ void start();                                  // before the display and Wi-Fi (
 Status status();
 std::vector<Source> sources();                 // what the App sent; empty unless the link is secure
 std::string current();                         // the input the App read back from the monitor; "" when not known
+bool usage(Usage &out, int64_t &age_ms);       // the last usage the App sent (13.12) and how long ago; false: none yet
 bool request(const std::string &id);           // false: no secure link, one is waiting, or the id is not in the list
 void open_pairing();
 void close_pairing();

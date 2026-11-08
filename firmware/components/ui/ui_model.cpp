@@ -94,18 +94,19 @@ RingPx ring_px(RingTier t) {
 }
 // ---- pages ----
 namespace {
-char view_letter(View v) { return v == View::Switch ? 'S' : v == View::Overview ? 'O' : v == View::Clock ? 'C' : 'P'; }
+char view_letter(View v) { return v == View::Switch ? 'S' : v == View::Overview ? 'O' : v == View::Clock ? 'C' : v == View::Power ? 'P' : 'U'; }
 bool view_of(char c, View &v) {
     switch (c) {
     case 'S': v = View::Switch; return true;
     case 'O': v = View::Overview; return true;
     case 'C': v = View::Clock; return true;
     case 'P': v = View::Power; return true;
+    case 'U': v = View::Usage; return true;
     default: return false;
     }
 }
 }  // namespace
-PageOrder default_pages() { return {{{View::Switch, true}, {View::Overview, true}, {View::Clock, false}, {View::Power, false}}}; }
+PageOrder default_pages() { return {{{View::Switch, true}, {View::Overview, true}, {View::Clock, false}, {View::Power, false}, {View::Usage, false}}}; }
 View home_view(const PageOrder &o) {
     for (const auto &s : o) if (s.shown) return s.view;
     return View::Switch;   // parse_pages and pages_toggle never leave none shown
@@ -118,11 +119,10 @@ std::vector<View> nav_views(const PageOrder &o) {
 }
 bool pages_toggle(PageOrder &o, size_t slot) {
     if (slot >= o.size()) return false;
-    if (o[slot].shown) {
-        size_t shown = 0;
-        for (const auto &s : o) shown += s.shown ? 1 : 0;
-        if (shown <= 1) return false;
-    }
+    size_t shown = 0;
+    for (const auto &s : o) shown += s.shown ? 1 : 0;
+    if (o[slot].shown && shown <= 1) return false;
+    if (!o[slot].shown && shown >= kMaxShownPages) return false;   // the navigation holds four (13.12 G7)
     o[slot].shown = !o[slot].shown;
     return true;
 }
@@ -137,7 +137,9 @@ std::string serialize_pages(const PageOrder &o) {
     for (const auto &s : o) { out += view_letter(s.view); out += s.shown ? '+' : '-'; }
     return out;
 }
-bool parse_pages(const std::string &text, PageOrder &out) {
+bool parse_pages(const std::string &given, PageOrder &out) {
+    // 0.3.27 and earlier stored four pages: Usage comes last, hidden (13.12 G7).
+    const std::string text = given.size() == 2 * (kViewCount - 1) && given.find('U') == std::string::npos ? given + "U-" : given;
     if (text.size() != 2 * kViewCount) return false;
     PageOrder o{};
     std::array<bool, kViewCount> seen{};
@@ -151,7 +153,9 @@ bool parse_pages(const std::string &text, PageOrder &out) {
         o[i] = {v, flag == '+'};
         any = any || flag == '+';
     }
-    if (!any) return false;
+    size_t shown = 0;
+    for (const auto &s : o) shown += s.shown ? 1 : 0;
+    if (!any || shown > kMaxShownPages) return false;   // five shown would not fit the navigation (13.12 G7)
     out = o;
     return true;
 }
@@ -677,5 +681,76 @@ std::string notice_text(Lang l, const std::string &command, int64_t now_ms, int6
     if (command.empty() || command == "尚无操作") return "";
     if (now_ms < changed_ms || now_ms - changed_ms >= kNoticeMs) return "";
     return dynamic_text(l, command);
+}
+// ---- the Usage page (docs/desktop-app-design.md 13.12) ----
+std::string short_count(uint64_t n) {
+    if (n < 1000) return std::to_string(n);
+    static const char *units[] = {"K", "M", "B", "T"};
+    double v = static_cast<double>(n);
+    int u = -1;
+    while (v >= 999.95 && u < 3) { v /= 1000.0; ++u; }
+    return fmt("%.1f%s", v, units[u]);
+}
+namespace {
+std::string window_label(Lang l, uint32_t minutes) {
+    if (minutes % 1440 == 0) return fmt(tr(l, Str::UsageWindowDays), static_cast<int>(minutes / 1440));
+    if (minutes % 60 == 0) return fmt(tr(l, Str::UsageWindowHours), static_cast<int>(minutes / 60));
+    return fmt(tr(l, Str::UsageWindowMinutes), static_cast<int>(minutes));
+}
+// G5: left is what is left now; the weekday only when the device knows the time.
+std::string reset_text(Lang l, const ble::UsageWindow &w, int64_t age_s, bool time_valid, time_t now) {
+    if (w.reset_s == 0) return T(l, Str::UsageResetUnknown);
+    const int64_t left = static_cast<int64_t>(w.reset_s) - age_s;
+    if (left <= 0) return T(l, Str::UsageResetNow);
+    if (left < 3600) return fmt(tr(l, Str::UsageResetMinutes), static_cast<int>(std::max<int64_t>(1, left / 60)));
+    if (left < 86400) return fmt(tr(l, Str::UsageResetHours), static_cast<int>(left / 3600), static_cast<int>(left % 3600 / 60));
+    if (!time_valid || now < kClockEpoch) return fmt(tr(l, Str::UsageResetDays), static_cast<int>(left / 86400));
+    const time_t at = now + static_cast<time_t>(left);
+    struct tm t{};
+    localtime_r(&at, &t);
+    return fmt(tr(l, Str::UsageResetAt), weekday_name(l, t.tm_wday), t.tm_hour, t.tm_min);
+}
+std::string ago_text(Lang l, int64_t s) {
+    if (s < 10) return T(l, Str::UsageAgoNow);
+    if (s < 60) return fmt(tr(l, Str::UsageAgoSeconds), static_cast<int>(s));
+    if (s < 3600) return fmt(tr(l, Str::UsageAgoMinutes), static_cast<int>(s / 60));
+    if (s < 86400) return fmt(tr(l, Str::UsageAgoHours), static_cast<int>(s / 3600));
+    return fmt(tr(l, Str::UsageAgoDays), static_cast<int>(s / 86400));
+}
+}  // namespace
+UsageView make_usage(Lang l, const ble::Usage *u, int64_t age_ms, bool time_valid, time_t now) {
+    UsageView v;
+    const std::string none = "\u2014";
+    v.calls = v.tokens = v.success = v.ttft = v.model = none;
+    v.title = "Magpie";
+    if (!u) { v.state = UsageView::State::Waiting; v.status = T(l, Str::UsageWaiting); return v; }   // G4
+    if (!u->ok) { v.state = UsageView::State::Offline; v.status = T(l, Str::UsageOffline); return v; }   // G2: no old numbers
+    const int64_t age_s = std::max<int64_t>(0, age_ms / 1000);
+    if (age_ms > ble::kUsageStaleMs) {   // G3
+        v.state = UsageView::State::Stale;
+        v.dim = true;
+        v.status = fmt(tr(l, Str::UsageStaleAgo), ago_text(l, age_s).c_str());
+    } else {
+        v.state = UsageView::State::Fresh;
+        v.status = age_ms < 5000 ? T(l, Str::UsageJustNow) : fmt(tr(l, Str::UsageUpdatedAgo), static_cast<int>(age_s));
+    }
+    if (!u->provider.empty()) {
+        std::string p = u->provider;
+        p[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(p[0])));
+        v.title = u->plan.empty() ? p : p + (l == Lang::EnUS ? " / " : " \u00b7 ") + u->plan;   // English text stays ASCII
+    }
+    for (const auto &w : u->windows) v.quotas.push_back({window_label(l, w.minutes), static_cast<int>(w.remaining), reset_text(l, w, age_s, time_valid, now)});
+    v.calls = short_count(u->calls);
+    v.tokens = short_count(u->tokens);
+    if (u->calls > 0) {   // G6
+        v.success = fmt("%.1f%%", 100.0 * (u->calls - u->errors) / u->calls);
+        if (u->ttft_ms > 0) v.ttft = std::to_string(u->ttft_ms);
+    }
+    if (!u->latest_model.empty()) v.model = u->latest_model;
+    if (u->latest_status) v.code = std::to_string(u->latest_status);
+    if (u->latest_ms) v.latency = u->latest_ms < 1000 ? std::to_string(u->latest_ms) + " ms" : fmt(tr(l, Str::UsageSeconds), u->latest_ms / 1000.0);
+    v.ago = ago_text(l, static_cast<int64_t>(u->latest_age_s) + age_s);
+    v.failed = u->latest_status != 0 && (u->latest_status < 200 || u->latest_status >= 400);
+    return v;
 }
 }  // namespace dh::ui

@@ -43,7 +43,7 @@ struct Widgets {
     lv_obj_t *first_action{};
     std::vector<lv_obj_t *> switch_rows, switch_tiles, switch_icons;
     int switch_current = -1;
-    std::array<std::array<lv_obj_t *, 3>, 4> pages_ctrl{};
+    std::array<std::array<lv_obj_t *, 3>, kViewCount> pages_ctrl{};
     std::array<lv_obj_t *, 9> icon_btn{};
     lv_obj_t *ble_state{}, *ble_bonds{};
     std::vector<lv_obj_t *> connect_values;
@@ -81,6 +81,7 @@ Str view_name(View v) {
     case View::Switch: return Str::NavActions;
     case View::Clock: return Str::NavClock;
     case View::Power: return Str::NavPower;
+    case View::Usage: return Str::NavUsage;
     case View::Overview: break;
     }
     return Str::NavOverview;
@@ -272,6 +273,137 @@ void refresh_home(const Frame &f) {
         if (lv_obj_get_style_arc_opa(ring.seg[i], LV_PART_INDICATOR) != seg) lv_obj_set_style_arc_opa(ring.seg[i], seg, LV_PART_INDICATOR);
         if (lv_obj_get_style_arc_opa(ring.glow[i], LV_PART_INDICATOR) != halo) lv_obj_set_style_arc_opa(ring.glow[i], halo, LV_PART_INDICATOR);
     }
+}
+
+// ---- Usage (docs/design v2 Usage, UsageStale; docs/desktop-app-design.md 13.12) ----
+struct UsageWidgets {
+    lv_obj_t *title{}, *status{}, *message{}, *hint{}, *noquota{};
+    std::array<lv_obj_t *, 2> card{}, label{}, left{}, percent{}, sign{}, track{}, fill{}, reset{};
+    lv_obj_t *stats{}, *latest{};
+    std::array<lv_obj_t *, 4> stat_value{};
+    lv_obj_t *latest_ago{}, *model{}, *code{}, *latency{};
+} uw;
+constexpr int kQuotaW = (kContentW - 10) / 2, kQuotaH = 128, kStatsY = 172, kStatsH = 70, kLatestY = 252, kLatestH = 78;
+lv_obj_t *usage_card(lv_obj_t *body, int x, int y, int w, int h) {
+    auto *c = holder(body, w, h);
+    lv_obj_set_pos(c, x, y);
+    lv_obj_set_style_radius(c, 18, 0);
+    lv_obj_set_style_bg_color(c, hex(P().card), 0);
+    lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(c, hex(P().edge), 0);
+    lv_obj_set_style_border_width(c, 1, 0);
+    return c;
+}
+void build_usage(lv_obj_t *body, const Frame &) {
+    uw = UsageWidgets{};
+    uw.title = label_at(body, "", 0, 4, kContentW / 2, look.body, P().muted);
+    single_line(uw.title, lh(look.body));
+    uw.status = label_at(body, "", kContentW / 2, 4 + (lh(look.body) - lh(look.caption)) / 2, kContentW / 2, look.caption, P().muted);
+    lv_obj_set_style_text_align(uw.status, LV_TEXT_ALIGN_RIGHT, 0);
+    single_line(uw.status, lh(look.caption));
+    // the message of the empty states, in the middle
+    uw.message = label_at(body, "", 0, 120, kContentW, look.title, P().ink);
+    centered(uw.message);
+    uw.hint = label_at(body, "", 20, 120 + lh(look.title) + 10, kContentW - 40, look.caption, P().muted);
+    centered(uw.hint);
+    uw.noquota = label_at(body, T(Str::UsageNoQuota), 0, 34 + kQuotaH / 2 - lh(look.caption) / 2, kContentW, look.caption, P().muted);
+    centered(uw.noquota);
+    for (size_t i = 0; i < 2; ++i) {
+        auto *c = usage_card(body, static_cast<int>(i) * (kQuotaW + 10), 34, kQuotaW, kQuotaH);
+        uw.card[i] = c;
+        uw.label[i] = label_at(c, "", 14, 10, kQuotaW - 90, look.caption, P().muted);
+        single_line(uw.label[i], lh(look.caption));
+        uw.left[i] = label_at(c, T(Str::UsageRemaining), kQuotaW - 84, 10, 70, look.caption, P().muted);
+        lv_obj_set_style_text_align(uw.left[i], LV_TEXT_ALIGN_RIGHT, 0);
+        single_line(uw.left[i], lh(look.caption));
+        uw.percent[i] = label_at(c, "", 14, 30, 110, &lv_font_montserrat_48, P().ink);
+        uw.sign[i] = label_at(c, "%", 0, 30 + lv_font_get_line_height(&lv_font_montserrat_48) - lv_font_get_line_height(&lv_font_montserrat_24) - 4, 30, &lv_font_montserrat_24, P().muted);
+        uw.track[i] = holder(c, kQuotaW - 28, 6);
+        lv_obj_set_pos(uw.track[i], 14, 88);
+        lv_obj_set_style_radius(uw.track[i], 3, 0);
+        lv_obj_set_style_bg_color(uw.track[i], hex(P().track), 0);
+        lv_obj_set_style_bg_opa(uw.track[i], LV_OPA_COVER, 0);
+        uw.fill[i] = holder(uw.track[i], 0, 6);
+        lv_obj_set_style_radius(uw.fill[i], 3, 0);
+        lv_obj_set_style_bg_color(uw.fill[i], hex(i == 0 ? P().accent : P().power), 0);
+        lv_obj_set_style_bg_opa(uw.fill[i], LV_OPA_COVER, 0);
+        uw.reset[i] = label_at(c, "", 14, 100, kQuotaW - 28, &btr_ui_16, P().muted);
+        single_line(uw.reset[i], lh(&btr_ui_16));
+    }
+    // today: four numbers
+    uw.stats = usage_card(body, 0, kStatsY, kContentW, kStatsH);
+    const Str names[4] = {Str::UsageCallsToday, Str::UsageTokensToday, Str::UsageSuccess, Str::UsageTtft};
+    const int cw = kContentW / 4;
+    for (size_t i = 0; i < 4; ++i) {
+        uw.stat_value[i] = label_at(uw.stats, "", static_cast<int>(i) * cw, 8, cw, &lv_font_montserrat_24, P().ink);
+        centered(uw.stat_value[i]);
+        auto *n = label_at(uw.stats, T(names[i]), static_cast<int>(i) * cw + 2, 8 + lv_font_get_line_height(&lv_font_montserrat_24) + 2, cw - 4, &btr_ui_16, P().muted);
+        centered(n);
+        single_line(n, lh(&btr_ui_16));
+    }
+    // the latest request
+    uw.latest = usage_card(body, 0, kLatestY, kContentW, kLatestH);
+    auto *t = label_at(uw.latest, T(Str::UsageLatest), 14, 10, 160, &btr_ui_16, P().muted);
+    single_line(t, lh(&btr_ui_16));
+    uw.latest_ago = label_at(uw.latest, "", kContentW - 14 - 160, 10, 160, &btr_ui_16, P().muted);
+    lv_obj_set_style_text_align(uw.latest_ago, LV_TEXT_ALIGN_RIGHT, 0);
+    single_line(uw.latest_ago, lh(&btr_ui_16));
+    // the first line: when, the status and the time it took; the second: the model, the whole width (32 bytes fit at 20 px)
+    lv_obj_set_width(uw.latest_ago, 150);
+    lv_obj_set_x(uw.latest_ago, 14 + 80);
+    lv_obj_set_style_text_align(uw.latest_ago, LV_TEXT_ALIGN_LEFT, 0);
+    uw.code = label_at(uw.latest, "", kContentW - 14 - 170, 10, 60, &btr_ui_16, P().agent);
+    lv_obj_set_style_text_align(uw.code, LV_TEXT_ALIGN_RIGHT, 0);
+    single_line(uw.code, lh(&btr_ui_16));
+    uw.latency = label_at(uw.latest, "", kContentW - 14 - 100, 10, 100, &btr_ui_16, P().ink);
+    lv_obj_set_style_text_align(uw.latency, LV_TEXT_ALIGN_RIGHT, 0);
+    single_line(uw.latency, lh(&btr_ui_16));
+    uw.model = label_at(uw.latest, "", 14, 10 + lh(&btr_ui_16) + 8, kContentW - 28, &btr_ui_20, P().ink);
+    single_line(uw.model, lh(&btr_ui_20));
+}
+void refresh_usage(const Frame &f) {
+    if (!uw.title) return;
+    const UsageView v = make_usage(look.lang, f.has_usage ? &f.usage : nullptr, f.usage_age_ms, f.s.time_valid, f.wall);
+    const bool data = v.state == UsageView::State::Fresh || v.state == UsageView::State::Stale;
+    set_text(uw.title, v.title);
+    set_text(uw.status, data ? v.status : "");
+    set_ink(uw.status, v.state == UsageView::State::Fresh ? P().agent : v.state == UsageView::State::Stale ? P().power : P().muted);
+    set_hidden(uw.message, data);
+    set_hidden(uw.hint, data);
+    if (!data) {
+        set_text(uw.message, v.status);
+        set_text(uw.hint, T(v.state == UsageView::State::Offline ? Str::UsageOfflineHint : Str::UsageWaitingHint));
+    }
+    const uint32_t value_ink = v.dim ? P().muted : P().ink;
+    set_hidden(uw.noquota, !data || !v.quotas.empty());
+    for (size_t i = 0; i < 2; ++i) {
+        const bool shown = data && i < v.quotas.size();
+        set_hidden(uw.card[i], !shown);
+        if (!shown) continue;
+        const QuotaCard &q = v.quotas[i];
+        set_text(uw.label[i], q.label);
+        set_text(uw.percent[i], std::to_string(q.remaining));
+        set_ink(uw.percent[i], value_ink);
+        lv_point_t size{};
+        lv_text_get_size(&size, std::to_string(q.remaining).c_str(), &lv_font_montserrat_48, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (lv_obj_get_x(uw.sign[i]) != 14 + size.x + 4) lv_obj_set_x(uw.sign[i], 14 + size.x + 4);
+        const int width = (kQuotaW - 28) * std::clamp(q.remaining, 0, 100) / 100;
+        if (lv_obj_get_width(uw.fill[i]) != width) lv_obj_set_width(uw.fill[i], width);
+        set_bg(uw.fill[i], v.dim ? P().edge : (i == 0 ? P().accent : P().power));
+        set_text(uw.reset[i], q.reset);
+    }
+    set_hidden(uw.stats, !data);
+    set_hidden(uw.latest, !data);
+    if (!data) return;
+    const std::string values[4] = {v.calls, v.tokens, v.success, v.ttft};
+    for (size_t i = 0; i < 4; ++i) { set_text(uw.stat_value[i], values[i]); set_ink(uw.stat_value[i], value_ink); }
+    set_text(uw.latest_ago, v.ago);
+    set_text(uw.model, v.model);
+    set_ink(uw.model, value_ink);
+    set_text(uw.code, v.code);
+    set_ink(uw.code, v.dim ? P().muted : v.failed ? P().danger : P().agent);
+    set_text(uw.latency, v.latency);
+    set_ink(uw.latency, value_ink);
 }
 
 // ---- Clock (docs/design v2 HomeClock) ----
@@ -1258,7 +1390,7 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     ring = Ring{};
     lv_obj_clean(body);
     lv_obj_scroll_to_y(body, 0, LV_ANIM_OFF);
-    const bool fixed = page == Page::Home || page == Page::Clock;
+    const bool fixed = page == Page::Home || page == Page::Clock || page == Page::Usage;
     lv_obj_set_layout(body, fixed ? LV_LAYOUT_NONE : LV_LAYOUT_FLEX);
     if (fixed) lv_obj_remove_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     else {
@@ -1280,6 +1412,7 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     case Page::Time: build_time(body, f); break;
     case Page::Display: build_display(body, f); break;
     case Page::Clock: build_clock(body); break;
+    case Page::Usage: build_usage(body, f); break;
     case Page::Device: build_device(body, f); break;
     }
     lv_obj_update_layout(body);
@@ -1299,6 +1432,7 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     case Page::Time: refresh_time(f); break;
     case Page::Display: refresh_display(f); break;
     case Page::Clock: refresh_clock(f); break;
+    case Page::Usage: refresh_usage(f); break;
     case Page::Device: refresh_device(f); break;
     }
     const bool more = page != Page::Home && page != Page::Clock && g_body && lv_obj_get_scroll_bottom(g_body) > 3;
@@ -1670,7 +1804,7 @@ int nav_count() { return sh.nav ? sh.nav_count : 0; }
 std::string nav_text(int i) { return i >= 0 && i < sh.nav_count && sh.nav_label[static_cast<size_t>(i)] ? lv_label_get_text(sh.nav_label[static_cast<size_t>(i)]) : ""; }
 bool nav_area(int i, int *x1, int *y1, int *x2, int *y2) { return i >= 0 && i < sh.nav_count && area_of(sh.nav_btn[static_cast<size_t>(i)], x1, y1, x2, y2); }
 bool pages_control_area(int slot, int which, int *x1, int *y1, int *x2, int *y2) {
-    if (current_page() != Page::Pages || slot < 0 || slot > 3 || which < 0 || which > 2) return false;
+    if (current_page() != Page::Pages || slot < 0 || slot >= static_cast<int>(kViewCount) || which < 0 || which > 2) return false;
     auto *o = w.pages_ctrl[static_cast<size_t>(slot)][static_cast<size_t>(which)];
     if (!o) return false;
     lv_obj_scroll_to_view_recursive(o, LV_ANIM_OFF);

@@ -46,6 +46,9 @@ Requests requests;
 PairingWindow window;
 esp_timer_handle_t ticker = nullptr;
 UpdateHooks hooks;
+bool has_usage = false;   // under mu: the last usage the App sent (13.12), kept when the link drops (it goes stale)
+Usage last_usage;
+int64_t usage_at = 0;
 std::string key_fingerprint;   // under mu
 int64_t now_ms();
 void set_command(const std::string &text);
@@ -316,6 +319,10 @@ int write_control(uint16_t handle, uint16_t, ble_gatt_access_ctxt *ctxt, void *)
             if (auto id = requests.finish(m.result)) notice = result_text(m.result, name_of(*id));
         } else if (m.op == Op::Current) {
             current_id = m.current;
+        } else if (m.op == Op::Usage) {
+            last_usage = m.usage;
+            has_usage = true;
+            usage_at = now_ms();
         } else {
             std::vector<Source> complete;
             const Apply a = apply(draft, m, &complete);
@@ -520,6 +527,13 @@ std::string current() {
     std::lock_guard<std::mutex> lock(mu);
     return secure ? current_in(list, current_id) : std::string();
 }
+bool usage(Usage &out, int64_t &age_ms) {
+    std::lock_guard<std::mutex> lock(mu);
+    if (!has_usage) return false;
+    out = last_usage;
+    age_ms = now_ms() - usage_at;
+    return true;
+}
 bool request(const std::string &id) {
     std::string name;
     {
@@ -572,6 +586,7 @@ void start() {}
 Status status() { return {}; }
 std::vector<Source> sources() { return {}; }
 std::string current() { return ""; }
+bool usage(Usage &, int64_t &) { return false; }
 bool request(const std::string &) { return false; }
 void open_pairing() {}
 void close_pairing() {}

@@ -1,6 +1,7 @@
 #include "ble_protocol.hpp"
 #include "json_util.hpp"
 #include <cmath>
+#include <cstring>
 #include <set>
 
 namespace dh::ble {
@@ -113,6 +114,54 @@ Message parse(const std::string &bytes) {
         if (!id || (id[0] != '\0' && !good_text(id, kMaxId))) return bad("current id");
         m.op = Op::Current;
         m.current = id;
+        return m;
+    }
+    if (o == "usage") {   // 13.12
+        cJSON *okj = cJSON_GetObjectItemCaseSensitive(j, "ok");
+        if (!cJSON_IsBool(okj)) return bad("usage ok");
+        m.op = Op::Usage;
+        if (cJSON_IsFalse(okj)) {
+            if (!keys(j, {"op", "ok"})) return bad("usage fields");
+            return m;
+        }
+        if (!keys(j, {"op", "ok", "p", "plan", "w", "c", "e", "t", "f", "lm", "ls", "lms", "la"})) return bad("usage fields");
+        Usage &u = m.usage;
+        u.ok = true;
+        auto name = [](cJSON *item, std::string *out) {
+            const char *s = text(item);
+            if (!s || strlen(s) > 16) return false;
+            for (const char *c = s; *c; ++c)
+                if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '.' || *c == '_' || *c == '-')) return false;
+            *out = s;
+            return true;
+        };
+        if (!name(cJSON_GetObjectItemCaseSensitive(j, "p"), &u.provider) || !name(cJSON_GetObjectItemCaseSensitive(j, "plan"), &u.plan)) return bad("usage names");
+        cJSON *w = cJSON_GetObjectItemCaseSensitive(j, "w");
+        if (!cJSON_IsArray(w) || cJSON_GetArraySize(w) > 2) return bad("usage windows");
+        cJSON *item;
+        cJSON_ArrayForEach(item, w) {
+            double mins = 0, rem = 0, reset = 0;
+            if (!cJSON_IsObject(item) || !keys(item, {"m", "r", "s"}) || !integer(cJSON_GetObjectItemCaseSensitive(item, "m"), 1, 525600, &mins) ||
+                !integer(cJSON_GetObjectItemCaseSensitive(item, "r"), 0, 100, &rem) || !integer(cJSON_GetObjectItemCaseSensitive(item, "s"), 0, 31536000, &reset))
+                return bad("usage window");
+            u.windows.push_back({static_cast<uint32_t>(mins), static_cast<uint32_t>(rem), static_cast<uint32_t>(reset)});
+        }
+        double calls = 0, errors = 0, tokens = 0, ttft = 0, status = 0, ms = 0, age = 0;
+        if (!integer(cJSON_GetObjectItemCaseSensitive(j, "c"), 0, 1e9, &calls) || !integer(cJSON_GetObjectItemCaseSensitive(j, "e"), 0, calls, &errors) ||
+            !integer(cJSON_GetObjectItemCaseSensitive(j, "t"), 0, 1e15, &tokens) || !integer(cJSON_GetObjectItemCaseSensitive(j, "f"), 0, 600000, &ttft) ||
+            !integer(cJSON_GetObjectItemCaseSensitive(j, "ls"), 0, 999, &status) || !integer(cJSON_GetObjectItemCaseSensitive(j, "lms"), 0, 3600000, &ms) ||
+            !integer(cJSON_GetObjectItemCaseSensitive(j, "la"), 0, 31536000, &age))
+            return bad("usage numbers");
+        const char *model = text(cJSON_GetObjectItemCaseSensitive(j, "lm"));
+        if (!model || (model[0] != '\0' && !good_text(model, 32))) return bad("usage model");
+        u.calls = static_cast<uint32_t>(calls);
+        u.errors = static_cast<uint32_t>(errors);
+        u.tokens = static_cast<uint64_t>(tokens);
+        u.ttft_ms = static_cast<uint32_t>(ttft);
+        u.latest_model = model;
+        u.latest_status = static_cast<uint32_t>(status);
+        u.latest_ms = static_cast<uint32_t>(ms);
+        u.latest_age_s = static_cast<uint32_t>(age);
         return m;
     }
     return bad("unknown op");
