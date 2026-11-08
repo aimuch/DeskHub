@@ -82,7 +82,8 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/`（`ui_model_test.cpp`、`ui_preview/harness.cpp`） | 秒和表针可选（0.3.19）：外观文字第 9 段的 T5、T25；界面 A40；时间页的“手动校时”检查改在大数字下做 |
 | `firmware/components/core/`（`core.cpp`、`core.hpp`）、`firmware/components/management/`（`management.cpp`、`management.hpp`）、`firmware/main/app_main.cpp` | 蓝牙升级（0.3.22，docs/desktop-app-design.md 13.11）：core 只存更新公钥（`save_update_key`，同一个 NVS 位置）；management 对外给出“能不能升级”和签名清单核对（和 Agent 那条路同一套规则），蓝牙升级进行时 Agent 的升级等着；USB 新请求 `update_key`；main 把这些挂到蓝牙模块上 |
 | `firmware/tests/`（`ble_update_test.cpp`、`ble_protocol_test.cpp`、`CMakeLists.txt`） | 蓝牙升级 O1 到 O9；蓝牙信息里的公钥指纹 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.22，各两处 |
+| `firmware/tests/`（`ble_protocol_test.cpp`、`ui_model_test.cpp`、`CMakeLists.txt`、`ui_preview/harness.cpp`） | 用量页（0.3.28）：B7 消息解析；T28 第 5 个页面、T29 用量页文字；A42 用量页；旧测试改成 5 个页面 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.28，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 
