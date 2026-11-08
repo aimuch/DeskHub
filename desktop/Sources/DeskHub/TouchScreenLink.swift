@@ -94,6 +94,12 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         enqueue(LinkProtocol.currentMessage(id))
     }
     func sendResult(_ message: String) { enqueue(message) }
+    // The Usage page (13.12): one message; an older one still waiting is replaced, never queued up.
+    func sendUsage(_ message: String) {
+        guard case .connected = state else { return }
+        queue.removeAll { String(decoding: $0, as: UTF8.self).contains(#""op":"usage""#) }
+        enqueue(message)
+    }
 
     // Sends the signed envelope and the app image (13.11). The caller has checked the key and the version.
     func startUpdate(envelope: Data, image: Data, version: String) {

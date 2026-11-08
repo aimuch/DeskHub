@@ -6,7 +6,7 @@ import SwiftUI
 
 @MainActor
 enum Screenshots {
-    static func runIfAsked(model: AppModel, firmware: FirmwareModel) {
+    static func runIfAsked(model: AppModel, firmware: FirmwareModel, magpie: MagpieFeed) {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "--screenshots"), i + 1 < a.count else { return }
         let dir = URL(fileURLWithPath: a[i + 1])
@@ -21,7 +21,7 @@ enum Screenshots {
             firmware.refreshPorts()
             let heights: [SettingsPage: CGFloat] = [.displays: 470, .inputs: 400, .device: 260, .firmware: 560, .general: 240]
             for p in SettingsPage.allCases {
-                let view = SettingsView(page: p).environmentObject(model).environmentObject(model.link).environmentObject(firmware)
+                let view = SettingsView(page: p).environmentObject(model).environmentObject(model.link).environmentObject(firmware).environmentObject(magpie)
                 write(view, width: 900, height: heights[p] ?? 600, to: dir.appendingPathComponent("settings-\(file(p)).png"))
             }
             write(MenuView().environmentObject(model).environmentObject(model.link), width: 340, height: nil, to: dir.appendingPathComponent("menu.png"))

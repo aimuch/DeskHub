@@ -230,6 +230,7 @@ private struct DevicePage: View {
 // ---- general ----
 private struct GeneralPage: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var magpie: MagpieFeed
     var body: some View {
         Text("通用").font(.title2.weight(.semibold))
         HStack {
@@ -239,6 +240,10 @@ private struct GeneralPage: View {
         }
         .onAppear { DispatchQueue.main.async { model.readLaunchAtLogin() } }
         if let p = model.launchAtLoginProblem { Text(p).font(.caption).foregroundStyle(badColor) }
+        // 13.12: the Usage page on the touch screen
+        Toggle("在触摸屏上显示 Magpie 用量", isOn: $magpie.enabled)
+        Text(magpie.note ?? "每 15 秒读一次这台 Mac 上的 Magpie（127.0.0.1:3425），把额度和今天的用量发给触摸屏。不发 API Key、账号和请求内容。在触摸屏的 设置 › 页面与首页 里打开“用量”。")
+            .font(.caption).foregroundStyle(.secondary)
         Text("配置文件：\(model.configPath)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         Text("DDC 用的是系统私有接口（IOAVService），只支持 Apple 芯片；macOS 升级后可能失效。").font(.caption).foregroundStyle(.secondary)
     }

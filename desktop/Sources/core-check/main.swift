@@ -52,6 +52,10 @@
 //     the window keeps at most 24 KB sent and not written. The payload has exactly the 8 fields the firmware wants, the
 //     envelope exactly 3. The fingerprint is the SHA-256 of the SPKI DER in hex. Update events and the device info are read
 //     strictly; anything else is not one.
+// F20 Usage page, the App's side (13.12 G2, G8 to G10): from Magpie's quotas, usage and requests, exactly the fields the
+//     firmware wants: the provider with the most used window, its windows (not unlimited, with a number left) by length,
+//     at most 2; today only when the last bucket is today; errors never above calls; the latest model cut to 32 bytes on a
+//     character boundary; seconds to reset and the age from the ISO times. No answer, or not JSON: {"op":"usage","ok":false}.
 import DeskHubCore
 import Foundation
 
@@ -504,6 +508,74 @@ do {
     check(info == DeviceInfo(device: "deskhub-44bd8d60c598", firmware: "0.3.22", updateKey: sha), "the info")
     check(DeviceInfo.parse(Data(#"{"protocol":1,"device":"deskhub-44bd8d60c598","firmware":"0.3.21"}"#.utf8))?.updateKey == "", "an older firmware: no key field")
     check(DeviceInfo.parse(Data("[]".utf8)) == nil && DeviceInfo.parse(Data(#"{"protocol":1}"#.utf8)) == nil, "not an info")
+}
+
+// ---- F20: the Usage page ----
+do {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let now = ISO8601DateFormatter().date(from: "2026-11-08T06:40:00Z")!   // 14:40 in Shanghai
+    let quotas = Data("""
+    {"object":"list","data":[
+      {"provider":"Codex","name":"Codex","kind":"subscription","plan":"Plus","user":"someone@example.com","windows":[
+        {"name":"7 days","used":63,"remaining":37,"resetsAt":"2026-11-11T22:20:00Z"},
+        {"name":"5 hours","used":0,"remaining":100,"resetsAt":"2026-11-08T10:52:00Z"}]},
+      {"provider":"other","name":"Other","windows":[{"name":"daily","remaining":90,"resetsAt":"2026-11-09T00:00:00Z"},{"name":"monthly","unlimited":true}]}
+    ]}
+    """.utf8)
+    let usage = Data("""
+    {"period":"30d","bucket":"day","calls":5000,"series":[
+      {"label":"Nov 7","time":"2026-11-07T00:00:00+08:00","calls":10,"errors":1,"input":1,"output":1,"cache_read":1,"cache_write":1,"reasoning":1},
+      {"label":"Nov 8","time":"2026-11-08T00:00:00+08:00","calls":128,"errors":2,"input":1000000,"output":200000,"cache_read":30000,"cache_write":4000,"reasoning":567,"timed":100,"ttft_ms":82000}
+    ]}
+    """.utf8)
+    let requests = Data("""
+    {"rows":[{"t":"2026-11-08T06:38:00Z","model":"gpt-6.1-sol","served":"gpt-6.1-sol","status":200,"ms":3200,"session_account":"secret@example.com"},
+             {"t":"2026-11-08T06:30:00Z","model":"older","status":500,"ms":1}]}
+    """.utf8)
+    func obj(_ s: String) -> [String: Any] { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:] }
+    let m = MagpieUsage.message(quotas: quotas, usage: usage, requests: requests, now: now, calendar: cal)
+    let o = obj(m)
+    check(Set(o.keys) == ["op", "ok", "p", "plan", "w", "c", "e", "t", "f", "lm", "ls", "lms", "la"], "exactly the fields: \(o.keys.sorted())")
+    check(o["op"] as? String == "usage" && o["ok"] as? Bool == true, "op and ok")
+    check(o["p"] as? String == "codex" && o["plan"] as? String == "plus", "provider and plan, lower case")
+    let w = o["w"] as? [[String: Any]] ?? []
+    check(w.count == 2 && w.first?["m"] as? Int == 300 && w.first?["r"] as? Int == 100 && w.last?["m"] as? Int == 10080 && w.last?["r"] as? Int == 37, "the windows of the most used provider, by length: \(w)")
+    check(w.first?["s"] as? Int == 4 * 3600 + 12 * 60 && w.last?["s"] as? Int == 3 * 86400 + 15 * 3600 + 40 * 60, "seconds to reset")
+    check(o["c"] as? Int == 128 && o["e"] as? Int == 2 && o["t"] as? Int == 1_234_567 && o["f"] as? Int == 820, "today")
+    check(o["lm"] as? String == "gpt-6.1-sol" && o["ls"] as? Int == 200 && o["lms"] as? Int == 3200 && o["la"] as? Int == 120, "the latest request")
+    check(!m.contains("example.com") && !m.contains("secret"), "no account goes out")
+    check(m.utf8.count <= 512, "at most 512 bytes")
+    // G8: the last bucket is yesterday: today is zero
+    let tomorrow = now.addingTimeInterval(86400)
+    let late = obj(MagpieUsage.message(quotas: quotas, usage: usage, requests: requests, now: tomorrow, calendar: cal))
+    check(late["c"] as? Int == 0 && late["e"] as? Int == 0 && late["t"] as? Int == 0 && late["f"] as? Int == 0, "a new day with no bucket yet")
+    check((late["w"] as? [[String: Any]])?.first?["s"] as? Int == 0, "a reset in the past is 0 (not known), never negative")
+    // errors above calls, a long model, a status out of range, no timing
+    let odd = Data("""
+    {"series":[{"time":"2026-11-08T00:00:00+08:00","calls":3,"errors":9,"input":5}]}
+    """.utf8)
+    let longModel = String(repeating: "模", count: 11) + "x"   // 34 bytes: cut to 10 characters (30 bytes)
+    let oddRequests = Data("""
+    {"rows":[{"t":"not a time","model":"\(longModel)","status":2000,"ms":99999999}]}
+    """.utf8)
+    let x = obj(MagpieUsage.message(quotas: quotas, usage: odd, requests: oddRequests, now: now, calendar: cal))
+    check(x["c"] as? Int == 3 && x["e"] as? Int == 3 && x["f"] as? Int == 0, "errors never above calls")
+    check(x["lm"] as? String == String(repeating: "模", count: 10), "the model cut on a character boundary: \(x["lm"] ?? "")")
+    check(x["ls"] as? Int == 0 && x["lms"] as? Int == 3_600_000 && x["la"] as? Int == 0, "values put in range")
+    // G9: no window with a number left
+    let none = Data(#"{"data":[{"provider":"x","windows":[{"name":"5 hours","unlimited":true},{"name":"weird","remaining":10}]}]}"#.utf8)
+    let n = obj(MagpieUsage.message(quotas: none, usage: usage, requests: nil, now: now, calendar: cal))
+    check((n["w"] as? [Any])?.isEmpty == true && n["p"] as? String == "x", "no usable window: none sent")
+    check(n["lm"] as? String == "" && n["ls"] as? Int == 0 && n["la"] as? Int == 0, "no requests: no latest")
+    // names the device would refuse are cleaned
+    let messy = Data(#"{"data":[{"provider":"Open AI!","plan":"Pro Max Ultra Plus Edition","windows":[]}]}"#.utf8)
+    let ms = obj(MagpieUsage.message(quotas: messy, usage: usage, requests: nil, now: now, calendar: cal))
+    check(ms["p"] as? String == "openai" && (ms["plan"] as? String)?.count == 16, "names cleaned and cut: \(ms["p"] ?? "") \(ms["plan"] ?? "")")
+    // G2: Magpie did not answer, or not JSON
+    check(MagpieUsage.message(quotas: nil, usage: usage, requests: requests, now: now) == MagpieUsage.offline, "no quotas")
+    check(MagpieUsage.message(quotas: quotas, usage: Data("<html>".utf8), requests: requests, now: now) == MagpieUsage.offline, "not JSON")
+    check(obj(MagpieUsage.offline).count == 2, "the offline message has two fields")
 }
 
 if failures > 0 {
