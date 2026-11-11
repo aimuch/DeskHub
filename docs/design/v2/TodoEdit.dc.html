@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>更改待办</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+  <div style="position: absolute; left: 60px; right: 60px; top: 30px; display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center">
+    <span style="font-size: 13px; color: #7f97a3">更改待办</span>
+    <span style="font-size: 18px; line-height: 1.3; max-width: 340px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical">回复设计评审的意见，附上新的截图和改过的流程</span>
+  </div>
+  <div style="position: absolute; left: 44px; right: 44px; top: 112px; display: flex; flex-direction: column; gap: 8px">
+    <button type="button" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="font-size: 16px; color: #9fb4be; width: 56px">到期</span>
+      <span style="flex: 1; text-align: right; font-size: 17px; color: {{accent}}">11月12日 14:30</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7f97a3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+    </button>
+    <button type="button" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="font-size: 16px; color: #9fb4be; width: 56px">重复</span>
+      <span style="flex: 1; text-align: right; font-size: 17px">每周</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7f97a3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+    </button>
+    <button type="button" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="font-size: 16px; color: #9fb4be; width: 56px">清单</span>
+      <span style="flex: 1; text-align: right; font-size: 17px">工作</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7f97a3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+    </button>
+    <div style="box-sizing: border-box; height: 56px; padding: 0 6px 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span style="font-size: 16px; color: #9fb4be; width: 56px">响铃</span>
+      <span style="flex: 1; font-size: 12px; color: #7f97a3">Mac 弹通知，触摸屏响</span>
+      <div role="group" aria-label="响铃" style="display: flex; padding: 3px; border-radius: 22px; background: #05080c; box-shadow: inset 0 0 0 1px #15212b">
+        <button type="button" style="all: unset; width: 56px; height: 38px; border-radius: 19px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #9fb4be">关</button>
+        <button type="button" aria-pressed="true" style="all: unset; width: 56px; height: 38px; border-radius: 19px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: {{accent}}; background: #0d2c36; box-shadow: inset 0 0 0 1.5px {{accent}}">开</button>
+      </div>
+    </div>
+  </div>
+  <div style="position: absolute; left: 64px; right: 64px; bottom: 44px; display: flex; gap: 12px">
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #e8f3f7; background: #101b24; box-shadow: inset 0 0 0 1px #1f3140">取消</button>
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 500; color: #000000; background: {{accent}}">保存</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2fd8ff' };
+  }
+}
+</script>
+</body>
+</html>

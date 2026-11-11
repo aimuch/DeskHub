@@ -1,0 +1,28 @@
+{
+  "version": "0.3.31",
+  "app": "0.4.2",
+  "date": "2026-11-11",
+  "device": "deskhub-44bd8d60c598",
+  "what": "待办看板（docs/desktop-app-design.md 13.13）：固件 0.3.31 经蓝牙装上，App 0.4.2 装到 /Applications",
+  "user_approved": "2026-11-11 用户说“刷，并装新 App”",
+  "update": {
+    "record": "ble-update-e2e/run-0.3.31.json",
+    "result": "0.3.30 → 0.3.31，写入 4,506,352 字节约 244 秒；重启后 3 秒读回 boot pending，App 等到重启后 64 秒读到 confirmed"
+  },
+  "on_the_device": [
+    "App 0.4.2 有提醒事项的权限；系统日志里每 30 秒一次 fetchIncompleteRemindersWithDueDate",
+    "用户在 设置 › 页面与首页 里找到第 6 行“待办”（要往下滚）并打开；待办页显示列表",
+    "用户说：长按一条弹出了操作"
+  ],
+  "checks_done": [
+    "主机测试 19 组全部通过（B8 到 B10、T30 到 T32）",
+    "界面流程全部通过（A43：选中、长按、取消、完成、推迟、删除确认和 10 秒自动取消、等回答、结果、过期、关掉、没有待办、长标题、英文；界面矩阵多一页）",
+    "App core-check 全部通过（F22）",
+    "固件 0.3.31 用 ESP-IDF v6.0.2 构建通过；包 dist/deskhub-0.3.31-esp32s3.zip，sha256 d1154646a04b237e3226d0fb7fc9efc109946035808d8cd19d3a872c746549e2"
+  ],
+  "not_tested": [
+    "在触摸屏上完成、推迟、删除以后，Mac 的提醒事项里是不是真的变了（用户还没说）",
+    "“这条待办已经变了”（在 Mac 上先改再在触摸屏上操作）",
+    "多于 30 条、字库没有的字、关掉 App 2 分钟后的“数据过期”"
+  ]
+}

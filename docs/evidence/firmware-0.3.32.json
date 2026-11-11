@@ -1,0 +1,33 @@
+{
+  "version": "0.3.32",
+  "app": "0.4.3",
+  "date": "2026-11-12",
+  "device": "deskhub-44bd8d60c598",
+  "what": "待办的更改（到期、重复、清单、响铃）和触摸屏响铃（docs/desktop-app-design.md 13.14）",
+  "user_approved": "2026-11-12 用户说“刷，并装新 App”，第一次回退以后说“Try again”",
+  "updates": [
+    {
+      "record": "ble-update-e2e/run-0.3.32.json",
+      "result": "0.3.31 → 0.3.32 写入、重启、读回 boot pending；约 20 秒后读回 0.3.31：新固件重启了，引导程序回退（13.14 M14）"
+    },
+    {
+      "record": "ble-update-e2e/run-0.3.32-fixed.json",
+      "result": "栈改小以后重新构建的 0.3.32：写入约 350 秒，重启后 64 秒读到 confirmed，留下来了"
+    }
+  ],
+  "cause_of_the_first_rollback": "推断：NimBLE 主任务 4 KB 栈不够（write_control 加 parse 约 2300 字节）。没有串口日志（USB 串口没有数据）。改后约 830 字节，scripts/check_stack.py 检查上限",
+  "on_the_device": [
+    "用户说“都行”：更改、响铃、Mac 上改了同步过来、完成，都在真机上试过"
+  ],
+  "checks_done": [
+    "主机测试 19 组全部通过（B11、B12、T33、T34、S7）",
+    "界面流程全部通过（A43、A44）",
+    "App core-check 全部通过（F22、F23）",
+    "scripts/check_stack.py firmware/build-0.3.32：全部在上限以内",
+    "包 dist/deskhub-0.3.32-esp32s3.zip，sha256 6d9e07d32b695d7203b406afdc7df1b5ef70c91ede1cc83763005a73fc07ddc7"
+  ],
+  "not_tested": [
+    "同步过来的秒数没有量",
+    "夜间时段只亮屏不响、字库没有的字、多于 30 条、在 Mac 上先改再在触摸屏上保存（M3）没有在真机上一一试"
+  ]
+}

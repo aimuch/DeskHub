@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>清单</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+  <div style="position: absolute; left: 0; right: 0; top: 30px; text-align: center; font-size: 15px; color: #9fb4be">移到哪个清单</div>
+  <div role="radiogroup" aria-label="清单" style="position: absolute; left: 44px; right: 44px; top: 60px; display: flex; flex-direction: column; gap: 8px">
+    <button type="button" role="radio" aria-checked="true" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #0d2c36; box-shadow: inset 0 0 0 1.5px {{accent}}">
+      <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #2fd8ff"></span>
+      <span style="flex: 1; font-size: 17px">工作</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+    </button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #ffb547"></span>
+      <span style="flex: 1; font-size: 17px">家</span>
+    </button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #b18cff"></span>
+      <span style="flex: 1; font-size: 17px">购物</span>
+    </button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; box-sizing: border-box; height: 56px; padding: 0 18px; border-radius: 16px; display: flex; align-items: center; gap: 12px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">
+      <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #59f0a6"></span>
+      <span style="flex: 1; font-size: 17px">提醒</span>
+    </button>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; top: 330px; text-align: center; font-size: 12px; color: #7f97a3">只列出能改的清单；多了可以往下滚</div>
+  <div style="position: absolute; left: 64px; right: 64px; bottom: 40px; display: flex; gap: 12px">
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #e8f3f7; background: #101b24; box-shadow: inset 0 0 0 1px #1f3140">返回</button>
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 500; color: #000000; background: {{accent}}">好</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2fd8ff' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>重复</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+  <div style="position: absolute; left: 0; right: 0; top: 30px; text-align: center; font-size: 15px; color: #9fb4be">重复</div>
+  <div role="radiogroup" aria-label="重复" style="position: absolute; left: 44px; right: 44px; top: 60px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">不重复</button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">每天</button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">工作日</button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">每周</button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">每月</button>
+    <button type="button" role="radio" aria-checked="false" style="all: unset; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #070b10; box-shadow: inset 0 0 0 1px #15212b">每年</button>
+  </div>
+  <div style="position: absolute; left: 44px; right: 44px; top: 196px; height: 140px; box-sizing: border-box; border-radius: 18px; background: #0d2c36; box-shadow: inset 0 0 0 1.5px {{accent}}; display: flex; align-items: center; padding: 0 18px; gap: 10px">
+    <span style="font-size: 17px; color: {{accent}}">每</span>
+    <div role="listbox" aria-label="N" style="flex: 1; display: flex; flex-direction: column; align-items: center; font-family: Montserrat, sans-serif">
+      <span style="height: 40px; line-height: 40px; font-size: 18px; color: #3d5866">1</span>
+      <span style="height: 44px; line-height: 44px; font-size: 26px; color: #e8f3f7">2</span>
+      <span style="height: 40px; line-height: 40px; font-size: 18px; color: #3d5866">3</span>
+    </div>
+    <div role="listbox" aria-label="单位" style="flex: 1; display: flex; flex-direction: column; align-items: center">
+      <span style="height: 40px; line-height: 40px; font-size: 16px; color: #3d5866">天</span>
+      <span style="height: 44px; line-height: 44px; font-size: 22px; color: #e8f3f7">周</span>
+      <span style="height: 40px; line-height: 40px; font-size: 16px; color: #3d5866">月</span>
+    </div>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; top: 346px; text-align: center; font-size: 12px; color: #7f97a3">选了“每 2 周”。点上面一个常用的，下面就回到每 1</div>
+  <div style="position: absolute; left: 64px; right: 64px; bottom: 40px; display: flex; gap: 12px">
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #e8f3f7; background: #101b24; box-shadow: inset 0 0 0 1px #1f3140">返回</button>
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 500; color: #000000; background: {{accent}}">好</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2fd8ff' };
+  }
+}
+</script>
+</body>
+</html>

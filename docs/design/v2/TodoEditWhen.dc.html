@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>到期 波轮</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+  <div style="position: absolute; left: 0; right: 0; top: 30px; text-align: center; font-size: 15px; color: #9fb4be">到期 · 周四</div>
+  <div role="group" aria-label="有没有时间" style="position: absolute; left: 72px; right: 72px; top: 60px; height: 48px; padding: 4px; box-sizing: border-box; display: flex; gap: 4px; border-radius: 24px; background: #05080c; box-shadow: inset 0 0 0 1px #15212b">
+    <button type="button" aria-pressed="true" style="all: unset; flex: 1; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: {{accent}}; background: #0d2c36; box-shadow: inset 0 0 0 1.5px {{accent}}">有时间</button>
+    <button type="button" style="all: unset; flex: 1; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #9fb4be">全天</button>
+    <button type="button" style="all: unset; flex: 1; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #9fb4be">没有日期</button>
+  </div>
+
+  <div style="position: absolute; left: 44px; right: 44px; top: 124px; height: 220px">
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 88px; height: 44px; border-radius: 14px; background: #0d2c36; box-shadow: inset 0 0 0 1px {{accentLine}}"></div>
+    <div style="position: absolute; inset: 0; display: flex; align-items: stretch">
+      <div role="listbox" aria-label="月" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Montserrat, sans-serif">
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">9</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">10</span>
+        <span style="height: 44px; line-height: 44px; font-size: 26px; color: #e8f3f7">11<span style="font-family: 'Noto Sans SC'; font-size: 14px; color: #9fb4be"> 月</span></span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">12</span>
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">1</span>
+      </div>
+      <div role="listbox" aria-label="日" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Montserrat, sans-serif">
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">10</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">11</span>
+        <span style="height: 44px; line-height: 44px; font-size: 26px; color: #e8f3f7">12<span style="font-family: 'Noto Sans SC'; font-size: 14px; color: #9fb4be"> 日</span></span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">13</span>
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">14</span>
+      </div>
+      <div aria-hidden="true" style="width: 1px; margin: 30px 6px; background: #15212b"></div>
+      <div role="listbox" aria-label="时" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Montserrat, sans-serif">
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">12</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">13</span>
+        <span style="height: 44px; line-height: 44px; font-size: 26px; color: #e8f3f7">14</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">15</span>
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">16</span>
+      </div>
+      <div aria-hidden="true" style="display: flex; align-items: center; font-family: Montserrat, sans-serif; font-size: 26px; color: #9fb4be">:</div>
+      <div role="listbox" aria-label="分" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Montserrat, sans-serif">
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">28</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">29</span>
+        <span style="height: 44px; line-height: 44px; font-size: 26px; color: #e8f3f7">30</span>
+        <span style="height: 44px; line-height: 44px; font-size: 20px; color: #5a7180">31</span>
+        <span style="height: 44px; line-height: 44px; font-size: 18px; color: #2f4250">32</span>
+      </div>
+    </div>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; top: 350px; text-align: center; font-size: 12px; color: #7f97a3">上下拨动；分钟一格一分，可以循环拨</div>
+  <div style="position: absolute; left: 64px; right: 64px; bottom: 40px; display: flex; gap: 12px">
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #e8f3f7; background: #101b24; box-shadow: inset 0 0 0 1px #1f3140">返回</button>
+    <button type="button" style="all: unset; box-sizing: border-box; flex: 1; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 500; color: #000000; background: {{accent}}">好</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const a = this.props.accent ?? '#2fd8ff';
+    const rgb = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)).join(',');
+    return { accent: a, accentLine: 'rgba(' + rgb + ',0.6)' };
+  }
+}
+</script>
+</body>
+</html>
