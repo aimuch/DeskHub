@@ -43,11 +43,26 @@ static int peak(const std::vector<int16_t> &v) {
     return p;
 }
 
+// S7 The ring of a to-do (docs/desktop-app-design.md 13.14): three beeps of the same note with silence between them, within the
+//    half second of every tone, and like the others quiet, without clicks.
+static void s7_alarm() {
+    const int rate = 16000;
+    const auto w = render(Tone::Alarm, rate, 100);
+    int bursts = 0;
+    bool in = false;
+    size_t quiet = 0;
+    for (int16_t v : w) {
+        if (std::abs(static_cast<int>(v)) > 200) { if (!in && (bursts == 0 || quiet > static_cast<size_t>(rate * 30 / 1000))) ++bursts; in = true; quiet = 0; }
+        else { ++quiet; if (quiet > static_cast<size_t>(rate * 30 / 1000)) in = false; }
+    }
+    CHECK(bursts == 3);
+    CHECK(!w.empty() && w.size() <= static_cast<size_t>(rate * kMaxMs / 1000));
+}
 static void s1_render() {
     const int rate = 16000;
     CHECK(kPeak <= 32767 * 35 / 100 && kPeak >= 32767 * 20 / 100);   // quiet: between a fifth and a third of full scale
     CHECK(kMaxMs <= 500 && Gate::kGapMs == 600 && Gate::kTestGapMs == 300);   // the numbers of the design
-    for (Tone t : {Tone::Confirm, Tone::Fail}) {
+    for (Tone t : {Tone::Confirm, Tone::Fail, Tone::Alarm}) {
         const auto w = render(t, rate, 100);
         CHECK(!w.empty());
         CHECK(w.size() <= static_cast<size_t>(rate * kMaxMs / 1000));          // at most half a second
@@ -160,6 +175,7 @@ static void s5_volume() {
 }
 
 int main() {
+    s7_alarm();
     s1_render();
     s2_commands();
     s3_gate();

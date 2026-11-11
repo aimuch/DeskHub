@@ -22,7 +22,9 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include <atomic>
 #include <cstring>
+#include <memory>
 #include <mutex>
+#include <new>
 
 extern "C" void ble_store_config_init(void);
 
@@ -49,6 +51,28 @@ UpdateHooks hooks;
 bool has_usage = false;   // under mu: the last usage the App sent (13.12), kept when the link drops (it goes stale)
 Usage last_usage;
 int64_t usage_at = 0;
+TodosDraft todo_draft;    // under mu: the to-do board (13.13)
+TodoList todo_list;
+ListsDraft lists_draft;
+std::vector<TodoListName> todo_lists;
+bool has_todos = false;
+int64_t todos_at = 0;
+std::string todos_off;
+TodoActs todo_acts;
+bool has_todo_outcome = false;
+TodoOutcome todo_outcome;
+int64_t todo_outcome_at = 0;
+std::string todo_title_of(const std::string &id) {
+    for (const auto &t : todo_list.items) if (t.id == id) return t.title;
+    return "";
+}
+void todo_unknown_locked(int64_t now) {   // L11: the waiting action ends without an answer
+    const auto &p = todo_acts.pending();
+    if (!p) return;
+    todo_outcome = TodoOutcome{true, p->action, false, todo_title_of(p->id), ""};
+    has_todo_outcome = true;
+    todo_outcome_at = now;
+}
 std::string key_fingerprint;   // under mu
 int64_t now_ms();
 void set_command(const std::string &text);
@@ -296,6 +320,10 @@ void drop_link_state_locked() {
     current_id.clear();
     draft = SourcesDraft{};
     requests.reset();
+    todo_draft = TodosDraft{};
+    lists_draft = ListsDraft{};
+    todo_unknown_locked(now_ms());
+    todo_acts.reset();
     confirm_pending = false;
 }
 
@@ -314,10 +342,15 @@ int read_info(uint16_t, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
 }
 int write_control(uint16_t handle, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_UNLIKELY;
-    char buf[kMaxMessage + 1];
+    // The NimBLE host task has 4 KB of stack (13.14, 2026-11-12: 0.3.32 crashed here on the device when the to-do list came, and
+    // rolled back). Only this task calls write_control, so the buffer is static, and the parsed message (552 bytes) is on the heap.
+    static char buf[kMaxMessage + 1];
     uint16_t len = 0;
     if (ble_hs_mbuf_to_flat(ctxt->om, buf, kMaxMessage, &len) != 0) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
-    const Message m = parse(std::string(buf, len));
+    const std::unique_ptr<Message> held(new (std::nothrow) Message());
+    if (!held) return BLE_ATT_ERR_INSUFFICIENT_RES;
+    parse_into(std::string(buf, len), *held);
+    const Message &m = *held;
     std::string notice;
     {
         std::lock_guard<std::mutex> lock(mu);
@@ -331,6 +364,30 @@ int write_control(uint16_t handle, uint16_t, ble_gatt_access_ctxt *ctxt, void *)
             last_usage = m.usage;
             has_usage = true;
             usage_at = now_ms();
+        } else if (m.op == Op::TodosOff) {
+            todos_off = m.off_why;
+            todo_draft = TodosDraft{};
+        } else if (m.op == Op::TodoResult) {
+            if (auto p = todo_acts.finish(m.todo_result)) {
+                todo_outcome = TodoOutcome{false, p->action, m.todo_result.ok, todo_title_of(p->id), m.todo_result.detail};
+                has_todo_outcome = true;
+                todo_outcome_at = now_ms();
+            }
+        } else if (m.op == Op::TodoListsBegin || m.op == Op::TodoListItem || m.op == Op::TodoListsEnd) {
+            std::vector<TodoListName> complete;
+            const Apply a = apply(lists_draft, m, &complete);
+            if (a == Apply::Complete) todo_lists = complete;
+            if (a == Apply::Rejected) { ESP_LOGW(TAG, "list of lists refused"); return BLE_ATT_ERR_UNLIKELY; }
+        } else if (m.op == Op::TodosBegin || m.op == Op::Todo || m.op == Op::TodosEnd) {
+            TodoList complete;
+            const Apply a = apply(todo_draft, m, &complete);
+            if (a == Apply::Complete) {
+                todo_list = complete;
+                has_todos = true;
+                todos_at = now_ms();
+                todos_off.clear();
+            }
+            if (a == Apply::Rejected) { ESP_LOGW(TAG, "to-do list refused"); return BLE_ATT_ERR_UNLIKELY; }
         } else {
             std::vector<Source> complete;
             const Apply a = apply(draft, m, &complete);
@@ -475,6 +532,10 @@ void tick(void *) {
         std::lock_guard<std::mutex> lock(mu);
         const int64_t now = now_ms();
         expired = requests.expire(now);
+        if (todo_acts.waiting() && now - todo_acts.pending()->sent_ms >= kRequestTimeoutMs) {
+            todo_unknown_locked(now);
+            todo_acts.expire(now);
+        }
         if (session.tick(now).what == update::Plan::Abort) {   // U10: 15 s without a frame
             command = CmdAbort;
             if (writer) xTaskNotifyGive(writer);
@@ -545,6 +606,43 @@ bool usage(Usage &out, int64_t &age_ms) {
     age_ms = now_ms() - usage_at;
     return true;
 }
+TodoState todos() {
+    std::lock_guard<std::mutex> lock(mu);
+    TodoState t;
+    const int64_t now = now_ms();
+    t.has_list = has_todos;
+    t.list = todo_list;
+    t.lists = todo_lists;
+    t.age_ms = now - todos_at;
+    t.off_why = todos_off;
+    t.waiting = todo_acts.waiting();
+    t.has_outcome = has_todo_outcome;
+    t.outcome = todo_outcome;
+    t.outcome_age_ms = now - todo_outcome_at;
+    return t;
+}
+bool todo_edit(const TodoEdit &e) {
+    std::lock_guard<std::mutex> lock(mu);
+    if (!valid_edit(e) || !secure || !subscribed || !todos_off.empty() || !has_todos || now_ms() - todos_at > kTodoStaleMs) return false;
+    uint32_t req = 0;
+    if (!todo_acts.begin(e.id, TodoAction::Edit, todo_list.items, now_ms(), &req)) return false;
+    const std::string json = todo_edit_json(req, e);
+    os_mbuf *om = ble_hs_mbuf_from_flat(json.data(), static_cast<uint16_t>(json.size()));
+    if (!om || ble_gatts_notify_custom(conn, events_handle, om) != 0) { todo_acts.reset(); return false; }
+    has_todo_outcome = false;
+    return true;
+}
+bool todo_act(const std::string &id, TodoAction a) {
+    std::lock_guard<std::mutex> lock(mu);
+    if (!secure || !subscribed || !todos_off.empty() || !has_todos || now_ms() - todos_at > kTodoStaleMs) return false;   // L4, L5
+    uint32_t req = 0;
+    if (!todo_acts.begin(id, a, todo_list.items, now_ms(), &req)) return false;   // L10
+    const std::string json = todo_act_json(req, id, a);
+    os_mbuf *om = ble_hs_mbuf_from_flat(json.data(), static_cast<uint16_t>(json.size()));
+    if (!om || ble_gatts_notify_custom(conn, events_handle, om) != 0) { todo_acts.reset(); return false; }
+    has_todo_outcome = false;
+    return true;
+}
 bool request(const std::string &id) {
     std::string name;
     {
@@ -599,6 +697,9 @@ std::vector<Source> sources() { return {}; }
 std::string current() { return ""; }
 bool usage(Usage &, int64_t &) { return false; }
 bool request(const std::string &) { return false; }
+TodoState todos() { return {}; }
+bool todo_act(const std::string &, TodoAction) { return false; }
+bool todo_edit(const TodoEdit &) { return false; }
 void open_pairing() {}
 void close_pairing() {}
 void answer_digits(bool) {}

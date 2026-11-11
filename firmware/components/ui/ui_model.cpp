@@ -94,7 +94,7 @@ RingPx ring_px(RingTier t) {
 }
 // ---- pages ----
 namespace {
-char view_letter(View v) { return v == View::Switch ? 'S' : v == View::Overview ? 'O' : v == View::Clock ? 'C' : v == View::Power ? 'P' : 'U'; }
+char view_letter(View v) { return v == View::Switch ? 'S' : v == View::Overview ? 'O' : v == View::Clock ? 'C' : v == View::Power ? 'P' : v == View::Usage ? 'U' : 'T'; }
 bool view_of(char c, View &v) {
     switch (c) {
     case 'S': v = View::Switch; return true;
@@ -102,11 +102,12 @@ bool view_of(char c, View &v) {
     case 'C': v = View::Clock; return true;
     case 'P': v = View::Power; return true;
     case 'U': v = View::Usage; return true;
+    case 'T': v = View::Todo; return true;
     default: return false;
     }
 }
 }  // namespace
-PageOrder default_pages() { return {{{View::Switch, true}, {View::Overview, true}, {View::Clock, false}, {View::Power, false}, {View::Usage, false}}}; }
+PageOrder default_pages() { return {{{View::Switch, true}, {View::Overview, true}, {View::Clock, false}, {View::Power, false}, {View::Usage, false}, {View::Todo, false}}}; }
 View home_view(const PageOrder &o) {
     for (const auto &s : o) if (s.shown) return s.view;
     return View::Switch;   // parse_pages and pages_toggle never leave none shown
@@ -138,8 +139,13 @@ std::string serialize_pages(const PageOrder &o) {
     return out;
 }
 bool parse_pages(const std::string &given, PageOrder &out) {
-    // 0.3.27 and earlier stored four pages: Usage comes last, hidden (13.12 G7).
-    const std::string text = given.size() == 2 * (kViewCount - 1) && given.find('U') == std::string::npos ? given + "U-" : given;
+    // 0.3.27 and earlier stored four pages: Usage comes last, hidden (13.12 G7); 0.3.28 to 0.3.30 stored five: To-do comes
+    // last, hidden (13.13 L15).
+    std::string text = given;
+    if (text.find('T') == std::string::npos) {
+        if (text.size() == 8 && text.find('U') == std::string::npos) text += "U-T-";
+        else if (text.size() == 10) text += "T-";
+    }
     if (text.size() != 2 * kViewCount) return false;
     PageOrder o{};
     std::array<bool, kViewCount> seen{};
@@ -753,4 +759,199 @@ UsageView make_usage(Lang l, const ble::Usage *u, int64_t age_ms, bool time_vali
     v.failed = u->latest_status != 0 && (u->latest_status < 200 || u->latest_status >= 400);
     return v;
 }
+
+// ---- the to-do board (docs/desktop-app-design.md 13.13) ----
+std::string displayable(const std::string &s, bool (*has)(uint32_t)) {
+    std::string out;
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        uint32_t cp = n == 1 ? c : n == 2 ? (c & 0x1f) : n == 3 ? (c & 0x0f) : (c & 0x07);
+        bool ok = n != 0 && i + n <= s.size();
+        for (size_t k = 1; ok && k < n; ++k) {
+            const unsigned char d = static_cast<unsigned char>(s[i + k]);
+            ok = (d >> 6) == 2;
+            cp = (cp << 6) | (d & 0x3f);
+        }
+        if (!ok) { out += '?'; break; }   // broken UTF-8: stop here, never read past the end
+        const bool joiner = cp == 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x1f3fb && cp <= 0x1f3ff);
+        if (!joiner) {
+            if (has(cp)) out.append(s, i, n);
+            else out += '?';
+        }
+        i += n;
+    }
+    return out;
+}
+namespace {
+std::string todo_date(Lang l, const ble::Todo &t) {
+    return l == Lang::EnUS ? fmt("%s %d", month_name(l, t.month - 1), t.day) : fmt("%d月%d日", t.month, t.day);
+}
+std::string todo_time(const ble::Todo &t) { return t.minute < 0 ? std::string() : fmt("%02d:%02d", t.minute / 60, t.minute % 60); }
+std::string joined(const std::string &a, const std::string &b) { return a.empty() ? b : b.empty() ? a : a + " " + b; }
+// the full "when": the date words and the time
+std::string todo_when_full(Lang l, const ble::Todo &t) {
+    switch (t.kind) {
+    case ble::TodoKind::Today: return joined(T(l, Str::TodoToday), todo_time(t));
+    case ble::TodoKind::Tomorrow: return joined(T(l, Str::TodoTomorrow), todo_time(t));
+    case ble::TodoKind::Overdue: case ble::TodoKind::Later: return joined(todo_date(l, t), todo_time(t));
+    case ble::TodoKind::None: break;
+    }
+    return "";
+}
+}  // namespace
+TodoView make_todos(Lang l, const ble::TodoList *list, const std::string &off_why, int64_t age_ms, bool link_secure) {
+    TodoView v;
+    if (!off_why.empty()) {   // L5: no old list
+        v.state = TodoView::State::Off;
+        const bool access = off_why == "access";
+        v.status = T(l, access ? Str::TodoOffAccess : Str::TodoOffSetting);
+        v.hint = T(l, access ? Str::TodoOffAccessHint : Str::TodoOffSettingHint);
+        return v;
+    }
+    if (!list) { v.state = TodoView::State::Waiting; v.status = T(l, Str::TodoWaiting); v.hint = T(l, Str::UsageWaitingHint); return v; }   // L3
+    const int64_t age_s = std::max<int64_t>(0, age_ms / 1000);
+    const bool stale = age_ms > ble::kTodoStaleMs;
+    v.count = fmt(tr(l, Str::TodoCount), static_cast<int>(list->total));
+    if (list->items.empty() && !stale) { v.state = TodoView::State::Empty; v.status = T(l, Str::TodoEmpty); return v; }   // L6
+    if (stale) {   // L4
+        v.state = TodoView::State::Stale;
+        v.dim = true;
+        v.status = fmt(tr(l, Str::UsageStaleAgo), ago_text(l, age_s).c_str());
+        v.hint = T(l, Str::TodoStaleHint);
+    } else {
+        v.state = TodoView::State::Fresh;
+        v.status = age_ms < 5000 ? T(l, Str::UsageJustNow) : fmt(tr(l, Str::UsageUpdatedAgo), static_cast<int>(age_s));
+        v.can_act = link_secure;
+    }
+    const ble::TodoKind order[4] = {ble::TodoKind::Overdue, ble::TodoKind::Today, ble::TodoKind::Later, ble::TodoKind::None};
+    const Str names[4] = {Str::TodoGroupOverdue, Str::TodoGroupToday, Str::TodoGroupLater, Str::TodoGroupNone};
+    for (size_t g = 0; g < 4; ++g) {
+        TodoGroup group;
+        group.kind = order[g];
+        for (const ble::Todo &t : list->items) {
+            const ble::TodoKind k = t.kind == ble::TodoKind::Tomorrow ? ble::TodoKind::Later : t.kind;
+            if (k != order[g]) continue;
+            TodoRow r;
+            r.id = t.id;
+            r.title = t.title;
+            r.kind = t.kind;
+            r.tag = t.kind == ble::TodoKind::Today;
+            if (t.kind == ble::TodoKind::Today) r.when = t.minute < 0 ? T(l, Str::TodoToday) : todo_time(t);
+            else if (t.kind == ble::TodoKind::Tomorrow) r.when = todo_when_full(l, t);
+            else r.when = todo_when_full(l, t);
+            std::string extra;
+            if (!t.repeat.empty()) extra += T(l, Str::Sep) + repeat_text(l, t.repeat);
+            if (t.alarm) extra += T(l, Str::Sep) + T(l, Str::TodoRingWord);
+            const std::string full = todo_when_full(l, t);
+            r.detail = (t.list.empty() ? full : full.empty() ? t.list : t.list + T(l, Str::Sep) + full) + extra;
+            if (r.detail.rfind(T(l, Str::Sep), 0) == 0) r.detail.erase(0, T(l, Str::Sep).size());
+            group.rows.push_back(r);
+        }
+        if (group.rows.empty()) continue;
+        group.title = T(l, names[g]) + T(l, Str::Sep) + std::to_string(group.rows.size());
+        v.groups.push_back(group);
+    }
+    if (list->total > list->items.size()) v.more = fmt(tr(l, Str::TodoMore), static_cast<int>(list->total - list->items.size()));   // L7
+    return v;
+}
+std::string todo_result_text(Lang l, ble::TodoAction a, bool ok, const std::string &title, const std::string &detail) {
+    if (!ok) return detail.empty() ? T(l, Str::TodoFailedBare) : fmt(tr(l, Str::TodoFailed), detail.c_str());
+    const Str s = a == ble::TodoAction::Done ? Str::TodoDone : a == ble::TodoAction::Tomorrow ? Str::TodoPostponed : a == ble::TodoAction::Edit ? Str::TodoEdited : Str::TodoDeleted;
+    return fmt(tr(l, s), title.c_str());
+}
+std::string todo_timeout_text(Lang l) { return T(l, Str::TodoTimeout); }
+
+// ---- changing a to-do (13.14) ----
+std::string repeat_text(Lang l, const std::string &r) {
+    if (r.empty()) return T(l, Str::TodoRepeatNone);
+    if (r == "wd") return T(l, Str::TodoRepeatWeekdays);
+    if (r == "x" || !ble::valid_repeat(r)) return T(l, Str::TodoRepeatCustom);
+    const int n = std::atoi(r.c_str() + 1);
+    const char f = r[0];
+    if (n == 1) return T(l, f == 'd' ? Str::TodoRepeatDaily : f == 'w' ? Str::TodoRepeatWeekly : f == 'm' ? Str::TodoRepeatMonthly : Str::TodoRepeatYearly);
+    return fmt(tr(l, f == 'd' ? Str::TodoRepeatDays : f == 'w' ? Str::TodoRepeatWeeks : f == 'm' ? Str::TodoRepeatMonths : Str::TodoRepeatYears), n);
+}
+std::vector<MonthChoice> month_choices(Lang l, bool time_valid, int now_year, int now_month, int item_year, int item_month) {
+    int y = now_year, m = now_month;
+    const bool item = item_year >= 2000 && item_month >= 1 && item_month <= 12;
+    if (!time_valid) { y = item ? item_year : 2026; m = item ? item_month : 1; }
+    else if (item && (item_year * 12 + item_month) < (now_year * 12 + now_month)) { y = item_year; m = item_month; }
+    const int end = time_valid ? now_year * 12 + now_month + 12 : y * 12 + m + 12;   // through the same month next year
+    std::vector<MonthChoice> out;
+    for (int k = y * 12 + m; k <= end; ++k) {
+        const int yy = (k - 1) / 12, mm = (k - 1) % 12 + 1;
+        const bool other_year = time_valid ? yy != now_year : yy != y;
+        std::string label = l == Lang::EnUS ? (other_year ? fmt("%s %d", month_name(l, mm - 1), yy) : std::string(month_name(l, mm - 1)))
+                                            : (other_year ? fmt("%d年%d月", yy, mm) : fmt("%d月", mm));
+        out.push_back({yy, mm, label});
+    }
+    return out;
+}
+TodoDraft todo_draft(const ble::Todo &t, bool time_valid, int now_year, int now_month, int now_day) {
+    TodoDraft d;
+    d.repeat = t.repeat;
+    d.list_id = t.list_id;
+    d.alarm = t.alarm;
+    if (t.kind == ble::TodoKind::None || t.year == 0) {
+        d.when = TodoDraft::When::None;
+        d.year = time_valid ? now_year : 2026;
+        d.month = time_valid ? now_month : 1;
+        d.day = time_valid ? now_day : 1;
+        d.minute = 540;
+        return d;
+    }
+    d.year = t.year; d.month = t.month; d.day = t.day;
+    d.when = t.minute < 0 ? TodoDraft::When::AllDay : TodoDraft::When::Timed;
+    d.minute = t.minute < 0 ? 540 : t.minute;
+    return d;
+}
+ble::TodoEdit todo_edit_of(const ble::Todo &t, const TodoDraft &d) {
+    ble::TodoEdit e;
+    e.id = t.id;
+    e.version = t.version;
+    e.repeat = d.repeat;
+    e.list_id = d.list_id;
+    if (d.when != TodoDraft::When::None) {
+        e.year = static_cast<uint16_t>(d.year);
+        e.month = static_cast<uint8_t>(d.month);
+        e.day = static_cast<uint8_t>(std::clamp(d.day, 1, std::max(1, ble::days_in_month(d.year, d.month))));
+        e.minute = static_cast<int16_t>(d.when == TodoDraft::When::Timed ? std::clamp(d.minute, 0, 1439) : -1);
+    }
+    e.alarm = d.alarm && e.minute >= 0;
+    return e;
+}
+std::string draft_when_text(Lang l, const TodoDraft &d, int now_year) {
+    if (d.when == TodoDraft::When::None) return T(l, Str::TodoNoDate);
+    const int day = std::clamp(d.day, 1, std::max(1, ble::days_in_month(d.year, d.month)));
+    const bool year = d.year != now_year;   // the year only when it is not this one
+    std::string date;
+    if (l == Lang::EnUS) date = year ? fmt("%s %d %d", month_name(l, d.month - 1), day, d.year) : fmt("%s %d", month_name(l, d.month - 1), day);
+    else date = year ? fmt("%d年%d月%d日", d.year, d.month, day) : fmt("%d月%d日", d.month, day);
+    std::string when = d.when == TodoDraft::When::Timed ? fmt("%02d:%02d", d.minute / 60, d.minute % 60) : T(l, Str::TodoAllDay);
+    return date + " " + when;
+}
+namespace {
+std::string ring_key(const ble::Todo &t) { return t.id + fmt("%04d%02d%02d%04d", t.year, t.month, t.day, t.minute); }
+}  // namespace
+std::optional<ble::Todo> TodoRinger::due(const std::vector<ble::Todo> &list, bool time_valid, int year, int month, int day, int minute, int64_t now_ms) {
+    for (size_t i = 0; i < snoozed_.size(); ++i) {
+        if (now_ms >= snoozed_[i].second) {
+            ble::Todo t = snoozed_[i].first;
+            snoozed_.erase(snoozed_.begin() + static_cast<long>(i));
+            return t;
+        }
+    }
+    if (!time_valid) return std::nullopt;   // M7
+    for (const auto &t : list) {
+        if (!t.alarm || t.minute < 0 || t.year != year || t.month != month || t.day != day || t.minute != minute) continue;
+        const std::string key = ring_key(t);
+        if (std::find(rung_.begin(), rung_.end(), key) != rung_.end()) continue;   // M9
+        rung_.push_back(key);
+        if (rung_.size() > 64) rung_.erase(rung_.begin());
+        return t;
+    }
+    return std::nullopt;
+}
+void TodoRinger::snooze(const ble::Todo &t, int64_t now_ms) { snoozed_.push_back({t, now_ms + kSnoozeMs}); }
 }  // namespace dh::ui

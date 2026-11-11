@@ -82,6 +82,7 @@ Str view_name(View v) {
     case View::Clock: return Str::NavClock;
     case View::Power: return Str::NavPower;
     case View::Usage: return Str::NavUsage;
+    case View::Todo: return Str::NavTodo;
     case View::Overview: break;
     }
     return Str::NavOverview;
@@ -404,6 +405,351 @@ void refresh_usage(const Frame &f) {
     set_ink(uw.code, v.dim ? P().muted : v.failed ? P().danger : P().agent);
     set_text(uw.latency, v.latency);
     set_ink(uw.latency, value_ink);
+}
+
+
+// ---- To-do (docs/design v2 Todo, TodoStale; docs/desktop-app-design.md 13.13) ----
+// The rows are made again whenever what they show changes (the list, the selection, the state); the line at the top is
+// only set. A long press asks ui.cpp for the actions; a short tap selects.
+struct TodoWidgets {
+    lv_obj_t *count{}, *status{}, *notice{};
+    std::vector<lv_obj_t *> rows;
+    std::vector<std::string> ids;
+    std::string sig;
+    int state = -1;   // a new state starts at the top: its banner or message is there
+} tw;
+constexpr int kTodoPad = 14, kTodoMark = 14, kTodoWhenW = 120, kTodoMinH = 56, kTodoLines = 3;
+bool todo_glyph(uint32_t cp) {
+    lv_font_glyph_dsc_t g;
+    return cp < 0x80 || lv_font_get_glyph_dsc(look.body, &g, cp, 0);
+}
+// The longest start of `text` that fits `lines` lines of `width`, with an ellipsis when something was left out.
+std::string fit_text(const std::string &text, const lv_font_t *font, int width, int lines) {
+    auto fits = [&](const std::string &t) {
+        lv_point_t size{};
+        lv_text_get_size(&size, t.c_str(), font, 0, 0, width, LV_TEXT_FLAG_NONE);
+        return size.y <= lines * lv_font_get_line_height(font);
+    };
+    if (fits(text)) return text;
+    const std::string more = look.lang == Lang::EnUS ? "..." : "…";
+    std::vector<size_t> cuts;   // character boundaries
+    for (size_t i = 0; i < text.size(); ++i) if ((static_cast<unsigned char>(text[i]) & 0xc0) != 0x80) cuts.push_back(i);
+    size_t lo = 0, hi = cuts.size();   // how many characters are kept
+    while (lo < hi) {
+        const size_t mid = (lo + hi + 1) / 2;
+        if (fits(text.substr(0, mid < cuts.size() ? cuts[mid] : text.size()) + more)) lo = mid;
+        else hi = mid - 1;
+    }
+    const size_t end = lo < cuts.size() ? cuts[lo] : text.size();
+    return text.substr(0, end) + more;
+}
+void on_todo_tap(lv_event_t *e) {
+    const size_t i = static_cast<size_t>(data_of(e));
+    if (i < tw.ids.size()) request_todo_tap(tw.ids[i]);
+}
+void on_todo_long(lv_event_t *e) {
+    const size_t i = static_cast<size_t>(data_of(e));
+    if (i < tw.ids.size()) request_todo_menu(tw.ids[i]);
+}
+std::string todo_signature(const TodoView &v, const std::string &selected) {
+    const bool list = v.state == TodoView::State::Fresh || v.state == TodoView::State::Stale;   // their line is set, not rebuilt
+    std::string s = std::to_string(static_cast<int>(v.state)) + (v.dim ? "d" : "") + "|" + v.count + "|" + (list ? "" : v.status) + "|" + v.hint + "|" + v.more + "|" + selected;
+    for (const auto &g : v.groups) {
+        s += "#" + g.title;
+        for (const auto &r : g.rows) s += "/" + r.id + "=" + r.title + "@" + r.when + "@" + r.detail;
+    }
+    return s;
+}
+void fill_todo(lv_obj_t *body, const TodoView &v, const std::string &selected) {
+    tw.rows.clear();
+    tw.ids.clear();
+    const int cap = lh(look.caption);
+    auto *top = holder(body, kContentW, cap + 4);
+    tw.count = label_at(top, v.count, 6, 2, kContentW / 2 - 6, look.caption, P().muted);
+    tw.status = label_at(top, "", kContentW / 2, 2, kContentW / 2 - 6, look.caption, P().muted);
+    lv_obj_set_style_text_align(tw.status, LV_TEXT_ALIGN_RIGHT, 0);
+    const bool list = v.state == TodoView::State::Fresh || v.state == TodoView::State::Stale;
+    // waiting for the App's answer, or the last result: a line of its own under the top line, hidden when empty
+    tw.notice = label(body, "", kContentW - 12, look.caption, P().agent);
+    lv_obj_set_style_margin_left(tw.notice, 6, 0);
+    lv_obj_add_flag(tw.notice, LV_OBJ_FLAG_HIDDEN);
+    if (!list) {   // waiting, off, empty: one message in the middle
+        auto *gap = holder(body, kContentW, 70);
+        (void)gap;
+        auto *m = label(body, v.status, kContentW, look.title, P().ink);
+        centered(m);
+        if (!v.hint.empty()) {
+            auto *h = label(body, v.hint, kContentW - 40, look.caption, P().muted);
+            centered(h);
+            lv_obj_set_style_margin_left(h, 20, 0);
+        }
+        return;
+    }
+    if (v.state == TodoView::State::Stale) {   // L4: why it cannot act, before the dim list
+        auto *banner = panel(body, kContentW, LV_SIZE_CONTENT, P().card, P().power, 16);
+        lv_obj_set_style_pad_all(banner, 12, 0);
+        label(banner, v.hint, kContentW - 26, look.caption, P().ink);
+    }
+    const int title_w = kContentW - 2 * kTodoPad - kTodoMark - 12 - 10 - kTodoWhenW;
+    for (const auto &g : v.groups) {
+        const uint32_t tone = g.kind == ble::TodoKind::Overdue ? P().power : g.kind == ble::TodoKind::Today ? P().accent : P().muted;
+        auto *head = label(body, g.title, kContentW - 12, look.caption, tone);
+        lv_obj_set_style_margin_left(head, 6, 0);
+        for (const auto &r : g.rows) {
+            const bool sel = r.id == selected;
+            const std::string title = displayable(r.title, todo_glyph);
+            const std::string shown = fit_text(title, look.body, title_w, sel ? kTodoLines : 1);
+            lv_point_t size{};
+            lv_text_get_size(&size, shown.c_str(), look.body, 0, 0, title_w, LV_TEXT_FLAG_NONE);
+            const int detail_h = sel ? 4 + cap + 2 + cap : 0;
+            const int h = std::max(kTodoMinH, 2 * 10 + static_cast<int>(size.y) + detail_h);
+            const size_t index = tw.ids.size();
+            auto *row = button(body, [](lv_event_t *) {}, nullptr, kContentW, h);
+            lv_obj_set_style_radius(row, 14, 0);
+            lv_obj_add_event_cb(row, on_todo_tap, LV_EVENT_SHORT_CLICKED, data(static_cast<int>(index)));
+            lv_obj_add_event_cb(row, on_todo_long, LV_EVENT_LONG_PRESSED, data(static_cast<int>(index)));
+            if (sel) select(row, true, false);
+            if (v.dim) lv_obj_set_style_opa(row, LV_OPA_50, 0);
+            const int first = sel ? 10 : (h - lh(look.body)) / 2;
+            auto *mark = lv_obj_create(row);
+            lv_obj_remove_style_all(mark);
+            lv_obj_set_size(mark, kTodoMark, kTodoMark);
+            lv_obj_set_pos(mark, kTodoPad, first + (lh(look.body) - kTodoMark) / 2);
+            lv_obj_set_style_radius(mark, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_border_width(mark, 2, 0);
+            lv_obj_set_style_border_color(mark, hex(tone == P().muted ? P().edge : tone), 0);
+            lv_obj_remove_flag(mark, LV_OBJ_FLAG_CLICKABLE);
+            auto *t = label_at(row, shown, kTodoPad + kTodoMark + 12, first, title_w, look.body, P().ink);
+            lv_obj_remove_flag(t, LV_OBJ_FLAG_CLICKABLE);
+            if (!r.when.empty()) {
+                if (r.tag) {
+                    auto *tag = pill(row, r.when, P().bg, P().accent, P().accent, look.caption);
+                    lv_obj_update_layout(tag);
+                    lv_obj_set_pos(tag, kContentW - kTodoPad - lv_obj_get_width(tag), first + (lh(look.body) - lv_obj_get_height(tag)) / 2);
+                } else {
+                    auto *when = label_at(row, r.when, kContentW - kTodoPad - kTodoWhenW, first + (lh(look.body) - cap) / 2, kTodoWhenW, look.caption,
+                                          r.kind == ble::TodoKind::Overdue ? P().power : P().muted);
+                    lv_obj_set_style_text_align(when, LV_TEXT_ALIGN_RIGHT, 0);
+                }
+            }
+            if (sel) {
+                const int y = first + static_cast<int>(size.y) + 4;
+                if (!r.detail.empty()) label_at(row, fit_text(displayable(r.detail, todo_glyph), look.caption, title_w + kTodoWhenW, 1), kTodoPad + kTodoMark + 12, y, title_w + kTodoWhenW, look.caption, P().muted);
+                label_at(row, T(Str::TodoLongPress), kTodoPad + kTodoMark + 12, y + cap + 2, title_w + kTodoWhenW, look.caption, P().muted);
+            }
+            tw.rows.push_back(row);
+            tw.ids.push_back(r.id);
+        }
+    }
+    if (!v.more.empty()) {
+        auto *m = label(body, v.more, kContentW, look.caption, P().muted);
+        centered(m);
+    }
+}
+void build_todo(lv_obj_t *, const Frame &) { tw = TodoWidgets{}; }
+void refresh_todo(const Frame &f) {
+    if (!g_body) return;
+    const TodoView v = make_todos(look.lang, f.todos.has_list ? &f.todos.list : nullptr, f.todos.off_why, f.todos.age_ms, f.ble.secure);
+    const std::string sig = todo_signature(v, f.todo_selected);
+    if (sig != tw.sig || !tw.count) {
+        const int y = tw.state == static_cast<int>(v.state) ? lv_obj_get_scroll_y(g_body) : 0;
+        lv_obj_clean(g_body);
+        tw = TodoWidgets{};
+        fill_todo(g_body, v, f.todo_selected);
+        tw.sig = sig;
+        tw.state = static_cast<int>(v.state);
+        lv_obj_update_layout(g_body);
+        if (y > 0) lv_obj_scroll_to_y(g_body, std::min<int>(y, lv_obj_get_scroll_y(g_body) + lv_obj_get_scroll_bottom(g_body)), LV_ANIM_OFF);
+    }
+    // the top right says how old the list is; the line under it says what the last action is doing or did
+    if (tw.status) {
+        const std::string age = v.state == TodoView::State::Fresh || v.state == TodoView::State::Stale ? v.status : "";
+        set_text(tw.status, fit_text(age, look.caption, lv_obj_get_width(tw.status), 1));
+        set_ink(tw.status, v.state == TodoView::State::Stale ? P().power : P().agent);
+    }
+    std::string line;
+    uint32_t ink = P().accent;
+    if (f.todos.waiting) line = T(Str::TodoWorking);
+    else if (f.todos.has_outcome && f.todos.outcome_age_ms < 8000) {
+        const auto &o = f.todos.outcome;
+        line = o.timeout ? todo_timeout_text(look.lang) : todo_result_text(look.lang, o.action, o.ok, displayable(o.title, todo_glyph), o.detail);
+        ink = o.ok && !o.timeout ? P().agent : P().power;
+    }
+    if (tw.notice) {
+        set_optional_text(tw.notice, line);
+        set_ink(tw.notice, ink);
+    }
+}
+
+
+// ---- changing a to-do (docs/design v2 TodoEdit, TodoEditWhen, TodoEditRepeat, TodoEditList; 13.14) ----
+// A full screen of its own on the top layer, made again on every change (ui.cpp keeps the draft). The wheels are LVGL rollers.
+struct EditWidgets { std::array<lv_obj_t *, 6> roller{}; std::array<lv_obj_t *, 2> ring{}; } ew;
+lv_obj_t *edit_screen(lv_obj_t *layer) {
+    ew = EditWidgets{};
+    auto *root = panel(layer, kScreen, kScreen, P().bg, P().bg, 0);
+    lv_obj_set_pos(root, 0, 0);
+    lv_obj_add_flag(root, LV_OBJ_FLAG_CLICKABLE);   // nothing behind it takes a touch
+    lv_obj_remove_flag(root, LV_OBJ_FLAG_SCROLLABLE);
+    return root;
+}
+lv_obj_t *edit_head(lv_obj_t *root, const std::string &text) {
+    auto *l = label_at(root, text, 80, 26, kScreen - 160, look.caption, P().muted);
+    centered(l);
+    return l;
+}
+lv_obj_t *edit_button(lv_obj_t *parent, const std::string &text, lv_event_cb_t cb, int data_v, int x, int y, int w, uint32_t ink, uint32_t fill, bool chosen = false) {
+    auto *b = button(parent, cb, data(data_v), w, kMinTarget);
+    lv_obj_set_pos(b, x, y);
+    lv_obj_set_style_radius(b, 16, 0);
+    lv_obj_set_style_bg_color(b, hex(fill), 0);
+    if (chosen) select(b, true, false);
+    auto *l = label(b, text, w - 8, look.body == &btr_ui_28 ? &btr_ui_20 : look.body, chosen ? P().accent : ink);
+    centered(l);
+    lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    return b;
+}
+void edit_bottom(lv_obj_t *root, Str left, Str right, lv_event_cb_t cb) {   // data 0 left, 1 right
+    const int w = (kScreen - 128 - 12) / 2, y = kScreen - 44 - kMinTarget;
+    auto *a = edit_button(root, T(left), cb, 0, 64, y, w, P().ink, P().card);
+    lv_obj_set_style_radius(a, 28, 0);
+    auto *b = edit_button(root, T(right), cb, 1, 64 + w + 12, y, w, P().bg, P().accent);
+    lv_obj_set_style_radius(b, 28, 0);
+}
+lv_obj_t *wheel(lv_obj_t *parent, int which, const std::string &options, int selected, int x, int y, int w, bool enabled) {
+    auto *r = lv_roller_create(parent);
+    lv_roller_set_options(r, options.c_str(), which == 3 || which == 2 ? LV_ROLLER_MODE_INFINITE : LV_ROLLER_MODE_NORMAL);
+    lv_roller_set_visible_row_count(r, 3);
+    lv_obj_set_width(r, w);
+    lv_obj_set_pos(r, x, y);
+    lv_obj_set_style_text_font(r, look.body, 0);
+    lv_obj_set_style_text_font(r, look.body, LV_PART_SELECTED);
+    lv_obj_set_style_bg_opa(r, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(r, 0, 0);
+    lv_obj_set_style_text_color(r, hex(P().muted), 0);
+    lv_obj_set_style_text_align(r, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_bg_color(r, hex(P().selected), LV_PART_SELECTED);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, LV_PART_SELECTED);
+    lv_obj_set_style_text_color(r, hex(P().ink), LV_PART_SELECTED);
+    lv_obj_set_style_radius(r, 12, LV_PART_SELECTED);
+    lv_roller_set_selected(r, static_cast<uint32_t>(std::max(0, selected)), LV_ANIM_OFF);
+    lv_obj_add_event_cb(r, [](lv_event_t *e) {
+        auto *o = static_cast<lv_obj_t *>(lv_event_get_target(e));
+        request_todo_roller(data_of(e), static_cast<int>(lv_roller_get_selected(o)));
+    }, LV_EVENT_VALUE_CHANGED, data(which));
+    if (!enabled) { lv_obj_set_style_opa(r, LV_OPA_30, 0); lv_obj_remove_flag(r, LV_OBJ_FLAG_CLICKABLE); }
+    ew.roller[static_cast<size_t>(which)] = r;
+    return r;
+}
+std::string numbers(int from, int to, bool two_digits) {
+    std::string out;
+    for (int i = from; i <= to; ++i) {
+        char b[8];
+        snprintf(b, sizeof(b), two_digits ? "%02d" : "%d", i);
+        out += (i == from ? "" : "\n") + std::string(b);
+    }
+    return out;
+}
+void build_edit_main(lv_obj_t *root, const TodoEditView &v) {
+    edit_head(root, T(Str::TodoEditTitle));
+    auto *t = label_at(root, fit_text(displayable(v.title, todo_glyph), look.body, 340, 2), 70, 48, 340, look.body, P().ink);
+    centered(t);
+    const int x = 44, w = kScreen - 88;
+    const std::array<std::pair<Str, std::string>, 3> rows = {{{Str::TodoDue, v.when}, {Str::TodoRepeat, v.repeat}, {Str::TodoListLabel, v.list_name}}};
+    for (size_t i = 0; i < rows.size(); ++i) {
+        auto *b = button(root, [](lv_event_t *e) { request_todo_edit_row(data_of(e)); }, data(static_cast<int>(i)), w, kMinTarget);
+        lv_obj_set_pos(b, x, 112 + static_cast<int>(i) * 64);
+        lv_obj_set_style_radius(b, 16, 0);
+        auto *n = label_at(b, T(rows[i].first), 18, (kMinTarget - lh(look.caption)) / 2, 90, look.caption, P().muted);
+        (void)n;
+        auto *val = label_at(b, fit_text(displayable(rows[i].second, todo_glyph), look.body, w - 150, 1), 110, (kMinTarget - lh(look.body)) / 2, w - 140, look.body,
+                             i == 0 ? P().accent : P().ink);
+        lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_RIGHT, 0);
+    }
+    // the ring: off / on; without a time it cannot be on, and the row says why
+    const int y = 112 + 3 * 64;
+    auto *row = panel(root, w, kMinTarget, P().card, P().edge, 16);
+    lv_obj_set_pos(row, x, y);
+    label_at(row, T(Str::TodoRingWord), 18, (kMinTarget - lh(look.caption)) / 2, 70, look.caption, P().muted);
+    const bool timed = v.draft.when == TodoDraft::When::Timed;
+    auto *note = label_at(row, T(timed ? Str::TodoRingNote : Str::TodoRingNeedsTime), 74, (kMinTarget - lh(&btr_ui_16)) / 2, w - 74 - 2 * 64 - 8, &btr_ui_16, P().muted);
+    lv_label_set_text(note, fit_text(lv_label_get_text(note), &btr_ui_16, w - 74 - 2 * 64 - 8, 1).c_str());
+    for (int k = 0; k < 2; ++k) {
+        auto *b = button(row, [](lv_event_t *e) { request_todo_ring(data_of(e) == 1); }, data(k), 64, kMinTarget - 2);
+        lv_obj_set_pos(b, w - 2 - 2 * 64 + k * 64, 0);
+        lv_obj_set_style_radius(b, 16, 0);
+        const bool on = (k == 1) == v.draft.alarm;
+        select(b, on, true);
+        auto *l = label(b, T(k == 0 ? Str::TodoOff : Str::TodoOn), 56, look.caption, on ? P().accent : P().muted);
+        centered(l);
+        lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+        if (k == 1 && !timed) { lv_obj_set_style_opa(b, LV_OPA_40, 0); }
+        ew.ring[static_cast<size_t>(k)] = b;
+    }
+    edit_bottom(root, Str::Cancel, Str::TodoSave, [](lv_event_t *e) { request_todo_edit_done(data_of(e) == 1); });
+}
+void build_edit_when(lv_obj_t *root, const TodoEditView &v) {
+    edit_head(root, T(Str::TodoDue));
+    const Str names[3] = {Str::TodoTimed, Str::TodoAllDay, Str::TodoNoDate};
+    const int w = (kScreen - 88 - 16) / 3;
+    const int chosen = v.draft.when == TodoDraft::When::Timed ? 0 : v.draft.when == TodoDraft::When::AllDay ? 1 : 2;
+    for (int i = 0; i < 3; ++i) edit_button(root, T(names[i]), [](lv_event_t *e) { request_todo_when(data_of(e)); }, i, 44 + i * (w + 8), 56, w, P().muted, P().card, i == chosen);
+    std::string months;
+    int month_index = 0;
+    for (size_t i = 0; i < v.months.size(); ++i) {
+        months += (i ? "\n" : "") + v.months[i].label;
+        if (v.months[i].year == v.draft.year && v.months[i].month == v.draft.month) month_index = static_cast<int>(i);
+    }
+    const bool dated = chosen != 2, timed = chosen == 0;
+    const int top = 132;
+    wheel(root, 0, months, month_index, 40, top, 150, dated);
+    wheel(root, 1, numbers(1, std::max(1, ble::days_in_month(v.draft.year, v.draft.month)), false), v.draft.day - 1, 194, top, 70, dated);
+    wheel(root, 2, numbers(0, 23, true), v.draft.minute / 60, 284, top, 70, timed);
+    auto *colon = label_at(root, ":", 354, top + 40, 16, look.title, timed ? P().muted : P().edge);
+    centered(colon);
+    wheel(root, 3, numbers(0, 59, true), v.draft.minute % 60, 370, top, 70, timed);
+    edit_bottom(root, Str::TodoBack, Str::TodoOk, [](lv_event_t *e) { request_todo_sub(data_of(e) == 1); });
+}
+void build_edit_repeat(lv_obj_t *root, const TodoEditView &v) {
+    edit_head(root, T(Str::TodoRepeat));
+    const Str names[6] = {Str::TodoRepeatNone, Str::TodoRepeatDaily, Str::TodoRepeatWeekdays, Str::TodoRepeatWeekly, Str::TodoRepeatMonthly, Str::TodoRepeatYearly};
+    static const char *const keys[6] = {"", "d1", "wd", "w1", "m1", "y1"};
+    const int w = (kScreen - 88 - 16) / 3;
+    for (int i = 0; i < 6; ++i)
+        edit_button(root, T(names[i]), [](lv_event_t *e) { request_todo_repeat(data_of(e)); }, i, 44 + (i % 3) * (w + 8), 56 + (i / 3) * 64, w, P().ink, P().card, v.draft.repeat == keys[i]);
+    // every N days / weeks / months / years
+    int n = 1, unit = 0;
+    const std::string &r = v.draft.repeat;
+    if (ble::valid_repeat(r) && r.size() >= 2 && r != "wd") { n = std::atoi(r.c_str() + 1); unit = static_cast<int>(std::string("dwmy").find(r[0])); }
+    const bool custom = n > 1;
+    auto *box = panel(root, kScreen - 88, 132, custom ? P().selected : P().card, custom ? P().accent : P().edge, 18);
+    lv_obj_set_pos(box, 44, 192);
+    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    label_at(box, T(Str::TodoEvery), 24, 66 - lh(look.body) / 2, 60, look.body, custom ? P().accent : P().muted);
+    wheel(box, 4, numbers(1, 99, false), n - 1, 100, 6, 100, true);
+    const std::string units = T(Str::TodoUnitDay) + "\n" + T(Str::TodoUnitWeek) + "\n" + T(Str::TodoUnitMonth) + "\n" + T(Str::TodoUnitYear);
+    wheel(box, 5, units, unit, 220, 6, 120, true);
+    edit_bottom(root, Str::TodoBack, Str::TodoOk, [](lv_event_t *e) { request_todo_sub(data_of(e) == 1); });
+}
+void build_edit_list(lv_obj_t *root, const TodoEditView &v) {
+    edit_head(root, T(Str::TodoMoveTo));
+    auto *box = holder(root, kScreen - 88, 300);
+    lv_obj_set_pos(box, 44, 56);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(box, 8, 0);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(box, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(box, LV_SCROLLBAR_MODE_OFF);
+    if (v.lists.empty()) label(box, T(Str::TodoNoLists), kScreen - 88, look.body, P().muted);
+    for (size_t i = 0; i < v.lists.size(); ++i) {
+        const bool on = v.lists[i].id == v.draft.list_id;
+        auto *b = button(box, [](lv_event_t *e) { request_todo_list_pick(data_of(e)); }, data(static_cast<int>(i)), kScreen - 88, kMinTarget);
+        lv_obj_set_style_radius(b, 16, 0);
+        if (on) select(b, true, false);
+        auto *l = label_at(b, fit_text(displayable(v.lists[i].name, todo_glyph), look.body, kScreen - 140, 1), 18, (kMinTarget - lh(look.body)) / 2, kScreen - 140, look.body, on ? P().accent : P().ink);
+        (void)l;
+    }
+    edit_bottom(root, Str::TodoBack, Str::TodoOk, [](lv_event_t *e) { request_todo_sub(data_of(e) == 1); });
 }
 
 // ---- Clock (docs/design v2 HomeClock) ----
@@ -1383,6 +1729,99 @@ void remember_scroll(int y) { g_scroll = y; }
 int body_scroll_y() { return g_body ? lv_obj_get_scroll_y(g_body) : -1; }
 void forget_body() { g_body = nullptr; }
 
+lv_obj_t *build_todo_dialog(lv_obj_t *layer, int mode, const std::string &title, const std::string &detail, void (*choose)(int)) {
+    const Palette &p = P();
+    static void (*chosen)(int) = nullptr;
+    chosen = choose;
+    auto *dimmer = lv_obj_create(layer);
+    lv_obj_remove_style_all(dimmer);
+    lv_obj_set_size(dimmer, kScreen, kScreen);
+    lv_obj_set_pos(dimmer, 0, 0);
+    lv_obj_set_style_bg_color(dimmer, hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(dimmer, LV_OPA_70, 0);
+    lv_obj_add_flag(dimmer, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(dimmer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(dimmer, [](lv_event_t *e) { if (lv_event_get_target(e) == lv_event_get_current_target(e) && chosen) chosen(0); }, LV_EVENT_CLICKED, nullptr);
+    constexpr int kBoxW = 384, kInner = kBoxW - 2 * 20;
+    auto *box = panel(dimmer, kBoxW, LV_SIZE_CONTENT, p.card, mode == 2 ? p.power : p.edge, 28);
+    lv_obj_set_pos(box, (kScreen - kBoxW) / 2, mode == 2 ? 92 : 44);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);   // a tap inside the box, between the buttons, is not "outside"
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(box, 20, 0);
+    lv_obj_set_style_pad_row(box, 8, 0);
+    const std::string shown = displayable(title, todo_glyph);
+    if (mode == 2) label(box, T(Str::TodoDeleteTitle), kInner, look.body, p.power);
+    label(box, fit_text(shown, look.body, kInner, mode == 1 ? 2 : kTodoLines), kInner, look.body, p.ink);
+    if (mode == 1 && !detail.empty()) label(box, fit_text(displayable(detail, todo_glyph), look.caption, kInner, 1), kInner, look.caption, p.muted);
+    if (mode == 2) label(box, T(Str::TodoDeleteBody), kInner, look.caption, p.muted);
+    auto choice_button = [&](lv_obj_t *parent, Str text, int choice, uint32_t ink, uint32_t fill, int w) {
+        auto *b = button(parent, [](lv_event_t *e) { if (chosen) chosen(data_of(e)); }, data(choice), w, kMinTarget);
+        lv_obj_set_style_radius(b, 16, 0);
+        lv_obj_set_style_bg_color(b, hex(fill), 0);
+        auto *l = label(b, T(text), w - 8, look.body, ink);
+        centered(l);
+        lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+        return b;
+    };
+    if (mode == 1) {   // three rows (v2 TodoMenu2): done; tomorrow and change; delete and cancel
+        choice_button(box, Str::TodoActDone, 1, p.bg, p.accent, kInner);
+        const int half = (kInner - 10) / 2;
+        auto *r1 = holder(box, kInner, kMinTarget);
+        lv_obj_set_pos(choice_button(r1, Str::TodoActTomorrow, 2, p.ink, p.card, half), 0, 0);
+        auto *ch = choice_button(r1, Str::TodoActChange, 5, p.accent, p.card, half);
+        lv_obj_set_pos(ch, half + 10, 0);
+        auto *r2 = holder(box, kInner, kMinTarget);
+        lv_obj_set_pos(choice_button(r2, Str::TodoActDelete, 3, p.power, p.card, half), 0, 0);
+        auto *c = choice_button(r2, Str::Cancel, 0, p.muted, p.card, half);
+        lv_obj_set_pos(c, half + 10, 0);
+        flat(c);
+    } else {
+        auto *row = holder(box, kInner, kMinTarget);
+        auto *c = choice_button(row, Str::Cancel, 0, p.ink, p.card, (kInner - 12) / 2);
+        lv_obj_set_pos(c, 0, 0);
+        auto *d = choice_button(row, Str::TodoDeleteConfirm, 4, p.bg, p.power, (kInner - 12) / 2);
+        lv_obj_set_pos(d, (kInner - 12) / 2 + 12, 0);
+    }
+    lv_obj_update_layout(dimmer);
+    auto *foot = label_at(dimmer, T(mode == 2 ? Str::TodoDeleteAuto : Str::TodoOutside), 60, std::min<int>(static_cast<int>(lv_obj_get_y(box) + lv_obj_get_height(box)) + 12, kScreen - 60), kScreen - 120, look.caption, p.muted);
+    centered(foot);
+    return dimmer;
+}
+
+lv_obj_t *build_todo_edit(lv_obj_t *layer, const TodoEditView &v) {
+    auto *root = edit_screen(layer);
+    switch (v.page) {
+    case 4: build_edit_when(root, v); break;
+    case 5: build_edit_repeat(root, v); break;
+    case 6: build_edit_list(root, v); break;
+    default: build_edit_main(root, v); break;
+    }
+    return root;
+}
+// The ring (docs/design v2 TodoRing): the whole screen, so it is seen across the room.
+lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act) {
+    auto *root = edit_screen(layer);
+    auto *h = label_at(root, head, 60, 64, kScreen - 120, look.body, P().accent);
+    centered(h);
+    auto *t = label_at(root, fit_text(displayable(title, todo_glyph), look.title, kScreen - 120, 3), 60, 64 + lh(look.body) + 10, kScreen - 120, look.title, P().ink);
+    centered(t);
+    lv_obj_update_layout(t);
+    if (!detail.empty()) {
+        auto *d = label_at(root, fit_text(displayable(detail, todo_glyph), look.caption, kScreen - 120, 1), 60, lv_obj_get_y(t) + lv_obj_get_height(t) + 8, kScreen - 120, look.caption, P().muted);
+        centered(d);
+    }
+    const int w = kScreen - 128, half = (w - 10) / 2;
+    auto *done = edit_button(root, T(Str::TodoActDone), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 1, 64, 284, w, P().bg, P().accent);
+    lv_obj_set_style_radius(done, 28, 0);
+    if (!can_act) { lv_obj_set_style_opa(done, LV_OPA_40, 0); lv_obj_remove_flag(done, LV_OBJ_FLAG_CLICKABLE); }
+    auto *snooze = edit_button(root, T(Str::TodoSnooze), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 2, 64, 350, half, P().ink, P().card);
+    lv_obj_set_style_radius(snooze, 28, 0);
+    auto *ok = edit_button(root, T(Str::TodoGotIt), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 0, 64 + half + 10, 350, half, P().muted, P().card);
+    lv_obj_set_style_radius(ok, 28, 0);
+    auto *foot = label_at(root, T(can_act ? Str::TodoRingAuto : Str::TodoCannotAct), 90, 414, kScreen - 180, &btr_ui_16, P().muted);
+    centered(foot);
+    return root;
+}
 void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     g_body = body;
     if (page != Page::Time) g_time_seeded = false;
@@ -1413,6 +1852,7 @@ void build_page(lv_obj_t *body, Page page, PowerTab tab, const Frame &f) {
     case Page::Display: build_display(body, f); break;
     case Page::Clock: build_clock(body); break;
     case Page::Usage: build_usage(body, f); break;
+    case Page::Todo: build_todo(body, f); break;
     case Page::Device: build_device(body, f); break;
     }
     lv_obj_update_layout(body);
@@ -1433,6 +1873,7 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     case Page::Display: refresh_display(f); break;
     case Page::Clock: refresh_clock(f); break;
     case Page::Usage: refresh_usage(f); break;
+    case Page::Todo: refresh_todo(f); break;
     case Page::Device: refresh_device(f); break;
     }
     const bool more = page != Page::Home && page != Page::Clock && g_body && lv_obj_get_scroll_bottom(g_body) > 3;
@@ -1798,6 +2239,29 @@ std::string home_first_action_label() {
         if (lv_obj_check_type(c, &lv_label_class)) return lv_label_get_text(c);
     }
     return "";
+}
+int todo_row_count() { return static_cast<int>(tw.rows.size()); }
+lv_obj_t *todo_roller(int which) {
+    if (which < 0 || which > 5) return nullptr;
+    lv_obj_t *r = ew.roller[static_cast<size_t>(which)];
+    return r && lv_obj_is_valid(r) ? r : nullptr;
+}
+int todo_ring_selected() {
+    for (int k = 0; k < 2; ++k) {
+        lv_obj_t *b = ew.ring[static_cast<size_t>(k)];
+        if (!b || !lv_obj_is_valid(b)) return -1;
+    }
+    return lv_obj_get_style_border_width(ew.ring[1], LV_PART_MAIN) == 2 ? 1 : 0;
+}
+bool todo_row_area(int index, int *x1, int *y1, int *x2, int *y2) {
+    if (index < 0 || static_cast<size_t>(index) >= tw.rows.size() || !lv_obj_is_valid(tw.rows[static_cast<size_t>(index)])) return false;
+    lv_obj_t *r = tw.rows[static_cast<size_t>(index)];
+    lv_obj_scroll_to_view_recursive(r, LV_ANIM_OFF);
+    lv_obj_update_layout(r);
+    lv_area_t a;
+    lv_obj_get_coords(r, &a);
+    *x1 = a.x1; *y1 = a.y1; *x2 = a.x2; *y2 = a.y2;
+    return true;
 }
 lv_obj_t *accent_swatch(int index) { return index >= 0 && index < 6 ? w.swatch[static_cast<size_t>(index)] : nullptr; }
 int nav_count() { return sh.nav ? sh.nav_count : 0; }

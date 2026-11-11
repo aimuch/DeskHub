@@ -18,7 +18,7 @@ LV_FONT_DECLARE(font_clock_72);
 
 namespace dh::ui::detail {
 // Home is the status overview and Actions is the switch page (the names are older than the v2 design).
-enum class Page : uint8_t { Home, Actions, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time, Pages, Sources, SourceEdit, Usage };
+enum class Page : uint8_t { Home, Actions, Settings, Power, Connect, Appearance, Display, Clock, Device, Sound, Time, Pages, Sources, SourceEdit, Usage, Todo };
 Page page_of(View);   // the page that shows a view of the navigation
 enum class PowerTab : uint8_t { Level, Readings, Protect };
 constexpr int kScreen = 480, kMargin = 24, kContentW = 432, kMinTarget = 56;
@@ -73,6 +73,8 @@ struct Frame {
     ble::Usage usage;
     int64_t usage_age_ms = 0;
     bool confirm_forget = false;          // "forget computers" was tapped once
+    ble::TodoState todos;                 // the to-do board (13.13)
+    std::string todo_selected;            // the id of the selected row; "" when none
 };
 
 // ---- ui_kit.cpp: equality-guarded setters (LVGL 9.4 invalidates even when a style is set to its current value) ----
@@ -154,6 +156,33 @@ void request_ble_pairing();          // opens the pairing window
 void request_ble_cancel();
 void request_ble_answer(bool same);
 void request_ble_forget();           // two taps
+// ---- the to-do board (13.13) ----
+void request_todo_tap(const std::string &id);    // selects the row, or unselects it when it is the selected one
+void request_todo_menu(const std::string &id);   // a long press: the actions, when the list can act
+void request_todo_choice(int choice);            // 0 cancel, 1 done, 2 tomorrow, 3 "delete...", 4 delete (the second time)
+// The dialog of v2 TodoMenu (mode 1) or TodoDelete (mode 2) on `layer`; `choose` gets the choice; a tap outside is 0.
+lv_obj_t *build_todo_dialog(lv_obj_t *layer, int mode, const std::string &title, const std::string &detail, void (*choose)(int));
+// ---- changing a to-do (13.14): the edit page (3) and its pages for the due time (4), the repeat (5) and the list (6) ----
+void request_todo_edit_row(int row);          // 0 due, 1 repeat, 2 list
+void request_todo_ring(bool on);              // the switch on the edit page; ignored without a time
+void request_todo_when(int which);            // 0 with a time, 1 all day, 2 no date
+void request_todo_roller(int which, int selected);   // 0 month, 1 day, 2 hour, 3 minute, 4 N, 5 unit
+void request_todo_repeat(int preset);         // 0 none, 1 daily, 2 weekdays, 3 weekly, 4 monthly, 5 yearly
+void request_todo_list_pick(int index);
+void request_todo_sub(bool ok);               // "OK" or "Back" on the pages of the due time, the repeat and the list
+void request_todo_edit_done(bool save);       // "Save" or "Cancel"
+void request_todo_ring_choice(int choice);    // the ring page: 0 OK, 1 done, 2 again in 10 minutes
+struct TodoEditView {
+    int page = 3;
+    std::string title;
+    TodoDraft draft;                          // what the page shows: the edit, or the copy a page below it changes
+    std::vector<MonthChoice> months;
+    std::vector<ble::TodoListName> lists;
+    std::string when, repeat, list_name;
+    int now_year = 0;
+};
+lv_obj_t *build_todo_edit(lv_obj_t *layer, const TodoEditView &);
+lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act);
 lv_obj_t *build_ble_pairing(lv_obj_t *layer, const ble::Status &);   // the waiting page or the digits
 void refresh_ble_pairing(const ble::Status &);
 void wifi_close();
@@ -219,6 +248,14 @@ std::string home_seconds_text();     // the overview: the seconds after the time
 bool home_seconds_shown();           // the overview: the label of the seconds is shown (even when it is empty)
 int ble_overlay_mode();              // 0 none, 1 waiting for the computer, 2 the digits
 int switch_current_index();          // the switch page: the source marked current; -1 when none
+int todo_row_count();                // the to-do page: the rows of to-dos shown
+bool todo_row_area(int index, int *x1, int *y1, int *x2, int *y2);
+std::string todo_selected();         // the id of the selected row, "" when none
+lv_obj_t *todo_roller(int which);    // a wheel of the edit pages (see request_todo_roller); nullptr when it is not shown
+int todo_ring_selected();            // the ring switch of the edit page: 0 off, 1 on, -1 not shown
+bool todo_ring_shown();              // the "due now" page is up
+void set_wall_for_test(time_t t);    // the wall clock the UI reads; 0: the real one
+int todo_dialog_mode();              // 0 none, 1 the actions, 2 the delete question
 bool rename_open();
 void rename_back();
 void rename_erase();

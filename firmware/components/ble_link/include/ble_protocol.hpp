@@ -10,7 +10,10 @@
 //                             {"op":"result","req":7,"outcome":"confirmed|sent_unconfirmed|not_sent","detail":"..."}
 //                             {"op":"current","id":"<App id>"}   the input the monitor is on; "" when not known
 //                             {"op":"usage","ok":true,...} / {"op":"usage","ok":false}   Magpie, 13.12
+//                             {"op":"todos_begin","n":3,"total":9} {"op":"todo",...} {"op":"todos_end"}   to-dos, 13.13
+//                             {"op":"todos_off","why":"access|setting"} {"op":"todo_result","req":5,"ok":true,"detail":""}
 //   device -> App (events):   {"op":"switch","req":7,"id":"<App id>"}
+//                             {"op":"todo_act","req":5,"id":"9f2c4e1a0b7d","a":"done|tomorrow|delete"}
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -23,6 +26,8 @@ constexpr int64_t kPairingWindowMs = 120000;   // "pair a computer" accepts a ne
 constexpr int64_t kConfirmMs = 30000;          // the six digits must be confirmed within 30 s (the Mac gives up then too)
 constexpr int64_t kRequestTimeoutMs = 12000;   // the App needs about 4.5 s for a switch and its read-backs
 constexpr int64_t kUsageStaleMs = 60000;       // the App sends the usage every 15 s (13.12 G3)
+constexpr size_t kMaxTodos = 30, kMaxTodoTotal = 9999, kTodoIdLen = 12, kMaxTodoTitle = 96, kMaxTodoList = 32, kMaxTodoDetail = 64;
+constexpr int64_t kTodoStaleMs = 120000;       // the App sends the list every 30 s (13.13 L4)
 
 struct Source {
     std::string id, name, port;   // port: dp1 dp2 hdmi1 hdmi2 usbc other
@@ -53,19 +58,91 @@ struct Usage {
     uint32_t latest_status = 0, latest_ms = 0, latest_age_s = 0;
 };
 
-enum class Op { SourcesBegin, Source, SourcesEnd, Result, Current, Usage, Bad };
+// The to-do board (docs/desktop-app-design.md 13.13): the unfinished reminders the App read on the Mac.
+enum class TodoKind : uint8_t { Overdue, Today, Tomorrow, Later, None };
+enum class TodoAction : uint8_t { Done, Tomorrow, Delete, Edit };
+struct Todo {
+    std::string id;            // 12 lowercase hex digits: the App's handle, not the reminder's own id
+    std::string title, list;
+    TodoKind kind = TodoKind::None;
+    uint16_t year = 0;            // the due date (13.14); 0 with None
+    uint8_t month = 0, day = 0;
+    int16_t minute = -1;          // the due time of day; -1: all day or none
+    std::string repeat;           // "" none, "wd" weekdays, "x" custom (shown, not chosen), d/w/m/y + 1..99
+    std::string list_id;          // 12 lowercase hex digits
+    bool alarm = false;           // a ring at the due time; only with a time
+    std::string version;          // 8 lowercase hex digits: changes whenever the reminder changes on the Mac (M3)
+    bool operator==(const Todo &o) const {
+        return id == o.id && title == o.title && list == o.list && kind == o.kind && year == o.year && month == o.month && day == o.day &&
+               minute == o.minute && repeat == o.repeat && list_id == o.list_id && alarm == o.alarm && version == o.version;
+    }
+};
+struct TodoListName { std::string id, name; };   // a list of Reminders the person can move a to-do into (13.14)
+// What the edit page sends (13.14): the to-do after the change; unchanged parts as they were.
+struct TodoEdit {
+    std::string id, version;
+    uint16_t year = 0;
+    uint8_t month = 0, day = 0;
+    int16_t minute = -1;
+    std::string repeat, list_id;
+    bool alarm = false;
+};
+// Header-only, so the UI and its tests use them without the parser: 0 for a month out of range.
+inline int days_in_month(int year, int month) {
+    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month < 1 || month > 12) return 0;
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    return month == 2 && leap ? 29 : days[month - 1];
+}
+inline bool lower_hex(const std::string &s, size_t len) {
+    if (s.size() != len) return false;
+    for (char c : s) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    return true;
+}
+// "" none, "wd" weekdays, "x" custom, or d/w/m/y with 1..99 and no leading zero.
+inline bool valid_repeat(const std::string &r) {
+    if (r.empty() || r == "wd" || r == "x") return true;
+    if (r.size() < 2 || r.size() > 3 || std::string("dwmy").find(r[0]) == std::string::npos || r[1] < '1' || r[1] > '9') return false;
+    return r.size() == 2 || (r[2] >= '0' && r[2] <= '9');
+}
+// A real date or none, a repeat the protocol knows ("x": unchanged), a ring only with a time.
+inline bool valid_edit(const TodoEdit &e) {
+    if (!lower_hex(e.id, 12) || !lower_hex(e.version, 8) || !lower_hex(e.list_id, 12) || !valid_repeat(e.repeat)) return false;
+    const bool undated = e.year == 0 && e.month == 0 && e.day == 0 && e.minute == -1;
+    if (!undated && (e.year < 2000 || e.year > 2100 || e.day < 1 || e.day > days_in_month(e.year, e.month) || e.minute < -1 || e.minute > 1439)) return false;
+    return !(e.alarm && e.minute < 0);
+}
+std::string todo_edit_json(uint32_t req, const TodoEdit &);
+struct TodoList {
+    std::vector<Todo> items;   // at most 30, in the App's order
+    size_t total = 0;          // all the unfinished ones on the Mac
+};
+struct TodoResult {
+    uint32_t req = 0;
+    bool ok = false;
+    std::string detail;
+};
+
+enum class Op { SourcesBegin, Source, SourcesEnd, Result, Current, Usage, TodosBegin, Todo, TodosEnd, TodosOff, TodoResult, TodoListsBegin, TodoListItem, TodoListsEnd, Bad };
 struct Message {
     Op op = Op::Bad;
-    size_t count = 0;        // SourcesBegin
-    size_t index = 0;        // Source
+    size_t count = 0;        // SourcesBegin, TodosBegin
+    size_t total = 0;        // TodosBegin
+    size_t index = 0;        // Source, Todo
     Source source;           // Source
     Result result;           // Result
     std::string current;     // Current: an id, or "" for "not known"
     Usage usage;             // Usage
+    Todo todo;               // Todo
+    std::string off_why;     // TodosOff: "access" or "setting"
+    TodoResult todo_result;  // TodoResult
+    TodoListName list_entry; // TodoListItem
     std::string error;       // Bad: why
 };
 // Strict: a known op, the fields it needs with the right types, nothing too long, valid UTF-8 without control characters.
 Message parse(const std::string &bytes);
+// The same, into a freshly made `out`. No Message on the stack: the NimBLE task has 4 KB (13.14).
+void parse_into(const std::string &bytes, Message &out);
 
 // The list arrives in pieces. It replaces the shown list only when it is complete: every index once, the count as
 // announced. Anything out of order throws the draft away (the shown list stays as it was).
@@ -76,6 +153,39 @@ struct SourcesDraft {
 };
 enum class Apply { Pending, Complete, Rejected };
 Apply apply(SourcesDraft &, const Message &, std::vector<Source> *complete);
+
+// The to-do list arrives in pieces too (13.13 L2): the same rules, plus unique ids. Other ops are ignored here.
+struct TodosDraft {
+    bool open = false;
+    size_t expected = 0, total = 0;
+    std::vector<std::optional<Todo>> items;
+};
+Apply apply(TodosDraft &, const Message &, TodoList *complete);
+
+// The lists of Reminders arrive in pieces too (13.14 M2). Other ops are ignored here.
+constexpr size_t kMaxTodoLists = 16;
+struct ListsDraft {
+    bool open = false;
+    size_t expected = 0;
+    std::vector<std::optional<TodoListName>> items;
+};
+Apply apply(ListsDraft &, const Message &, std::vector<TodoListName> *complete);
+
+// One to-do action at a time, only for an id in the shown list (13.13 L10, L11).
+class TodoActs {
+public:
+    struct Pending { uint32_t req; std::string id; TodoAction action; int64_t sent_ms; };
+    bool begin(const std::string &id, TodoAction, const std::vector<Todo> &shown, int64_t now_ms, uint32_t *req);
+    std::optional<Pending> finish(const TodoResult &);   // the action the result is for; nullopt when it is not the waiting one
+    bool expire(int64_t now_ms);                          // true once, when the waiting action timed out
+    bool waiting() const { return pending_.has_value(); }
+    const std::optional<Pending> &pending() const { return pending_; }
+    void reset() { pending_.reset(); }
+private:
+    uint32_t next_ = 1;
+    std::optional<Pending> pending_;
+};
+std::string todo_act_json(uint32_t req, const std::string &id, TodoAction);
 
 // One switch request at a time. A result counts only for the request that is waiting; a late or unknown one is ignored.
 // A request that got no result in kRequestTimeoutMs is over, and says so.

@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <ctime>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,9 +25,9 @@ enum class RingTier { Thin, Standard, Thick };
 struct RingPx { int home, gauge; };
 RingPx ring_px(RingTier);  // Thin 12/7, Standard 20/11 (what it was before the tiers), Thick 28/15
 // ---- pages (docs/design v2 Pages): which pages are in the navigation, in which order; the first shown one is the home page ----
-enum class View : uint8_t { Switch, Overview, Clock, Power, Usage };
+enum class View : uint8_t { Switch, Overview, Clock, Power, Usage, Todo };
 constexpr size_t kMaxShownPages = 4;   // the navigation holds 4 pages and Settings (13.12 G7)
-constexpr size_t kViewCount = 5;
+constexpr size_t kViewCount = 6;
 struct PageSlot { View view; bool shown; };
 using PageOrder = std::array<PageSlot, kViewCount>;
 PageOrder default_pages();                          // Switch and Overview shown, Clock and Power hidden
@@ -34,7 +35,7 @@ View home_view(const PageOrder &);                  // the first shown page
 std::vector<View> nav_views(const PageOrder &);     // the shown pages, in order (Settings comes after them, always)
 bool pages_toggle(PageOrder &, size_t slot);        // false: out of range, or it is the last shown page
 bool pages_move(PageOrder &, size_t slot, int delta);   // delta -1 or +1; false at the ends or out of range
-std::string serialize_pages(const PageOrder &);     // "S+O+C-P-"
+std::string serialize_pages(const PageOrder &);     // "S+O+C-P-U-T-"
 bool parse_pages(const std::string &, PageOrder &); // false (and `out` untouched) unless every page is there once and one is shown
 // How the switch page shows the input sources.
 enum class SwitchStyle : uint8_t { List, Icons };
@@ -146,6 +147,57 @@ struct UsageView {
 };
 // u: the last usage the App sent, or nullptr when none came yet; age_ms: how long ago it came.
 UsageView make_usage(Lang, const ble::Usage *u, int64_t age_ms, bool time_valid, time_t now);
+
+// ---- the to-do board (docs/design v2 Todo, TodoMenu, TodoDelete, TodoStale; docs/desktop-app-design.md 13.13) ----
+// L8: each character `has` says the font lacks is drawn as "?"; variation selectors and joiners are dropped.
+std::string displayable(const std::string &utf8, bool (*has)(uint32_t codepoint));
+struct TodoRow {
+    std::string id, title;
+    std::string when;     // on the right: "11月10日", "14:30", "今天", "明天", "" (no date)
+    std::string detail;   // under the title of the selected row: "工作 · 今天 14:30"
+    ble::TodoKind kind = ble::TodoKind::None;
+    bool tag = false;     // today's: drawn as a pill in the accent colour
+};
+struct TodoGroup { std::string title; ble::TodoKind kind = ble::TodoKind::None; std::vector<TodoRow> rows; };   // Later holds tomorrow too
+struct TodoView {
+    enum class State { Waiting, Off, Empty, Fresh, Stale } state = State::Waiting;
+    std::string count;    // "未完成 9 条"
+    std::string status;   // "刚刚更新", "45 秒前更新", "数据过期 · 3 分钟前"; the message of Waiting, Off and Empty
+    std::string hint;     // the second line of Waiting and Off; the banner of Stale
+    std::vector<TodoGroup> groups;
+    std::string more;     // "还有 3 条", or ""
+    bool dim = false;
+    bool can_act = false; // long press opens the actions: fresh, and the link is secure
+};
+// list: the last complete list, or nullptr when none came; off_why: "access" or "setting" after todos_off, else "".
+TodoView make_todos(Lang, const ble::TodoList *list, const std::string &off_why, int64_t age_ms, bool link_secure);
+std::string todo_result_text(Lang, ble::TodoAction, bool ok, const std::string &title, const std::string &detail);
+std::string todo_timeout_text(Lang);
+// ---- changing a to-do (docs/design v2 TodoEdit, TodoEditWhen, TodoEditRepeat, TodoEditList, TodoRing; 13.14) ----
+std::string repeat_text(Lang, const std::string &repeat);   // "每周", "每 3 天", "自定义"
+struct MonthChoice { int year = 0, month = 0; std::string label; };
+// The month wheel: 13 months from this month, from the to-do's own month when that is earlier or the time is not known.
+std::vector<MonthChoice> month_choices(Lang, bool time_valid, int now_year, int now_month, int item_year, int item_month);
+struct TodoDraft {
+    enum class When { Timed, AllDay, None } when = When::None;
+    int year = 0, month = 0, day = 0, minute = 540;   // kept when "no date" is chosen, so the wheels come back where they were
+    std::string repeat, list_id;
+    bool alarm = false;
+};
+TodoDraft todo_draft(const ble::Todo &, bool time_valid, int now_year, int now_month, int now_day);
+ble::TodoEdit todo_edit_of(const ble::Todo &, const TodoDraft &);   // the day kept inside its month; no ring without a time
+std::string draft_when_text(Lang, const TodoDraft &, int now_year);  // "11月12日 14:30", "2027年1月3日 全天", "没有日期"
+class TodoRinger {
+public:
+    static constexpr int64_t kSnoozeMs = 600000;
+    // The to-do to ring now, or nothing: a ring, a time, today and this minute, not rung yet; the first in the list's order.
+    std::optional<ble::Todo> due(const std::vector<ble::Todo> &, bool time_valid, int year, int month, int day, int minute_of_day, int64_t now_ms);
+    void snooze(const ble::Todo &, int64_t now_ms);   // rings once more, 10 minutes later
+    void reset() { rung_.clear(); snoozed_.clear(); }
+private:
+    std::vector<std::string> rung_;
+    std::vector<std::pair<ble::Todo, int64_t>> snoozed_;
+};
 
 // ---- gauges ----
 struct Gauge { bool valid = false; float percent = 0; std::string text = "--"; };

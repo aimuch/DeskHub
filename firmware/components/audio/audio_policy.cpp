@@ -9,17 +9,21 @@ struct Note {
 };
 constexpr Note kConfirm[2] = {{880, 70}, {1320, 110}};
 constexpr Note kFail[2] = {{440, 120}, {330, 160}};
+constexpr Note kAlarm[3] = {{1320, 90}, {1320, 90}, {1320, 90}};
+constexpr int kAlarmGapMs = 60;
 constexpr int kFadeMs = 8;
 constexpr double kPi = 3.14159265358979323846;
 }  // namespace
 
 std::vector<int16_t> render(Tone tone, int rate, int level_percent) {
     if (rate < kMinRate || rate > kMaxRate || level_percent < 1 || level_percent > 100) return {};
-    const Note *notes = tone == Tone::Confirm ? kConfirm : kFail;
+    const Note *notes = tone == Tone::Confirm ? kConfirm : tone == Tone::Fail ? kFail : kAlarm;
+    const int count_notes = tone == Tone::Alarm ? 3 : 2;
     const double amplitude = static_cast<double>(kPeak) * level_percent / 100.0;
     const int fade = std::max(1, rate * kFadeMs / 1000);
     std::vector<int16_t> out;
-    for (int n = 0; n < 2; ++n) {
+    for (int n = 0; n < count_notes; ++n) {
+        if (tone == Tone::Alarm && n > 0) out.insert(out.end(), static_cast<size_t>(rate * kAlarmGapMs / 1000), 0);   // the silence between beeps
         const int count = rate * notes[n].ms / 1000;
         for (int i = 0; i < count; ++i) {
             const double gain = std::min({1.0, static_cast<double>(i) / fade, static_cast<double>(count - 1 - i) / fade});   // zero at both ends of a note

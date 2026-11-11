@@ -29,6 +29,22 @@ bool confirm_forget = false;  // "forget computers" tapped once
 int ble_mode = 0;
 std::string built_current;   // the current input the switch page was drawn with             // the pairing page shown: 0 none, 1 waiting, 2 digits
 lv_obj_t *ble_view = nullptr;
+std::string todo_sel, todo_dialog_id;   // the to-do board (13.13): the selected row; the row of the dialog
+int todo_dialog = 0, todo_dialog_built = 0;   // 0 none, 1 the actions, 2 the delete question
+int64_t todo_dialog_at = 0;
+lv_obj_t *todo_view = nullptr;
+constexpr int64_t kTodoAskMs = 10000;   // the delete question goes away by itself (L14)
+ble::Todo todo_item;                 // 13.14: the to-do the edit page is about, as it was when it opened
+TodoDraft todo_draft_edit, todo_draft_sub;   // the edit, and the copy the page of the due time, the repeat or the list changes
+int todo_rev = 0, todo_rev_built = -1;       // a change of the edit pages rebuilds them
+TodoRinger ringer;
+lv_obj_t *ring_view = nullptr;
+ble::Todo ring_item;
+int64_t ring_at = 0;
+constexpr int64_t kRingShowMs = 60000;       // the ring page closes by itself
+time_t test_wall = 0;
+time_t wall_now() { return test_wall ? test_wall : time(nullptr); }
+std::string fmt_ring_head(const char *hhmm) { char b[96]; snprintf(b, sizeof(b), tr(look.lang, Str::TodoRingNow), hhmm); return b; }
 lv_obj_t *screen = nullptr, *body = nullptr, *shield = nullptr, *pairing_view = nullptr, *blank = nullptr;
 lv_timer_t *ui_timer = nullptr;
 DisplayPolicy policy;
@@ -100,7 +116,7 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.charge = charge::status();
     f.charge_error = charge_error;
     f.now_ms = now;
-    f.wall = time(nullptr);
+    f.wall = wall_now();
     if (want_paired) { const auto stored = secrets(); f.paired = stored.ready(); f.wifi_name = stored.ssid; }
     f.command_changed_ms = command_changed_ms;
     f.config_pending = config_due != 0;
@@ -116,6 +132,8 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.confirm_forget = confirm_forget;
     f.current_id = ble::current();
     f.has_usage = ble::usage(f.usage, f.usage_age_ms);
+    f.todos = ble::todos();
+    f.todo_selected = todo_sel;
     return f;
 }
 
@@ -136,6 +154,64 @@ void rebuild_shell() {
     lv_obj_add_event_cb(body, [](lv_event_t *) { request_update(); }, LV_EVENT_SCROLL, nullptr);
     // The header and the navigation sit above the body in the draw order, as before: body first, then they are re-raised.
     lv_obj_move_background(body);
+}
+
+// The to-do dialogs, the edit pages and the ring (13.13, 13.14). A function of its own, not inlined into update(): its strings and
+// views take stack only while it runs (update() runs on the LVGL task every tick).
+__attribute__((noinline)) void todo_overlays(const Frame &f, int64_t now, const DisplayConfig &c, const Snapshot &s, const struct tm &t, bool pairing_now) {
+    {   // the to-do dialog: only on the to-do page, only while the list can still act; the delete question times out
+        if (todo_dialog) {
+            const TodoView tv = make_todos(look.lang, f.todos.has_list ? &f.todos.list : nullptr, f.todos.off_why, f.todos.age_ms, f.ble.secure);
+            bool there = false;
+            if (f.todos.has_list) for (const auto &t : f.todos.list.items) there = there || t.id == todo_dialog_id;
+            if (page != Page::Todo || !tv.can_act || !there || (todo_dialog == 2 && now - todo_dialog_at >= kTodoAskMs)) todo_dialog = 0;
+        }
+        if (todo_dialog != todo_dialog_built || (todo_dialog >= 3 && todo_rev != todo_rev_built)) {
+            if (todo_view) { lv_obj_delete(todo_view); todo_view = nullptr; }
+            todo_rev_built = todo_rev;
+            if (todo_dialog >= 3) {
+                TodoEditView v;
+                v.page = todo_dialog;
+                v.title = todo_item.title;
+                v.draft = todo_dialog == 3 ? todo_draft_edit : todo_draft_sub;
+                struct tm lt{};
+                localtime_r(&f.wall, &lt);
+                v.now_year = f.s.time_valid ? lt.tm_year + 1900 : v.draft.year;
+                v.months = month_choices(look.lang, f.s.time_valid, lt.tm_year + 1900, lt.tm_mon + 1, v.draft.year, v.draft.month);
+                v.lists = f.todos.lists;
+                v.when = draft_when_text(look.lang, v.draft, v.now_year);
+                v.repeat = repeat_text(look.lang, v.draft.repeat);
+                v.list_name = todo_item.list;
+                for (const auto &l : f.todos.lists) if (l.id == v.draft.list_id) v.list_name = l.name;
+                todo_view = build_todo_edit(lv_layer_top(), v);
+            } else if (todo_dialog) {
+                std::string title, detail;
+                for (const auto &t : f.todos.list.items) if (t.id == todo_dialog_id) title = t.title;
+                const TodoView tv = make_todos(look.lang, &f.todos.list, "", 0, true);
+                for (const auto &g : tv.groups) for (const auto &r : g.rows) if (r.id == todo_dialog_id) detail = r.detail;
+                todo_view = build_todo_dialog(lv_layer_top(), todo_dialog, title, detail, request_todo_choice);
+            }
+            todo_dialog_built = todo_dialog;
+        }
+        if (todo_view) policy.last_activity_ms = now;
+    }
+    {   // 13.14: a to-do with a ring at this minute (the device's own clock and list); one page at a time
+        if (ring_view && now - ring_at >= kRingShowMs) { lv_obj_delete(ring_view); ring_view = nullptr; }
+        if (!ring_view && !todo_view && !pairing_now && !wifi_opened() && !rename_opened() && f.todos.has_list && f.todos.off_why.empty()) {
+            if (auto due = ringer.due(f.todos.list.items, s.time_valid, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour * 60 + t.tm_min, now)) {
+                ring_item = *due;
+                ring_at = now;
+                const TodoView tv = make_todos(look.lang, &f.todos.list, "", f.todos.age_ms, f.ble.secure);
+                std::string detail;
+                for (const auto &g : tv.groups) for (const auto &r : g.rows) if (r.id == due->id) detail = r.detail;
+                char head[48];
+                snprintf(head, sizeof(head), "%02d:%02d", due->minute / 60, due->minute % 60);
+                ring_view = build_todo_ring(lv_layer_top(), fmt_ring_head(head), due->title, detail, tv.can_act && !f.todos.waiting);
+                audio::ring(quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)));
+            }
+        }
+        if (ring_view) policy.last_activity_ms = now;   // M8: the screen lights up, with or without the sound
+    }
 }
 
 // One pass over the world. `beat` is false for the first pass inside ui_start, so ui_alive() stays false until the timer ran.
@@ -173,7 +249,7 @@ void update() {
     }
     const PowerState power = board_power();
     policy.fault = power.fault;
-    time_t wall = time(nullptr);
+    time_t wall = wall_now();
     struct tm t{};
     localtime_r(&wall, &t);
     {   // The pairing page is read, not touched: the code and the hotspot password must not vanish with the screen.
@@ -268,6 +344,7 @@ void update() {
         }
         if (ble_view) { refresh_ble_pairing(b); policy.last_activity_ms = now; }   // the person has to read it: keep it awake
     }
+    todo_overlays(f, now, c, s, t, pairing_now);
     rename_tick(blocked, pairing_now);
     if (blocked && shield) lv_obj_move_foreground(shield);
 
@@ -292,11 +369,49 @@ Page page_of(View v) {
     case View::Clock: return Page::Clock;
     case View::Power: return Page::Power;
     case View::Usage: return Page::Usage;
+    case View::Todo: return Page::Todo;
     case View::Overview: break;
     }
     return Page::Home;
 }
 void request_update() { if (ui_timer) lv_timer_ready(ui_timer); }
+void request_todo_tap(const std::string &id) {
+    note_activity();
+    todo_sel = todo_sel == id ? std::string() : id;
+    request_update();
+}
+void request_todo_menu(const std::string &id) {
+    note_activity();
+    const ble::TodoState t = ble::todos();
+    const TodoView v = make_todos(look.lang, t.has_list ? &t.list : nullptr, t.off_why, t.age_ms, ble::status().secure);
+    if (!v.can_act || t.waiting || todo_dialog) return;   // L4, L5, L10: nothing to do; the page says why
+    todo_dialog_id = id;
+    todo_dialog = 1;
+    request_update();
+}
+void request_todo_choice(int choice) {
+    note_activity();
+    const std::string id = todo_dialog_id;
+    if (choice == 5 && todo_dialog == 1) {   // "Change...": the edit page, from the to-do as the list has it now (13.14)
+        const ble::TodoState t = ble::todos();
+        bool found = false;
+        for (const auto &x : t.list.items) if (x.id == id) { todo_item = x; found = true; }
+        if (!found) { todo_dialog = 0; request_update(); return; }
+        time_t w = wall_now();
+        struct tm lt{};
+        localtime_r(&w, &lt);
+        todo_draft_edit = todo_draft(todo_item, snapshot().time_valid, lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+        todo_dialog = 3;
+        ++todo_rev;
+        request_update();
+        return;
+    }
+    if (choice == 3 && todo_dialog == 1) { todo_dialog = 2; todo_dialog_at = monotonic_ms(); request_update(); return; }   // L14: ask again
+    const bool send = (choice == 1 || choice == 2) ? todo_dialog == 1 : choice == 4 ? todo_dialog == 2 : false;
+    todo_dialog = 0;
+    if (send) ble::todo_act(id, choice == 1 ? ble::TodoAction::Done : choice == 2 ? ble::TodoAction::Tomorrow : ble::TodoAction::Delete);
+    request_update();
+}
 void note_activity() { policy.last_activity_ms = monotonic_ms(); }
 void request_page(Page p) { desired = p; note_activity(); request_update(); }
 void request_power_tab(PowerTab t) { desired_tab = t; note_activity(); request_update(); }
@@ -546,7 +661,102 @@ void tick(lv_timer_t *) {
 // ---------------------------------------------------------------- test hooks
 lv_obj_t *screen_object() { return screen; }
 lv_obj_t *body_object() { return body; }
+void request_todo_edit_row(int row) {
+    note_activity();
+    if (todo_dialog != 3) return;
+    if (row == 2 && ble::todos().lists.empty()) return;   // M2: nothing to choose from
+    todo_draft_sub = todo_draft_edit;
+    todo_dialog = row == 0 ? 4 : row == 1 ? 5 : 6;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_ring(bool on) {
+    note_activity();
+    if (todo_dialog != 3) return;
+    todo_draft_edit.alarm = on && todo_draft_edit.when == TodoDraft::When::Timed;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_when(int which) {
+    note_activity();
+    if (todo_dialog != 4) return;
+    todo_draft_sub.when = which == 0 ? TodoDraft::When::Timed : which == 1 ? TodoDraft::When::AllDay : TodoDraft::When::None;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_roller(int which, int selected) {
+    note_activity();
+    TodoDraft &d = todo_draft_sub;
+    if (todo_dialog == 4) {
+        if (which == 0) {
+            time_t w = wall_now();
+            struct tm lt{};
+            localtime_r(&w, &lt);
+            const auto months = month_choices(look.lang, snapshot().time_valid, lt.tm_year + 1900, lt.tm_mon + 1, todo_draft_edit.year, todo_draft_edit.month);
+            if (selected >= 0 && static_cast<size_t>(selected) < months.size()) { d.year = months[static_cast<size_t>(selected)].year; d.month = months[static_cast<size_t>(selected)].month; }
+            d.day = std::min(d.day, ble::days_in_month(d.year, d.month));
+        } else if (which == 1) d.day = std::clamp(selected + 1, 1, ble::days_in_month(d.year, d.month));
+        else if (which == 2) d.minute = std::clamp(selected, 0, 23) * 60 + d.minute % 60;
+        else if (which == 3) d.minute = d.minute / 60 * 60 + std::clamp(selected, 0, 59);
+    } else if (todo_dialog == 5 && (which == 4 || which == 5)) {
+        int n = 1, unit = 0;
+        if (ble::valid_repeat(d.repeat) && d.repeat.size() >= 2 && d.repeat != "wd") { n = std::atoi(d.repeat.c_str() + 1); unit = static_cast<int>(std::string("dwmy").find(d.repeat[0])); }
+        if (which == 4) n = std::clamp(selected + 1, 1, 99);
+        else unit = std::clamp(selected, 0, 3);
+        d.repeat = std::string(1, "dwmy"[unit]) + std::to_string(n);
+    } else return;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_repeat(int preset) {
+    note_activity();
+    if (todo_dialog != 5) return;
+    static const char *const presets[] = {"", "d1", "wd", "w1", "m1", "y1"};
+    if (preset >= 0 && preset < 6) todo_draft_sub.repeat = presets[preset];
+    ++todo_rev;
+    request_update();
+}
+void request_todo_list_pick(int index) {
+    note_activity();
+    const auto lists = ble::todos().lists;
+    if (todo_dialog != 6 || index < 0 || static_cast<size_t>(index) >= lists.size()) return;
+    todo_draft_sub.list_id = lists[static_cast<size_t>(index)].id;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_sub(bool ok) {
+    note_activity();
+    if (todo_dialog < 4) return;
+    if (ok) {
+        todo_draft_edit = todo_draft_sub;
+        if (todo_draft_edit.when != TodoDraft::When::Timed) todo_draft_edit.alarm = false;   // M1: no ring without a time
+    }
+    todo_dialog = 3;
+    ++todo_rev;
+    request_update();
+}
+void request_todo_edit_done(bool save) {
+    note_activity();
+    if (todo_dialog != 3) return;
+    todo_dialog = 0;
+    if (save) ble::todo_edit(todo_edit_of(todo_item, todo_draft_edit));
+    request_update();
+}
+void request_todo_ring_choice(int choice) {
+    note_activity();
+    if (!ring_view) return;
+    if (choice == 1) ble::todo_act(ring_item.id, ble::TodoAction::Done);
+    if (choice == 2) ringer.snooze(ring_item, monotonic_ms());
+    lv_obj_add_flag(ring_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_delete_async(ring_view);
+    ring_view = nullptr;
+    request_update();
+}
 Page current_page() { return page; }
+std::string todo_selected() { return todo_sel; }
+int todo_dialog_mode() { return todo_dialog_built; }
+bool todo_ring_shown() { return ring_view != nullptr; }
+void set_wall_for_test(time_t t) { test_wall = t; }
 PowerTab current_power_tab() { return tab; }
 const Appearance &current_appearance() { return appearance; }
 static int count_objects(lv_obj_t *o) {
@@ -576,6 +786,13 @@ void reset_for_test() {
     confirm_forget = false;
     ble_mode = 0;
     ble_view = nullptr;
+    todo_sel.clear(); todo_dialog_id.clear();
+    todo_dialog = todo_dialog_built = 0;
+    todo_view = nullptr;
+    todo_rev = 0; todo_rev_built = -1;
+    ringer.reset();
+    ring_view = nullptr;
+    ring_at = 0;
     rename_reset();
     look = make_look(appearance);
     policy = DisplayPolicy{};

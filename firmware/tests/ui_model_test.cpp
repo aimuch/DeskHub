@@ -37,6 +37,19 @@
 // T25 Appearance, 0.3.17 format (8 fields: + pages, + switch style). Round-trips. The default is the night theme. What
 //     0.3.x stored (4 or 6 fields) is still read: the theme becomes night and keeps its colour as the accent (an accent
 //     that was chosen stays), the pages and the style are the defaults. 7 or 9 fields, a bad style, bad pages: default.
+// T30 The to-do page (13.13 L15): a sixth page "T", last and hidden by default; what 0.3.27 (4 pages) and 0.3.28 to
+//     0.3.30 (5 pages) stored is still read, with To-do added last and hidden; still at most four shown.
+// T31 The words of the to-do page (13.13 L3 to L7, L11): the states (waiting, off and why, empty, fresh, stale), the groups
+//     and their counts in order, the "when" of each kind in both languages, "N more", actions only while fresh and the link
+//     is secure, the result lines. Every word is in the font.
+// T32 Characters the font does not have (13.13 L8): each one is drawn as "?", variation selectors and joiners are dropped,
+//     the rest is left alone; broken UTF-8 never reads past the end.
+// T33 The edit page (13.14): the repeat in words ("x" is custom); the month wheel lists 13 months from this month (from the
+//     to-do's own month when that is earlier, or when the time is not known), the next year's with the year; the draft starts
+//     from the to-do (an undated one at today 09:00), keeps the day inside its month, drops the ring without a time, and
+//     gives an edit the protocol accepts; the "when" in words.
+// T34 Ringing (M7 to M9, M12): only a to-do with a ring, a time, today's date and this minute; not when the time is not known;
+//     once per to-do and due time; one at a time in the list's order; "again in 10 minutes" rings once more, 10 minutes later.
 // T26 The night theme: the tokens of docs/design/README.md (v2), pure black, readable like the others (T1, T4).
 // T27 Input sources: the port of an input id is read from its words (hdmi, dp/displayport, usbc/usb-c/type-c/thunderbolt,
 //     with or without a number), never from a part of a word; anything else is a plain display, with no port tag.
@@ -286,15 +299,15 @@ static void t5_appearance() {
     CHECK_EQ(combos, 4 * 3 * 2 * 3 * 2 * 3 * 2 * 2);
     Appearance d;
     CHECK(d.show_percent && d.ring == RingTier::Standard && d.theme == ThemeId::Night && d.style == SwitchStyle::List && d.clock_hands);
-    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands"));
+    CHECK_EQ(serialize(d), std::string("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-T-|list|hands"));
     Appearance a;
     a.theme = ThemeId::Ocean; a.accent = 0x5ee6b8; a.lang = Lang::EnUS; a.size = SizeTier::Large; a.show_percent = false; a.ring = RingTier::Thick;
     a.style = SwitchStyle::Icons;
-    a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}, {View::Usage, false}}};
+    a.pages = {{{View::Clock, true}, {View::Switch, true}, {View::Overview, false}, {View::Power, true}, {View::Usage, false}, {View::Todo, false}}};
     a.clock_hands = false;
-    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+U-|icons|nohands"));
+    CHECK_EQ(serialize(a), std::string("ocean|5ee6b8|en-US|large|nopct|thick|C+S+O-P+U-T-|icons|nohands"));
     const Appearance back = parse_appearance(serialize(a));
-    CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+U-"));
+    CHECK_EQ(serialize_pages(back.pages), std::string("C+S+O-P+U-T-"));
     const std::vector<std::string> bad = {
         "", "garbage", "mint|-|zh-CN", "mint|-|zh-CN|standard|pct", "mint|-|zh-CN|standard|pct|standard|extra", "mint|zzzzzz|zh-CN|standard|pct|standard",
         "mint|5EE6B8|zh-CN|standard|pct|standard", "mint|5ee6b|zh-CN|standard|pct|standard", "mint|5ee6b8f|zh-CN|standard|pct|standard",
@@ -336,7 +349,7 @@ static void t25_appearance_upgrade() {
         if (p.accent != c.accent) std::fprintf(stderr, "upgrade of %s: accent %06x\n", c.stored, static_cast<unsigned>(p.accent));
         CHECK_EQ(p.accent, c.accent);
         CHECK(p.style == SwitchStyle::List);
-        CHECK_EQ(serialize_pages(p.pages), std::string("S+O+C-P-U-"));
+        CHECK_EQ(serialize_pages(p.pages), std::string("S+O+C-P-U-T-"));
     }
     const Appearance six = parse_appearance("mint|-|en-US|large|nopct|thick");
     CHECK(six.lang == Lang::EnUS && six.size == SizeTier::Large && !six.show_percent && six.ring == RingTier::Thick);
@@ -345,7 +358,7 @@ static void t25_appearance_upgrade() {
     // Before 0.3.19 there were no hands: what was stored gets them, as a new device does.
     for (const char *s : {"mint|-|zh-CN|standard", "mint|-|en-US|large|nopct|thick", "night|-|zh-CN|standard|pct|standard|S+O+C-P-|icons"}) CHECK(parse_appearance(s).clock_hands);
     const Appearance nine = parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|nohands");
-    CHECK(!nine.clock_hands && nine.style == SwitchStyle::Icons && nine.lang == Lang::EnUS && serialize_pages(nine.pages) == "C+S-O+P-U-");
+    CHECK(!nine.clock_hands && nine.style == SwitchStyle::Icons && nine.lang == Lang::EnUS && serialize_pages(nine.pages) == "C+S-O+P-U-T-");
     CHECK(parse_appearance("night|-|en-US|small|nopct|thin|C+S-O+P-|icons|hands").clock_hands);
 }
 static void t6_font_tiers() {
@@ -1022,44 +1035,44 @@ static void t19_charge_view() {
 // ---- T24 ----
 static void t24_pages() {
     const PageOrder d = default_pages();
-    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-"));
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-T-"));
     CHECK(home_view(d) == View::Switch);
     CHECK(nav_views(d) == (std::vector<View>{View::Switch, View::Overview}));
     // The home page is the first shown one, not the first slot.
     PageOrder o = d;
     CHECK(pages_toggle(o, 0));                       // hide Switch
-    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-"));
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-T-"));
     CHECK(home_view(o) == View::Overview);
     CHECK(nav_views(o) == std::vector<View>{View::Overview});
     // The last shown page cannot be hidden.
     CHECK(!pages_toggle(o, 1));
-    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-"));
+    CHECK_EQ(serialize_pages(o), std::string("S-O+C-P-U-T-"));
     CHECK(pages_toggle(o, 2));                       // show Clock
     CHECK(pages_toggle(o, 1));                       // now Overview can go
     CHECK(home_view(o) == View::Clock);
-    CHECK(!pages_toggle(o, 5) && !pages_toggle(o, 99));
+    CHECK(!pages_toggle(o, 6) && !pages_toggle(o, 99));
     // Moves swap with the neighbour; the ends and slots out of range are refused and change nothing.
     o = d;
     CHECK(pages_move(o, 1, -1));
-    CHECK_EQ(serialize_pages(o), std::string("O+S+C-P-U-"));
+    CHECK_EQ(serialize_pages(o), std::string("O+S+C-P-U-T-"));
     CHECK(home_view(o) == View::Overview);
     CHECK(pages_move(o, 0, +1));
-    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-"));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-T-"));
     CHECK(!pages_move(o, 0, -1));
-    CHECK(!pages_move(o, 4, +1));
-    CHECK(!pages_move(o, 5, -1) && !pages_move(o, 7, +1) && !pages_move(o, 1, 0) && !pages_move(o, 1, 2) && !pages_move(o, 2, -2));
-    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-"));
+    CHECK(!pages_move(o, 5, +1));
+    CHECK(!pages_move(o, 6, -1) && !pages_move(o, 7, +1) && !pages_move(o, 1, 0) && !pages_move(o, 1, 2) && !pages_move(o, 2, -2));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+C-P-U-T-"));
     CHECK(pages_move(o, 3, -1));                     // Power moves up past the hidden Clock: still hidden, still not in the navigation
-    CHECK_EQ(serialize_pages(o), std::string("S+O+P-C-U-"));
+    CHECK_EQ(serialize_pages(o), std::string("S+O+P-C-U-T-"));
     CHECK(nav_views(o) == (std::vector<View>{View::Switch, View::Overview}));
     // Every order and every non-empty choice round-trips; the navigation is the shown ones in order, each once.
-    std::array<View, 5> perm = {View::Switch, View::Overview, View::Clock, View::Power, View::Usage};
+    std::array<View, 6> perm = {View::Switch, View::Overview, View::Clock, View::Power, View::Usage, View::Todo};
     std::sort(perm.begin(), perm.end());
     int seen = 0;
     do {
-        for (int mask = 1; mask < 32; ++mask) {
+        for (int mask = 1; mask < 64; ++mask) {
             PageOrder p{};
-            for (size_t i = 0; i < 5; ++i) p[i] = {perm[i], ((mask >> i) & 1) != 0};
+            for (size_t i = 0; i < 6; ++i) p[i] = {perm[i], ((mask >> i) & 1) != 0};
             PageOrder q = default_pages();
             if (__builtin_popcount(static_cast<unsigned>(mask)) > static_cast<int>(kMaxShownPages)) {   // five shown: refused
                 CHECK(!parse_pages(serialize_pages(p), q));
@@ -1075,7 +1088,7 @@ static void t24_pages() {
             ++seen;
         }
     } while (std::next_permutation(perm.begin(), perm.end()));
-    CHECK_EQ(seen, 120 * 30);
+    CHECK_EQ(seen, 720 * 56);   // 6! orders, and 1 to 4 of 6 shown
     for (const char *bad : {"", "S+O+C-", "S+O+C-P-X+", "S+S+C-P-", "S+O+C-Q-", "S*O+C-P-", "S-O-C-P-", "s+o+c-p-", "S+O+C-P", "S+O+C-P-\n", "SOCP", "S+O+C-P-S+"}) {
         PageOrder q = default_pages();
         q[0].shown = false; q[2].shown = true;   // not the default, to see that a refused text leaves it alone
@@ -1181,25 +1194,25 @@ static void t27_sources() {
 // ---- T28: the fifth page (13.12 G7) ----
 static void t28_usage_page_order() {
     PageOrder d = default_pages();
-    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-"));          // Usage is there, hidden
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-T-"));          // Usage is there, hidden
     PageOrder o{};
-    CHECK(parse_pages("S+O+C-P-U+", o) && serialize_pages(o) == "S+O+C-P-U+");
+    CHECK(parse_pages("S+O+C-P-U+T-", o) && serialize_pages(o) == "S+O+C-P-U+T-");
     // what 0.3.27 and earlier stored: four pages; Usage comes last, hidden
-    CHECK(parse_pages("C+S-O+P+", o) && serialize_pages(o) == "C+S-O+P+U-");
-    for (const char *bad : {"S+O+C+P+U+", "S+O+C-P-U", "S+O+C-P-U+X-", "S+O+C-P-S-", "S-O-C-P-U-", "S+O+C-P-u+", "S+O+C-U-", "S+O+C-P-U-U-"}) {
+    CHECK(parse_pages("C+S-O+P+", o) && serialize_pages(o) == "C+S-O+P+U-T-");
+    for (const char *bad : {"S+O+C+P+U+T-", "S+O+C-P-U", "S+O+C-P-U+X-", "S+O+C-P-S-", "S-O-C-P-U-T-", "S+O+C-P-u+", "S+O+C-U-", "S+O+C-P-U-U-"}) {
         PageOrder keep = default_pages();
         CHECK(!parse_pages(bad, keep));
-        CHECK_EQ(serialize_pages(keep), std::string("S+O+C-P-U-"));   // untouched
+        CHECK_EQ(serialize_pages(keep), std::string("S+O+C-P-U-T-"));   // untouched
     }
     // at most four shown
     PageOrder four{};
-    CHECK(parse_pages("S+O+C+P+U-", four));
+    CHECK(parse_pages("S+O+C+P+U-T-", four));
     CHECK(!pages_toggle(four, 4) && !four[4].shown);                   // a fifth is refused
     CHECK(pages_toggle(four, 3) && pages_toggle(four, 4) && four[4].shown);   // after one is hidden it may be shown
     CHECK(nav_views(four).size() == 4);
     // an Appearance text keeps working both ways
     Appearance a = parse_appearance("night|-|zh-CN|standard|pct|standard|S+O+C-P-|list|hands");
-    CHECK_EQ(serialize_pages(a.pages), std::string("S+O+C-P-U-"));
+    CHECK_EQ(serialize_pages(a.pages), std::string("S+O+C-P-U-T-"));
     a.pages[4].shown = true;
     CHECK(parse_appearance(serialize(a)).pages[4].shown);
 }
@@ -1295,7 +1308,222 @@ static void t29_usage_words() {
             CHECK(renderable(s, glyphs));
     for (const QuotaCard &q : v.quotas) CHECK(renderable(q.label, glyphs) && renderable(q.reset, glyphs));
 }
+
+// ---- T30 ----
+static void t30_todo_page_order() {
+    PageOrder d = default_pages();
+    CHECK_EQ(serialize_pages(d), std::string("S+O+C-P-U-T-"));
+    CHECK(d[5].view == View::Todo && !d[5].shown);
+    PageOrder o{};
+    CHECK(parse_pages("S+O+C-P-U-T+", o) && serialize_pages(o) == "S+O+C-P-U-T+");
+    CHECK(parse_pages("C+S-O+P+", o) && serialize_pages(o) == "C+S-O+P+U-T-");       // 0.3.27
+    CHECK(parse_pages("C+S-O+U+P-", o) && serialize_pages(o) == "C+S-O+U+P-T-");     // 0.3.28 to 0.3.30
+    for (const char *bad : {"S+O+C+P+U-T+", "S+O+C-P-U-T", "S+O+C-P-T-", "S+O+C-P-U-T-T-", "S+O+C-P-U-t-", "S+O+T-P-U-C-C-"}) {
+        PageOrder keep = default_pages();
+        CHECK(!parse_pages(bad, keep));
+        CHECK_EQ(serialize_pages(keep), std::string("S+O+C-P-U-T-"));
+    }
+    PageOrder four{};
+    CHECK(parse_pages("S+O+C+P+U-T-", four));
+    CHECK(!pages_toggle(four, 5) && !four[5].shown);
+    CHECK(pages_toggle(four, 2) && pages_toggle(four, 5) && four[5].shown);
+    CHECK(nav_views(four) == (std::vector<View>{View::Switch, View::Overview, View::Power, View::Todo}));
+    Appearance a = parse_appearance("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands");
+    CHECK_EQ(serialize_pages(a.pages), std::string("S+O+C-P-U-T-"));
+    a.pages[5].shown = true;
+    CHECK(parse_appearance(serialize(a)).pages[5].shown);
+}
+// ---- T31 ----
+static ble::Todo td(const char *id, const char *title, ble::TodoKind k, int m, int d, int hm, const char *list = "工作") {
+    ble::Todo t;
+    t.id = id; t.title = title; t.list = list; t.kind = k;
+    t.month = static_cast<uint8_t>(m); t.day = static_cast<uint8_t>(d); t.minute = static_cast<int16_t>(hm);
+    return t;
+}
+static void t31_todo_words() {
+    using K = ble::TodoKind;
+    ble::TodoList l;
+    l.items = {td("000000000001", "交季度报告", K::Overdue, 11, 10, -1), td("000000000002", "续费域名", K::Overdue, 11, 8, 570, ""),
+               td("000000000003", "回复设计评审", K::Today, 11, 11, 870), td("000000000004", "给猫买粮", K::Today, 11, 11, -1, "家"),
+               td("000000000005", "预约体检", K::Tomorrow, 11, 12, -1), td("000000000006", "看牙", K::Tomorrow, 11, 12, 540),
+               td("000000000007", "交房租", K::Later, 12, 1, -1), td("000000000008", "读完那本书", K::None, 0, 0, -1)};
+    l.total = 11;
+    // L3: nothing yet
+    TodoView w = make_todos(Lang::ZhCN, nullptr, "", 0, true);
+    CHECK(w.state == TodoView::State::Waiting && w.status == "等 App 发来待办" && w.groups.empty() && !w.can_act);
+    // fresh
+    TodoView v = make_todos(Lang::ZhCN, &l, "", 3000, true);
+    CHECK(v.state == TodoView::State::Fresh && !v.dim && v.can_act && v.status == "刚刚更新" && v.count == "未完成 11 条");
+    CHECK_EQ(make_todos(Lang::ZhCN, &l, "", 45000, true).status, std::string("45 秒前更新"));
+    CHECK(v.groups.size() == 4);
+    if (v.groups.size() == 4) {
+        CHECK(v.groups[0].kind == K::Overdue && v.groups[0].title == "已过期 · 2" && v.groups[0].rows.size() == 2);
+        CHECK(v.groups[1].kind == K::Today && v.groups[1].title == "今天 · 2" && v.groups[1].rows.size() == 2);
+        CHECK(v.groups[2].kind == K::Later && v.groups[2].title == "以后 · 3" && v.groups[2].rows.size() == 3);   // tomorrow and later
+        CHECK(v.groups[3].kind == K::None && v.groups[3].title == "没有日期 · 1" && v.groups[3].rows.size() == 1);
+        const TodoRow &a = v.groups[0].rows[0], &b = v.groups[0].rows[1];
+        CHECK(a.id == "000000000001" && a.title == "交季度报告" && a.when == "11月10日" && !a.tag && a.detail == "工作 · 11月10日");
+        CHECK(b.when == "11月8日 09:30" && b.detail == "11月8日 09:30");          // no list name: only the time
+        const TodoRow &c = v.groups[1].rows[0], &e = v.groups[1].rows[1];
+        CHECK(c.when == "14:30" && c.tag && c.detail == "工作 · 今天 14:30");
+        CHECK(e.when == "今天" && e.tag && e.detail == "家 · 今天");
+        CHECK(v.groups[2].rows[0].when == "明天" && v.groups[2].rows[1].when == "明天 09:00" && v.groups[2].rows[2].when == "12月1日");
+        CHECK(!v.groups[2].rows[0].tag && v.groups[2].rows[1].detail == "工作 · 明天 09:00");
+        CHECK(v.groups[3].rows[0].when.empty() && v.groups[3].rows[0].detail == "工作");
+    }
+    CHECK_EQ(v.more, std::string("还有 3 条"));                                  // L7: 11 on the Mac, 8 sent
+    ble::TodoList all = l; all.total = 8;
+    CHECK(make_todos(Lang::ZhCN, &all, "", 0, true).more.empty());
+    // the link is down but the list is fresh: no actions
+    CHECK(!make_todos(Lang::ZhCN, &l, "", 3000, false).can_act);
+    // L4: stale
+    TodoView s = make_todos(Lang::ZhCN, &l, "", 6 * 60000 + 1000, true);
+    CHECK(s.state == TodoView::State::Stale && s.dim && !s.can_act && s.status == "数据过期 · 6 分钟前" && s.groups.size() == 4);
+    CHECK(!s.hint.empty());
+    CHECK(make_todos(Lang::ZhCN, &l, "", ble::kTodoStaleMs, true).state == TodoView::State::Fresh);
+    // L5: off, and why; no old list
+    TodoView na = make_todos(Lang::ZhCN, &l, "access", 1000, true);
+    CHECK(na.state == TodoView::State::Off && na.groups.empty() && !na.can_act && na.status == "App 没有读提醒事项的权限");
+    CHECK(!na.hint.empty());
+    TodoView ns = make_todos(Lang::ZhCN, &l, "setting", 1000, true);
+    CHECK(ns.state == TodoView::State::Off && ns.status == "Mac 上的 DeskHub 关掉了待办");
+    // L6: none
+    ble::TodoList empty;
+    TodoView ne = make_todos(Lang::ZhCN, &empty, "", 1000, true);
+    CHECK(ne.state == TodoView::State::Empty && ne.status == "没有未完成的待办" && ne.groups.empty());
+    // English
+    TodoView en = make_todos(Lang::EnUS, &l, "", 3000, true);
+    CHECK(en.count == "11 open" && en.status == "Just updated");
+    if (en.groups.size() == 4) {
+        CHECK(en.groups[0].title == "Overdue | 2" && en.groups[1].title == "Today | 2" && en.groups[2].title == "Later | 3" && en.groups[3].title == "No date | 1");
+        CHECK(en.groups[0].rows[0].when == "Nov 10" && en.groups[0].rows[1].when == "Nov 8 09:30" && en.groups[1].rows[1].when == "Today");
+        CHECK(en.groups[2].rows[0].when == "Tomorrow" && en.groups[2].rows[1].detail == "工作 | Tomorrow 09:00");
+    }
+    CHECK_EQ(en.more, std::string("3 more"));
+    // result lines (L9, L11, L12)
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Done, true, "交季度报告", ""), std::string("已完成：交季度报告"));
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Tomorrow, true, "交季度报告", ""), std::string("已推迟到明天：交季度报告"));
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Delete, true, "交季度报告", ""), std::string("已删除：交季度报告"));
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Done, false, "交季度报告", "这条待办已经变了"), std::string("没有改成：这条待办已经变了"));
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Done, false, "交季度报告", ""), std::string("没有改成"));
+    CHECK_EQ(todo_result_text(Lang::EnUS, ble::TodoAction::Done, true, "Pay rent", ""), std::string("Done: Pay rent"));
+    CHECK(!todo_timeout_text(Lang::ZhCN).empty() && !todo_timeout_text(Lang::EnUS).empty());
+    const auto glyphs = font_glyphs();
+    for (const TodoView &x : {w, v, s, na, ns, ne, en}) {
+        for (const std::string &t : {x.status, x.count, x.hint, x.more}) CHECK(renderable(t, glyphs));
+        for (const TodoGroup &g : x.groups) {
+            CHECK(renderable(g.title, glyphs));
+            for (const TodoRow &r : g.rows) CHECK(renderable(r.when, glyphs));
+        }
+    }
+    CHECK(renderable(todo_timeout_text(Lang::ZhCN), glyphs) && renderable(todo_result_text(Lang::ZhCN, ble::TodoAction::Tomorrow, true, "", ""), glyphs));
+}
+// ---- T32 ----
+static bool has_cjk_common(uint32_t cp) { return cp < 0x80 || cp == 0x4EA4 /* 交 */ || cp == 0x62A5 /* 报 */; }
+static void t32_displayable() {
+    CHECK_EQ(displayable("交报 ok", has_cjk_common), std::string("交报 ok"));
+    CHECK_EQ(displayable("交\xe9\xbe\x98报", has_cjk_common), std::string("交?报"));                  // 龘: not in the font
+    CHECK_EQ(displayable("\xf0\x9f\x8e\x82 ok", has_cjk_common), std::string("? ok"));                 // an emoji
+    CHECK_EQ(displayable("\xe2\x9d\xa4\xef\xb8\x8f ok", has_cjk_common), std::string("? ok"));         // a heart and its variation selector
+    CHECK_EQ(displayable("\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbb", has_cjk_common), std::string("??"));   // two joined by ZWJ
+    CHECK_EQ(displayable("ab\xe4\xba", has_cjk_common), std::string("ab?"));                          // cut in the middle of a character
+    CHECK_EQ(displayable("", has_cjk_common), std::string(""));
+}
+
+// ---- T33 ----
+static void t33_todo_edit() {
+    using K = ble::TodoKind;
+    CHECK(repeat_text(Lang::ZhCN, "") == "不重复" && repeat_text(Lang::ZhCN, "d1") == "每天" && repeat_text(Lang::ZhCN, "wd") == "工作日");
+    CHECK(repeat_text(Lang::ZhCN, "w1") == "每周" && repeat_text(Lang::ZhCN, "m1") == "每月" && repeat_text(Lang::ZhCN, "y1") == "每年");
+    CHECK(repeat_text(Lang::ZhCN, "d3") == "每 3 天" && repeat_text(Lang::ZhCN, "w2") == "每 2 周" && repeat_text(Lang::ZhCN, "m12") == "每 12 个月" && repeat_text(Lang::ZhCN, "y99") == "每 99 年");
+    CHECK(repeat_text(Lang::ZhCN, "x") == "自定义" && repeat_text(Lang::EnUS, "w2") == "Every 2 weeks" && repeat_text(Lang::EnUS, "d1") == "Daily");
+    // the month wheel
+    auto months = month_choices(Lang::ZhCN, true, 2026, 11, 2026, 12);
+    CHECK(months.size() == 13 && months[0].year == 2026 && months[0].month == 11 && months[0].label == "11月");
+    CHECK(months[1].label == "12月" && months[2].year == 2027 && months[2].month == 1 && months[2].label == "2027年1月" && months[12].month == 11);
+    auto earlier = month_choices(Lang::ZhCN, true, 2026, 11, 2026, 8);   // an overdue one from August
+    CHECK(earlier.front().month == 8 && earlier.back().year == 2027 && earlier.back().month == 11 && earlier.size() == 16);
+    auto unknown = month_choices(Lang::ZhCN, false, 1970, 1, 2026, 5);   // the device does not know the date
+    CHECK(unknown.size() == 13 && unknown.front().year == 2026 && unknown.front().month == 5);
+    CHECK(month_choices(Lang::EnUS, true, 2026, 11, 0, 0)[2].label == "Jan 2027");
+    // the draft
+    ble::Todo t = td("000000000003", "回复设计评审", K::Today, 11, 11, 870);
+    t.year = 2026; t.repeat = "w1"; t.list_id = "aaaaaaaaaaaa"; t.alarm = true; t.version = "0a1b2c3d";
+    TodoDraft d = todo_draft(t, true, 2026, 11, 11);
+    CHECK(d.when == TodoDraft::When::Timed && d.year == 2026 && d.month == 11 && d.day == 11 && d.minute == 870 && d.repeat == "w1" && d.alarm);
+    ble::TodoEdit e = todo_edit_of(t, d);
+    CHECK(ble::valid_edit(e) && e.id == t.id && e.version == "0a1b2c3d" && e.minute == 870 && e.alarm && e.list_id == "aaaaaaaaaaaa");
+    d.when = TodoDraft::When::AllDay;
+    e = todo_edit_of(t, d);
+    CHECK(ble::valid_edit(e) && e.minute == -1 && !e.alarm);              // no time: no ring
+    d.when = TodoDraft::When::None;
+    e = todo_edit_of(t, d);
+    CHECK(ble::valid_edit(e) && e.year == 0 && e.month == 0 && e.day == 0 && e.minute == -1 && !e.alarm);
+    d.when = TodoDraft::When::Timed; d.month = 2; d.day = 31; d.year = 2027;
+    e = todo_edit_of(t, d);
+    CHECK(ble::valid_edit(e) && e.day == 28);                             // kept inside its month
+    ble::Todo undated = td("000000000008", "读完那本书", K::None, 0, 0, -1);
+    undated.list_id = "aaaaaaaaaaaa"; undated.version = "0a1b2c3d";
+    TodoDraft u = todo_draft(undated, true, 2026, 11, 11);
+    CHECK(u.when == TodoDraft::When::None && u.year == 2026 && u.month == 11 && u.day == 11 && u.minute == 540);   // ready for a date: today 09:00
+    // the "when" in words
+    TodoDraft w = todo_draft(t, true, 2026, 11, 11);
+    CHECK(draft_when_text(Lang::ZhCN, w, 2026) == "11月11日 14:30");
+    w.when = TodoDraft::When::AllDay;
+    CHECK(draft_when_text(Lang::ZhCN, w, 2026) == "11月11日 全天");
+    w.when = TodoDraft::When::None;
+    CHECK(draft_when_text(Lang::ZhCN, w, 2026) == "没有日期");
+    w = todo_draft(t, true, 2026, 11, 11); w.year = 2027; w.month = 1; w.day = 3;
+    CHECK(draft_when_text(Lang::ZhCN, w, 2026) == "2027年1月3日 14:30");
+    // the detail line says the repeat and the ring
+    ble::TodoList l; l.items = {t}; l.total = 1;
+    TodoView v = make_todos(Lang::ZhCN, &l, "", 0, true);
+    CHECK(!v.groups.empty() && v.groups[0].rows[0].detail == "工作 · 今天 14:30 · 每周 · 响铃");
+    const auto glyphs = font_glyphs();
+    for (const char *r : {"", "d1", "wd", "w1", "m1", "y1", "d3", "w2", "m4", "y5", "x"}) CHECK(renderable(repeat_text(Lang::ZhCN, r), glyphs));
+    for (const auto &m : months) CHECK(renderable(m.label, glyphs));
+    CHECK(renderable(v.groups[0].rows[0].detail, glyphs));
+    CHECK_EQ(todo_result_text(Lang::ZhCN, ble::TodoAction::Edit, true, "回复设计评审", ""), std::string("已更改：回复设计评审"));
+}
+// ---- T34 ----
+static void t34_ringing() {
+    using K = ble::TodoKind;
+    auto ringing = [](const char *id, int y, int m, int d, int hm, bool alarm) {
+        ble::Todo t = td(id, id, K::Today, m, d, hm);
+        t.year = static_cast<uint16_t>(y); t.alarm = alarm;
+        return t;
+    };
+    std::vector<ble::Todo> list = {ringing("000000000001", 2026, 11, 12, 870, true), ringing("000000000002", 2026, 11, 12, 870, true),
+                                   ringing("000000000003", 2026, 11, 12, 900, false), ringing("000000000004", 2026, 11, 13, 870, true)};
+    TodoRinger r;
+    CHECK(!r.due(list, true, 2026, 11, 12, 869, 0).has_value());                     // not yet
+    CHECK(!r.due(list, false, 2026, 11, 12, 870, 0).has_value());                    // M7: the time is not known
+    auto a = r.due(list, true, 2026, 11, 12, 870, 1000);
+    CHECK(a && a->id == "000000000001");                                            // M12: the first in the list
+    auto b = r.due(list, true, 2026, 11, 12, 870, 2000);
+    CHECK(b && b->id == "000000000002");                                            // then the next one
+    CHECK(!r.due(list, true, 2026, 11, 12, 870, 3000).has_value());                  // M9: each once
+    CHECK(!r.due(list, true, 2026, 11, 12, 900, 4000).has_value());                  // no ring set
+    CHECK(!r.due(list, true, 2026, 11, 12, 871, 5000).has_value());                  // a minute late: it is over
+    // again in 10 minutes, once
+    r.snooze(*a, 10000);
+    CHECK(!r.due(list, true, 2026, 11, 12, 875, 10000 + 9 * 60000).has_value());
+    auto c = r.due(list, true, 2026, 11, 12, 880, 10000 + 10 * 60000);
+    CHECK(c && c->id == "000000000001");
+    CHECK(!r.due(list, true, 2026, 11, 12, 881, 10000 + 11 * 60000).has_value());
+    // the same to-do moved to another time rings again then
+    list[0].minute = 900;
+    CHECK(r.due(list, true, 2026, 11, 12, 900, 20 * 60000).has_value());
+    r.reset();
+    list[0].minute = 870;
+    CHECK(r.due(list, true, 2026, 11, 12, 870, 0).has_value());                       // after a restart it may ring once more
+}
 int main() {
+    t33_todo_edit();
+    t34_ringing();
+    t30_todo_page_order();
+    t31_todo_words();
+    t32_displayable();
     t1_palettes_readable();
     t2_contrast_maths();
     t3_accent_guard();

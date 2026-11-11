@@ -7,14 +7,14 @@
 #include <vector>
 
 namespace dh::audio {
-enum class Tone { Confirm, Fail };
+enum class Tone { Confirm, Fail, Alarm };
 
 constexpr int kMinRate = 8000, kMaxRate = 48000;   // the rates a codec of this kind is run at
 constexpr int kMaxMs = 500;                         // no tone is longer than this
 constexpr int kPeak = 9830;                         // 30 % of full scale: the loudest sample of a tone at level 100
 
 // Mono signed 16-bit samples. Confirm: two notes, rising (880 Hz for 70 ms, 1320 Hz for 110 ms). Fail: two notes, falling
-// (440 Hz for 120 ms, 330 Hz for 160 ms). Each note fades in and out over 8 ms, so there is no click. Empty for a rate or a
+// (440 Hz for 120 ms, 330 Hz for 160 ms). Alarm (a to-do is due, 13.14): three beeps of 1320 Hz for 90 ms, 60 ms apart. Each note fades in and out over 8 ms, so there is no click. Empty for a rate or a
 // level (1 to 100) out of range: no sound at all instead of a wrong one.
 std::vector<int16_t> render(Tone, int rate, int level_percent);
 

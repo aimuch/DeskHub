@@ -120,6 +120,11 @@ void on_command(const std::string &text, bool quiet_hours, int64_t now_ms) {
     if (g_available.load() && g_gate.allow(now_ms, g_enabled.load(), quiet_hours)) ask(*tone);
 }
 
+bool ring(bool quiet_hours) {
+    if (quiet_hours || !g_available.load()) return false;
+    return ask(Tone::Alarm);
+}
+
 void on_pairing_done(int64_t now_ms) {
     std::lock_guard<std::mutex> lock(g_gate_mutex);
     if (g_available.load() && g_gate.allow(now_ms, g_enabled.load(), false)) ask(Tone::Confirm);

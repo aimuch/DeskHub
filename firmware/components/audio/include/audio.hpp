@@ -17,4 +17,7 @@ bool test();
 // A command text of the snapshot, or the end of a pairing: plays when the rules allow it. `quiet_hours`: the night limit is on now.
 void on_command(const std::string &text, bool quiet_hours, int64_t now_ms);
 void on_pairing_done(int64_t now_ms);
+// A to-do with a ring is due (docs/desktop-app-design.md 13.14 M8, M11): three beeps, whatever the "sounds on" setting (the ring is
+// set per to-do), never in the quiet hours. false: no speaker, the quiet hours, or the queue is full.
+bool ring(bool quiet_hours);
 }  // namespace dh::audio

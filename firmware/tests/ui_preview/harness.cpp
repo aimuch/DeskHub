@@ -3,6 +3,18 @@
 // the touch controller, the power chip or the network.
 //
 // Failure modes, written before the UI code (the model-level ones are in firmware/tests/ui_model_test.cpp):
+//  A43 The to-do board (docs/design v2 Todo, TodoMenu, TodoDelete, TodoStale; docs/desktop-app-design.md 13.13): a sixth page,
+//      hidden by default. A tap selects a row (the full title, the list and the time) and a second tap unselects it. A long press
+//      opens the actions only while the list is fresh, the link is secure and nothing waits; "cancel" or a tap outside closes them
+//      and sends nothing. "Done" and "move to tomorrow" send one action. "Delete..." asks again; only the second "delete" sends,
+//      and after 10 s the question goes away by itself. The waiting line and the result line show. Waiting, off, empty, stale
+//      have their words; a stale list is dim and cannot act. A character the font lacks is drawn as "?".
+//  A44 Changing a to-do (docs/design v2 TodoMenu2, TodoEdit, TodoEditWhen, TodoEditRepeat, TodoEditList, TodoRing; 13.14): the menu has
+//      "Change..."; the edit page shows the to-do's due time, repeat, list and ring; the wheels change the due time and "OK" takes it
+//      back to the edit page, "Back" does not; all day and no date drop the ring; a preset or "every N" sets the repeat; a list can
+//      be chosen; only "Save" sends one edit, with the version; "Cancel" sends nothing. A to-do with a ring rings at its minute: the
+//      page "due now", one ring of the speaker (none in the quiet hours), "again in 10 minutes" brings it back once, "done" sends
+//      the action, it closes by itself after a minute.
 //  A1  Init: a failed display lock (timeout, invalid state) builds no screen, creates no timer, unlocks nothing and
 //      leaves UI_LOCK_FAILED in the snapshot. A good start locks once and unlocks once.
 //  A2  Heartbeat: dead before the first tick, alive after, dead after 2 s, and right across the 32-bit wrap.
@@ -235,6 +247,8 @@ void on_command(const std::string &text, bool quiet_hours, int64_t) {
     if (tone_for_command(text)) audio_commands.push_back(text + (quiet_hours ? "|quiet" : ""));
 }
 void on_pairing_done(int64_t) { ++audio_paired; }
+int rings = 0;
+bool ring(bool quiet_hours) { if (!audio_available || quiet_hours) return false; ++rings; return true; }
 }  // namespace audio
 esp_err_t board_brightness(int percent) { ++brightness_calls; if (mock_brightness_result == ESP_OK) mock_brightness = percent; return mock_brightness_result; }
 esp_err_t board_rotation(int degrees) { ++rotation_calls; if (mock_rotation_result == ESP_OK) mock_rotation = degrees; return mock_rotation_result; }
@@ -302,6 +316,32 @@ bool usage(Usage &out, int64_t &age_ms) {
     age_ms = mock_ms - mock_usage_at;
     return true;
 }
+TodoState mock_todos;
+int64_t mock_todos_at = 0, mock_outcome_at = 0;
+std::vector<std::pair<std::string, TodoAction>> acts_sent;
+TodoState todos() {
+    TodoState t = mock_todos;
+    t.age_ms = mock_ms - mock_todos_at;
+    t.outcome_age_ms = mock_ms - mock_outcome_at;
+    return t;
+}
+std::vector<TodoEdit> edits_sent;
+bool todo_edit(const TodoEdit &e) {
+    if (!mock.secure || mock_todos.waiting || !valid_edit(e)) return false;
+    edits_sent.push_back(e);
+    mock_todos.waiting = true;
+    return true;
+}
+bool todo_act(const std::string &id, TodoAction a) {
+    if (!mock.secure || mock_todos.waiting) return false;
+    bool known = false;
+    for (const auto &t : mock_todos.list.items) known = known || t.id == id;
+    if (!known) return false;
+    acts_sent.push_back({id, a});
+    mock_todos.waiting = true;
+    mock_todos.has_outcome = false;
+    return true;
+}
 }  // namespace dh::ble
 static void reset_ble() {
     dh::ble::mock = {};
@@ -313,6 +353,9 @@ static void reset_ble() {
     dh::ble::pairing_opens = dh::ble::pairing_closes = dh::ble::forgets = 0;
     dh::ble::has_mock_usage = false;
     dh::ble::mock_usage = {};
+    dh::ble::mock_todos = {};
+    dh::ble::acts_sent.clear();
+    dh::ble::edits_sent.clear();
 }
 
 // Radio service simulated at its public boundary; LVGL input and widgets are real.
@@ -604,6 +647,7 @@ static void check_corners(const std::string &where) {
             lv_obj_get_coords(o, &a);
             const int w = lv_area_get_width(&a), h = lv_area_get_height(&a);
             if (w > 40 || h > 20 || a.y1 < 0 || a.y2 >= 480) return;
+            if (body_clips(o, a)) return;   // scrolled out of the body: clipped there, as for the labels above
             if (lv_obj_get_style_bg_opa(o, LV_PART_MAIN) == LV_OPA_TRANSP && lv_obj_get_style_border_width(o, LV_PART_MAIN) == 0) return;
             NOTE(all_visible(a.x1, a.y1, a.x2, a.y2), where << " mark cut by a rounded corner [" << a.x1 << "," << a.y1 << "," << a.x2 << "," << a.y2 << "]");
         });
@@ -686,13 +730,13 @@ static void save_png_source(const std::string &name) {
 
 using detail::Page;
 using detail::PowerTab;
-static const std::array<std::pair<Page, PowerTab>, 17> kViews = {{
+static const std::array<std::pair<Page, PowerTab>, 18> kViews = {{
     {Page::Home, PowerTab::Level}, {Page::Actions, PowerTab::Level}, {Page::Pages, PowerTab::Level}, {Page::Settings, PowerTab::Level},
     {Page::Power, PowerTab::Level}, {Page::Power, PowerTab::Readings}, {Page::Power, PowerTab::Protect}, {Page::Connect, PowerTab::Level},
     {Page::Appearance, PowerTab::Level}, {Page::Display, PowerTab::Level}, {Page::Clock, PowerTab::Level}, {Page::Device, PowerTab::Level}, {Page::Sound, PowerTab::Level}, {Page::Time, PowerTab::Level},
-    {Page::Sources, PowerTab::Level}, {Page::SourceEdit, PowerTab::Level}, {Page::Usage, PowerTab::Level}}};
+    {Page::Sources, PowerTab::Level}, {Page::SourceEdit, PowerTab::Level}, {Page::Usage, PowerTab::Level}, {Page::Todo, PowerTab::Level}}};
 static const char *view_name(size_t i) {
-    static const char *n[] = {"home", "actions", "pages", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time", "sources", "source-edit", "usage"};
+    static const char *n[] = {"home", "actions", "pages", "settings", "power-level", "power-readings", "power-protect", "connect", "appearance", "display", "clock", "device", "sound", "time", "sources", "source-edit", "usage", "todo"};
     return n[i];
 }
 
@@ -709,24 +753,24 @@ static void case_pages_and_home() {
     check_layout("pages"); check_targets("pages");
     // show the clock: stored, and the navigation grows at once
     EXPECT(tap_area(detail::pages_control_area, 2, 0));
-    EXPECT(stored_text.find("|S+O+C+P-U-|") != std::string::npos);
+    EXPECT(stored_text.find("|S+O+C+P-U-T-|") != std::string::npos);
     EXPECT(nav_line() == "切源,总览,时钟,设置");
     EXPECT(detail::current_page() == Page::Pages);
     // move the overview up: it is the home page now
     EXPECT(tap_area(detail::pages_control_area, 1, 1));
-    EXPECT(stored_text.find("|O+S+C+P-U-|") != std::string::npos);
+    EXPECT(stored_text.find("|O+S+C+P-U-T-|") != std::string::npos);
     EXPECT(nav_line() == "总览,切源,时钟,设置");
     EXPECT(has("首页"));
     // hide down to one page; the last one cannot be hidden, and the page says so
     EXPECT(tap_area(detail::pages_control_area, 1, 0));            // hide Switch
     EXPECT(tap_area(detail::pages_control_area, 2, 0));            // hide Clock
     const std::string one = stored_text;
-    EXPECT(one.find("|O+S-C-P-U-|") != std::string::npos && nav_line() == "总览,设置");
+    EXPECT(one.find("|O+S-C-P-U-T-|") != std::string::npos && nav_line() == "总览,设置");
     EXPECT(tap_area(detail::pages_control_area, 0, 0));            // hide Overview: refused
     EXPECT(stored_text == one && nav_line() == "总览,设置" && has("至少留一个页面"));
     // the ends do nothing
     EXPECT(tap_area(detail::pages_control_area, 0, 1));
-    EXPECT(tap_area(detail::pages_control_area, 4, 2));            // the last row is the fifth now (Usage)
+    EXPECT(tap_area(detail::pages_control_area, 5, 2));            // the last row is the sixth now (To-do)
     EXPECT(stored_text == one);
     // a failed save keeps the old order and says so
     store_ok = false;
@@ -969,7 +1013,7 @@ static void case_time_options() {   // A40
     // hands off: the large digits again, with the seconds after them
     goto_view(Page::Appearance);
     EXPECT(click_after("时钟表针", "隐藏")); step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|nohands" && !detail::current_appearance().clock_hands);
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-T-|list|nohands" && !detail::current_appearance().clock_hands);
     EXPECT(detail::body_scroll_y() > 0);   // a new look rebuilds the screen and keeps the place on the page (the choice is at the bottom)
     EXPECT(chosen_after("时钟表针", "隐藏"));
     goto_view(Page::Clock);
@@ -1084,6 +1128,275 @@ static void case_usage_page() {   // A42
     give_usage(); goto_view(Page::Usage);
     EXPECT(nav_line() == "Switch,Status,Usage,Settings" && has("Calls today") && has("5 h"));
     check_layout("usage-en-large");
+}
+// ---- A43: the to-do board ----
+static void link_up();
+static dh::ble::Todo mk_todo(const char *id, const char *title, dh::ble::TodoKind k, int m, int d, int hm, const char *list = "工作") {
+    dh::ble::Todo t;
+    t.id = id; t.title = title; t.list = list; t.kind = k;
+    t.month = static_cast<uint8_t>(m); t.day = static_cast<uint8_t>(d); t.minute = static_cast<int16_t>(hm);
+    return t;
+}
+static void give_todos(int64_t age_ms = 0) {
+    using K = dh::ble::TodoKind;
+    auto &t = dh::ble::mock_todos;
+    t.has_list = true;
+    t.off_why.clear();
+    t.list.items = {mk_todo("000000000001", "交季度报告", K::Overdue, 11, 10, -1), mk_todo("000000000002", "续费域名", K::Overdue, 11, 8, -1, ""),
+                    mk_todo("000000000003", "回复设计评审的意见，附上新的截图和改过的流程", K::Today, 11, 11, 870),
+                    mk_todo("000000000004", "给猫买粮", K::Today, 11, 11, -1, "家"), mk_todo("000000000005", "预约体检", K::Tomorrow, 11, 12, -1)};
+    t.list.total = 9;
+    dh::ble::mock_todos_at = mock_ms - age_ms;
+}
+static void long_press(int index) {
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!detail::todo_row_area(index, &x1, &y1, &x2, &y2)) return;
+    pointer(true, (x1 + x2) / 2, (y1 + y2) / 2);
+    for (int i = 0; i < 8; ++i) step(100);
+    pointer(false, (x1 + x2) / 2, (y1 + y2) / 2);
+    step(); step();
+}
+static bool tap_row(int index) {
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    if (!detail::todo_row_area(index, &x1, &y1, &x2, &y2)) return false;
+    tap((x1 + x2) / 2, (y1 + y2) / 2);
+    step(); step();
+    return true;
+}
+static void case_todo_board() {   // A43
+    using dh::ble::TodoAction;
+    // hidden by default; the Pages page has a sixth row
+    fresh();
+    goto_view(Page::Pages);
+    EXPECT(has("待办"));
+    check_layout("pages-todo"); check_targets("pages-todo");
+    EXPECT(tap_area(detail::pages_control_area, 5, 0));
+    EXPECT(stored_text.find("U-T+") != std::string::npos && nav_line() == "切源,总览,待办,设置");
+    // L3: nothing yet
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-T+|list|hands");
+    goto_view(Page::Todo);
+    EXPECT(has("等 App 发来待办") && detail::todo_row_count() == 0);
+    check_layout("todo-waiting");
+    // fresh
+    link_up(); give_todos(3000); step(); step();
+    EXPECT(has("未完成 9 条") && has("刚刚更新") && has("已过期 · 2") && has("今天 · 2") && has("以后 · 1"));
+    EXPECT(has("交季度报告") && has("11月10日") && has("14:30") && has("今天") && has("明天") && has("还有 4 条"));
+    EXPECT(detail::todo_row_count() == 5 && detail::todo_selected().empty());
+    check_layout("todo"); check_targets("todo"); save_png_source("state-todo");
+    // a tap selects, a second tap unselects
+    EXPECT(tap_row(2));
+    EXPECT(detail::todo_selected() == "000000000003" && has("工作 · 今天 14:30"));
+    check_layout("todo-selected"); check_targets("todo-selected");
+    EXPECT(tap_row(2));
+    EXPECT(detail::todo_selected().empty() && !has("工作 · 今天 14:30"));
+    // a long press opens the actions; cancel, and a tap outside, send nothing
+    long_press(0);
+    EXPECT(detail::todo_dialog_mode() == 1 && has("完成") && has("推迟到明天") && has("删除…") && has("取消"));
+    check_layout("todo-menu"); check_targets("todo-menu"); save_png_source("state-todo-menu");
+    EXPECT(click_text("取消")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::acts_sent.empty());
+    long_press(0);
+    tap(240, 466); step(); step();                                   // below the box
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::acts_sent.empty());
+    // done: one action, the waiting line, then the result
+    long_press(0);
+    EXPECT(click_text("完成")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::acts_sent.size() == 1);
+    if (!dh::ble::acts_sent.empty()) EXPECT(dh::ble::acts_sent[0].first == "000000000001" && dh::ble::acts_sent[0].second == TodoAction::Done);
+    EXPECT(has("正在等 App 回答…"));
+    long_press(1);                                                   // one waits: no actions
+    EXPECT(detail::todo_dialog_mode() == 0);
+    auto &t = dh::ble::mock_todos;
+    t.waiting = false; t.has_outcome = true; t.outcome = {false, TodoAction::Done, true, "交季度报告", ""}; dh::ble::mock_outcome_at = mock_ms; step(); step();
+    EXPECT(has("已完成：交季度报告"));
+    // move to tomorrow
+    long_press(4);
+    EXPECT(click_text("推迟到明天")); step(); step();
+    EXPECT(dh::ble::acts_sent.size() == 2);
+    if (dh::ble::acts_sent.size() == 2) EXPECT(dh::ble::acts_sent[1].first == "000000000005" && dh::ble::acts_sent[1].second == TodoAction::Tomorrow);
+    t.waiting = false; t.has_outcome = true; t.outcome = {false, TodoAction::Tomorrow, false, "预约体检", "这条待办已经变了"}; dh::ble::mock_outcome_at = mock_ms; step(); step();
+    EXPECT(has("没有改成：这条待办已经变了"));
+    t.has_outcome = true; t.outcome = {true, TodoAction::Tomorrow, false, "预约体检", ""}; step(); step();
+    EXPECT(has("App 没有回答，不知道改了没有"));
+    // delete asks again; it goes away by itself after 10 s
+    long_press(1);
+    EXPECT(click_text("删除…")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 2 && has("删除这条待办？") && has("续费域名") && dh::ble::acts_sent.size() == 2);
+    check_layout("todo-delete"); check_targets("todo-delete"); save_png_source("state-todo-delete");
+    for (int i = 0; i < 101; ++i) step(100);
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::acts_sent.size() == 2);
+    long_press(1);
+    EXPECT(click_text("删除…")); step(); step();
+    EXPECT(click_text("删除")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::acts_sent.size() == 3);
+    if (dh::ble::acts_sent.size() == 3) EXPECT(dh::ble::acts_sent[2].first == "000000000002" && dh::ble::acts_sent[2].second == TodoAction::Delete);
+    t.waiting = false; t.has_outcome = false;
+    // the link is down: the list is still there, but no actions
+    dh::ble::mock.secure = false; step(); step();
+    long_press(0);
+    EXPECT(detail::todo_dialog_mode() == 0);
+    dh::ble::mock.secure = true;
+    // L4: stale
+    give_todos(6 * 60000 + 1000); step(); step();
+    EXPECT(has("数据过期 · 6 分钟前") && contains("App 没连上") && has("交季度报告"));
+    EXPECT(detail::body_scroll_y() == 0);                           // a new state starts at the top, where its banner is
+    long_press(0);
+    EXPECT(detail::todo_dialog_mode() == 0);
+    check_layout("todo-stale"); save_png_source("state-todo-stale");
+    // L5: off; L6: none
+    give_todos(); t.off_why = "access"; step(); step();
+    EXPECT(has("App 没有读提醒事项的权限") && !has("交季度报告") && detail::todo_row_count() == 0);
+    check_layout("todo-off");
+    give_todos(); t.list.items.clear(); t.list.total = 0; step(); step();
+    EXPECT(has("没有未完成的待办") && detail::todo_row_count() == 0);
+    // L8: a character the font lacks
+    give_todos(); t.list.items[0].title = "交\xe9\xbe\x98报"; step(); step();
+    EXPECT(has("交?报"));
+    // a selected long title still fits
+    give_todos(); t.list.items[2].title = "回复设计评审的意见附上新的截图和改过的流程再约一次会议确认最后的方案和时间安排"; step(); step();
+    EXPECT(tap_row(2));
+    check_layout("todo-long-title");
+    // English, large text
+    fresh("night|-|en-US|large|pct|standard|S+O+C-P-U-T+|list|hands");
+    auto &t2 = dh::ble::mock_todos;
+    link_up(); give_todos();
+    {   // titles and lists the person wrote in English (an English page is ASCII only, A3)
+        const char *titles[] = {"Quarterly report", "Renew the domain", "Answer the design review with the new screenshots and the changed flow", "Cat food", "Dentist"};
+        for (size_t i = 0; i < 5; ++i) { t2.list.items[i].title = titles[i]; t2.list.items[i].list = i == 1 ? "" : "Work"; }
+    }
+    goto_view(Page::Todo);
+    EXPECT(nav_line() == "Switch,Status,To-do,Settings" && has("9 open") && has("Overdue | 2"));
+    check_layout("todo-en-large"); check_targets("todo-en-large");
+}
+// ---- A44: changing a to-do, and its ring ----
+static void give_rich_todos() {
+    using K = dh::ble::TodoKind;
+    auto &t = dh::ble::mock_todos;
+    t.has_list = true;
+    t.off_why.clear();
+    auto rich = [](const char *id, const char *title, K k, int y, int m, int d, int hm, const char *repeat, bool alarm) {
+        dh::ble::Todo x = mk_todo(id, title, k, m, d, hm);
+        x.year = static_cast<uint16_t>(y); x.repeat = repeat; x.alarm = alarm; x.list_id = "aaaaaaaaaaaa"; x.version = "0a1b2c3d";
+        return x;
+    };
+    t.list.items = {rich("000000000001", "回复设计评审", K::Today, 2026, 11, 12, 870, "w1", true), rich("000000000002", "给猫买粮", K::Today, 2026, 11, 12, -1, "", false),
+                    rich("000000000003", "读完那本书", K::None, 0, 0, 0, -1, "x", false)};
+    t.list.total = 3;
+    t.lists = {{"aaaaaaaaaaaa", "工作"}, {"bbbbbbbbbbbb", "家"}, {"cccccccccccc", "购物"}};
+    dh::ble::mock_todos_at = mock_ms;
+}
+static bool roll(int which, int index) {
+    lv_obj_t *r = detail::todo_roller(which);
+    if (!r) return false;
+    lv_roller_set_selected(r, static_cast<uint32_t>(index), LV_ANIM_OFF);
+    lv_obj_send_event(r, LV_EVENT_VALUE_CHANGED, nullptr);
+    step(); step();
+    return true;
+}
+static void case_todo_edit() {   // A44
+    using dh::ble::TodoAction;
+    fresh("night|-|zh-CN|standard|pct|standard|S+O+C-P-U-T+|list|hands");
+    setenv("TZ", "CST-8", 1); tzset();
+    detail::set_wall_for_test(1794470400);   // 2026-11-12 16:00 CST
+    link_up(); give_rich_todos(); goto_view(Page::Todo);
+    long_press(0);
+    EXPECT(detail::todo_dialog_mode() == 1 && has("更改…") && has("推迟到明天") && has("删除…"));
+    check_layout("todo-menu2"); check_targets("todo-menu2"); save_png_source("state-todo-menu2");
+    EXPECT(click_text("更改…")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 3 && has("更改待办") && has("回复设计评审") && has("11月12日 14:30") && has("每周") && has("工作"));
+    check_layout("todo-edit"); check_targets("todo-edit"); save_png_source("state-todo-edit");
+    // the wheels: back changes nothing, OK takes it
+    EXPECT(click_text("到期")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 4 && has("有时间") && has("全天") && has("没有日期"));
+    check_layout("todo-when"); check_targets("todo-when"); save_png_source("state-todo-when");
+    EXPECT(roll(1, 14) && roll(2, 9) && roll(3, 5));          // day 15, 09:05
+    EXPECT(click_text("返回")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 3 && has("11月12日 14:30"));
+    EXPECT(click_text("到期")); step(); step();
+    EXPECT(roll(0, 1) && roll(1, 2) && roll(2, 9) && roll(3, 5));   // December 3, 09:05
+    EXPECT(click_text("好")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 3 && has("12月3日 09:05"));
+    // repeat: a preset, then every 2 weeks
+    EXPECT(click_text("重复")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 5 && has("每天") && has("工作日") && has("每年"));
+    check_layout("todo-repeat"); check_targets("todo-repeat"); save_png_source("state-todo-repeat");
+    EXPECT(click_text("每天")); step(); step();
+    EXPECT(roll(4, 1) && roll(5, 1));                          // every 2 weeks
+    EXPECT(click_text("好")); step(); step();
+    EXPECT(has("每 2 周"));
+    // the list
+    EXPECT(click_text("清单")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 6 && has("家") && has("购物"));
+    check_layout("todo-list"); check_targets("todo-list"); save_png_source("state-todo-list");
+    EXPECT(click_text("家")); step(); step();
+    EXPECT(click_text("好")); step(); step();
+    EXPECT(has("家"));
+    EXPECT(dh::ble::edits_sent.empty());                       // nothing went out yet
+    // save: one edit with the version
+    EXPECT(click_text("保存")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::edits_sent.size() == 1);
+    if (dh::ble::edits_sent.size() == 1) {
+        const auto &e = dh::ble::edits_sent[0];
+        EXPECT(e.id == "000000000001" && e.version == "0a1b2c3d" && e.year == 2026 && e.month == 12 && e.day == 3 && e.minute == 545);
+        EXPECT(e.repeat == "w2" && e.list_id == "bbbbbbbbbbbb" && e.alarm);
+    }
+    auto &t = dh::ble::mock_todos;
+    t.waiting = false; t.has_outcome = true; t.outcome = {false, TodoAction::Edit, true, "回复设计评审", ""}; dh::ble::mock_outcome_at = mock_ms; step(); step();
+    EXPECT(has("已更改：回复设计评审"));
+    // all day drops the ring; cancel sends nothing
+    t.has_outcome = false;
+    long_press(0);
+    EXPECT(click_text("更改…")); step(); step();
+    EXPECT(click_text("到期")); step(); step();
+    EXPECT(click_text("全天")); step(); step();
+    EXPECT(click_text("好")); step(); step();
+    EXPECT(has("11月12日 全天") && detail::todo_ring_selected() == 0);
+    EXPECT(click_text("取消")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0 && dh::ble::edits_sent.size() == 1);
+    // a custom repeat left alone stays custom
+    long_press(2);
+    EXPECT(click_text("更改…")); step(); step();
+    EXPECT(has("自定义") && has("没有日期"));
+    EXPECT(click_text("保存")); step(); step();
+    EXPECT(dh::ble::edits_sent.size() == 2);
+    if (dh::ble::edits_sent.size() == 2) EXPECT(dh::ble::edits_sent[1].repeat == "x" && dh::ble::edits_sent[1].year == 0 && !dh::ble::edits_sent[1].alarm);
+    t.waiting = false;
+    // the to-do goes away on the Mac while its edit page is open: the page closes
+    long_press(1);
+    EXPECT(click_text("更改…")); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 3);
+    t.list.items.erase(t.list.items.begin() + 1); step(); step();
+    EXPECT(detail::todo_dialog_mode() == 0);
+    // the ring: at 14:30 of its day
+    give_rich_todos();
+    dh::audio::rings = 0;
+    detail::set_wall_for_test(1794465000 - 60);               // 14:29
+    step(); step();
+    EXPECT(!detail::todo_ring_shown() && dh::audio::rings == 0);
+    detail::set_wall_for_test(1794465000);                    // 14:30
+    step(); step();
+    EXPECT(detail::todo_ring_shown() && has("到时间了 · 14:30") && has("回复设计评审") && dh::audio::rings == 1);
+    check_layout("todo-ring"); check_targets("todo-ring"); save_png_source("state-todo-ring");
+    EXPECT(click_text("10 分钟后再响")); step(); step();
+    EXPECT(!detail::todo_ring_shown());
+    for (int i = 0; i < 5; ++i) step(100);
+    EXPECT(!detail::todo_ring_shown() && dh::audio::rings == 1);   // once per minute, not again
+    mock_ms += 600000; dh::ble::mock_todos_at = mock_ms; detail::set_wall_for_test(1794465600); step(); step();   // the App sent the list meanwhile
+    EXPECT(detail::todo_ring_shown() && dh::audio::rings == 2);
+    EXPECT(click_text("完成")); step(); step();
+    EXPECT(!detail::todo_ring_shown() && !dh::ble::acts_sent.empty() && dh::ble::acts_sent.back().second == TodoAction::Done);
+    // it closes by itself; the quiet hours make no sound
+    t.waiting = false;
+    give_rich_todos();
+    t.list.items[0].minute = 900; t.list.items[0].version = "0a1b2c3e";
+    detail::set_wall_for_test(1794466800);                    // 15:00
+    mock_config.night_enabled = true; mock_config.night_start = 0; mock_config.night_end = 1439; mock_config.revision++;
+    dh::audio::rings = 0;
+    step(); step();
+    EXPECT(detail::todo_ring_shown() && dh::audio::rings == 0);
+    for (int i = 0; i < 62; ++i) step(1000);
+    EXPECT(!detail::todo_ring_shown());
+    detail::set_wall_for_test(0);
 }
 static void case_no_metrics() {
     fresh();
@@ -1301,7 +1614,7 @@ static void case_matrix() {
                     dh::ui_pairing_hide(); step();
                 }
             }
-    EXPECT(views == 4 * 2 * 3 * 17);
+    EXPECT(views == 4 * 2 * 3 * 18);
 }
 static void case_state_fidelity() {
     using detail::header_battery_text;
@@ -1458,14 +1771,14 @@ static void case_appearance() {
     fresh();
     goto_view(Page::Appearance);
     EXPECT(click_text("深海蓝"));
-    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands");
+    EXPECT(stored_text == "ocean|-|zh-CN|standard|pct|standard|S+O+C-P-U-T-|list|hands");
     EXPECT(detail::current_appearance().theme == dh::ui::ThemeId::Ocean);
     EXPECT(lv_color_eq(lv_obj_get_style_bg_color(detail::screen_object(), LV_PART_MAIN), lv_color_hex(0x03131c)));
     EXPECT(click_text("English"));
-    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-U-|list|hands");
+    EXPECT(stored_text == "ocean|-|en-US|standard|pct|standard|S+O+C-P-U-T-|list|hands");
     EXPECT(has("Appearance") && has("Switch") && has("Status") && has("Settings") && !contains("外观"));
     EXPECT(click_text("Large"));
-    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-U-|list|hands");
+    EXPECT(detail::look.body == &btr_ui_28 && stored_text == "ocean|-|en-US|large|pct|standard|S+O+C-P-U-T-|list|hands");
     EXPECT(detail::current_page() == Page::Appearance);  // the page stays
     // a restart restores it
     const std::string saved = stored_text;
@@ -1498,7 +1811,7 @@ static void case_appearance() {
         EXPECT(swatch != nullptr);
         if (swatch) { lv_obj_scroll_to_view_recursive(swatch, LV_ANIM_OFF); lv_obj_update_layout(detail::screen_object()); lv_area_t a; lv_obj_get_coords(swatch, &a); tap((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2); }
     }
-    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands" && detail::look.palette.accent == 0x4fc3f7);
+    EXPECT(stored_text == "night|4fc3f7|zh-CN|standard|pct|standard|S+O+C-P-U-T-|list|hands" && detail::look.palette.accent == 0x4fc3f7);
     // the page of every tier still draws its own choices selected
     fresh("amber|-|zh-CN|small");
     goto_view(Page::Appearance);
@@ -1758,13 +2071,13 @@ static void case_appearance_options() {   // A19
     EXPECT(click_text("隐藏"));
     step(); step();
     EXPECT(chosen("隐藏") && !chosen("显示"));
-    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-U-|list|hands" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
+    EXPECT(stored_text == "night|-|zh-CN|standard|nopct|standard|S+O+C-P-U-T-|list|hands" && detail::header_battery_text().empty() && detail::current_appearance().show_percent == false);
     EXPECT(click_text("显示"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-|list|hands" && detail::header_battery_text() == "67");
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|standard|S+O+C-P-U-T-|list|hands" && detail::header_battery_text() == "67");
     EXPECT(click_text("粗"));
     step(); step();
-    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-U-|list|hands" && chosen("粗") && !chosen("细"));
+    EXPECT(stored_text == "night|-|zh-CN|standard|pct|thick|S+O+C-P-U-T-|list|hands" && chosen("粗") && !chosen("细"));
     fresh("mint|-|zh-CN|standard|nopct|thin");      // what is stored is what the page shows as chosen
     goto_view(Page::Appearance);
     EXPECT(chosen("隐藏") && !chosen("显示") && chosen("细") && !chosen("粗"));
@@ -2361,7 +2674,7 @@ int main(int argc, char **argv) {
         {"protect_dialog", case_protect_dialog}, {"protect_tab", case_protect_tab}, {"protect_flow", case_protect_flow},
         {"appearance_options", case_appearance_options}, {"no_experimental_word", case_no_experimental_word},
         {"pages_and_home", case_pages_and_home}, {"wake_goes_home", case_wake_goes_home}, {"switch_styles", case_switch_styles},
-        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page}, {"time_options", case_time_options}, {"usage_page", case_usage_page},
+        {"source_rename", case_source_rename}, {"themes", case_themes}, {"no_metrics", case_no_metrics}, {"clock_page", case_clock_page}, {"time_options", case_time_options}, {"usage_page", case_usage_page}, {"todo_board", case_todo_board}, {"todo_edit", case_todo_edit},
         {"ble_sources", case_ble_sources}, {"ble_pairing", case_ble_pairing}, {"ble_forget", case_ble_forget}, {"flash_worker", case_flash_worker}, {"ble_current", case_ble_current},
         {"battery_digits", case_battery_digits}, {"bolt_in_battery", case_bolt_in_battery}, {"home_without_actions", case_home_without_actions}, {"pairing_keeps_awake", case_pairing_keeps_awake}, {"no_setup_card", case_no_setup_card}, {"ring_info", case_ring_info}, {"sound", case_sound}, {"time", case_time}, {"wifi_pages", case_wifi_pages}, {"wifi_keyboard", case_wifi_keyboard}, {"screenshots", case_screenshots}};
     int failed = 0;
