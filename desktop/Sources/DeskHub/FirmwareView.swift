@@ -300,7 +300,7 @@ struct FirmwarePage: View {
             if case .sending = link.update { Button("取消") { link.cancelUpdate() } }
             Button(fw.package.map { "通过蓝牙升级到 \($0.version)" } ?? "通过蓝牙升级") { fw.bluetoothUpdate(link) }
                 .buttonStyle(.borderedProminent).tint(accent)
-                .disabled(fw.bluetoothBlocker(link) != nil || { switch link.update { case .manifest, .waitingReady, .sending, .finishing, .restarting: return true; default: return false } }())
+                .disabled(fw.bluetoothBlocker(link) != nil || { switch link.update { case .manifest, .waitingReady, .sending, .finishing, .restarting, .verifying: return true; default: return false } }())
         }
         .onAppear { fw.loadKey() }
     }
@@ -311,7 +311,8 @@ struct FirmwarePage: View {
         case .sending(let f): status("正在通过蓝牙写入", f)
         case .finishing: status("触摸屏正在核对整个镜像…", nil)
         case .restarting(let v): status("触摸屏正在重启到 \(v)，等它重新连上后读回版本…", nil)
-        case .confirmed(let v): note("已升级到 \(v)（读回确认）。新版本开机 1 分钟内自检，不过会自动回到旧版本。", okColor, "checkmark.circle.fill")
+        case .verifying(let v): status("已经在运行 \(v)，等它开机 1 分钟后的自检通过…", nil)
+        case .confirmed(let v): note("已升级到 \(v)，自检也通过了。", okColor, "checkmark.circle.fill")
         case .failed(let s): note(s, warnColor, "exclamationmark.triangle.fill")
         }
     }

@@ -27,7 +27,7 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     @Published private(set) var info: DeviceInfo?           // what the device said about itself at the last connection
     // ---- the firmware update over Bluetooth (docs/desktop-app-design.md 13.11) ----
     enum UpdatePhase: Equatable {
-        case idle, manifest, waitingReady, sending(Double), finishing, restarting(String)
+        case idle, manifest, waitingReady, sending(Double), finishing, restarting(String), verifying(String)
         case confirmed(String), failed(String)
     }
     @Published private(set) var update: UpdatePhase = .idle
@@ -261,10 +261,27 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
             remembered = p.identifier
             problem = nil
             info = ch.value.flatMap(DeviceInfo.parse)
-            if case .restarting(let target) = update {   // K3: the version read back after the restart
-                let got = info?.firmware ?? "?"
-                finishUpdate(got == target ? .confirmed(got) : .failed("读回的版本是 \(got)，不是 \(target)：没有生效（自检不过会回到旧版本）。"))
+            let reread: Bool = { if case .verifying = update { return true }; return false }()   // asked again while verifying
+            switch update {   // K3, U16: the version read back after the restart, then the self-test
+            case .restarting(let target), .verifying(let target):
+                switch BootReadBack.decide(target: target, info: info) {
+                case .confirmed(let v): finishUpdate(.confirmed(v))
+                case .failed(let why): finishUpdate(.failed(why))
+                case .waiting:
+                    if case .restarting = update {
+                        update = .verifying(target)
+                        arm(BootReadBack.verifySeconds, "新版本 2 分钟内没通过自检：不算确认。")
+                        log("verifying \(target)")
+                    }
+                    let ch = ch
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                        guard let self, case .verifying = self.update else { return }
+                        p.readValue(for: ch)
+                    }
+                }
+            default: break
             }
+            if reread, case .connected = state { return }   // the same link: nothing more to set up
             state = .connected(p.name ?? "DeskHub")
             if let events = p.services?.first?.characteristics?.first(where: { $0.uuid == Self.events }) { p.setNotifyValue(true, for: events) }
             resendSources()

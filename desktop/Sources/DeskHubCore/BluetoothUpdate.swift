@@ -107,14 +107,34 @@ public struct DeviceInfo: Equatable, Sendable {
     public var device: String
     public var firmware: String
     public var updateKey: String   // fingerprint, "" when none (firmware before 0.3.22 has no such field)
-    public init(device: String, firmware: String, updateKey: String) {
+    public var boot: String        // "pending" (self-test running), "confirmed"; "" before 0.3.29
+    public init(device: String, firmware: String, updateKey: String, boot: String = "") {
         self.device = device
         self.firmware = firmware
         self.updateKey = updateKey
+        self.boot = boot
     }
     public static func parse(_ data: Data) -> DeviceInfo? {
         guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let device = o["device"] as? String, let firmware = o["firmware"] as? String else { return nil }
-        return DeviceInfo(device: device, firmware: firmware, updateKey: o["update_key"] as? String ?? "")
+        return DeviceInfo(device: device, firmware: firmware, updateKey: o["update_key"] as? String ?? "", boot: o["boot"] as? String ?? "")
+    }
+}
+
+// After the restart (13.11 U16): the new version alone is not enough. Until 0.3.28 the App said "confirmed" as soon as the
+// version matched, while the firmware never passed its self-test and the next restart brought the old one back.
+public enum BootReadBack: Equatable, Sendable {
+    case waiting, confirmed(String), failed(String)
+    public static let verifySeconds: TimeInterval = 120   // the self-test runs 60 s after the start
+    public static func decide(target: String, info: DeviceInfo?) -> BootReadBack {
+        guard let info else { return .failed("重启后读不回版本：不算确认。") }
+        guard info.firmware == target else {
+            return .failed("读回的版本是 \(info.firmware)，不是 \(target)：新版本没有留下（自检不过会回到旧版本）。")
+        }
+        switch info.boot {
+        case "pending": return .waiting
+        case "confirmed", "": return .confirmed(target)
+        default: return .failed("设备说的开机状态看不懂（\(info.boot)）：不算确认。")
+        }
     }
 }

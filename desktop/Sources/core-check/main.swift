@@ -505,7 +505,7 @@ do {
     check(!UpdateEvent.failed("UPDATE_NOT_NEWER").words.isEmpty && UpdateEvent.reason("WHAT").contains("WHAT"), "the words")
 
     let info = DeviceInfo.parse(Data(#"{"protocol":1,"device":"deskhub-44bd8d60c598","firmware":"0.3.22","update_key":"\#(sha)"}"#.utf8))
-    check(info == DeviceInfo(device: "deskhub-44bd8d60c598", firmware: "0.3.22", updateKey: sha), "the info")
+    check(info == DeviceInfo(device: "deskhub-44bd8d60c598", firmware: "0.3.22", updateKey: sha, boot: ""), "the info")
     check(DeviceInfo.parse(Data(#"{"protocol":1,"device":"deskhub-44bd8d60c598","firmware":"0.3.21"}"#.utf8))?.updateKey == "", "an older firmware: no key field")
     check(DeviceInfo.parse(Data("[]".utf8)) == nil && DeviceInfo.parse(Data(#"{"protocol":1}"#.utf8)) == nil, "not an info")
 }
@@ -576,6 +576,27 @@ do {
     check(MagpieUsage.message(quotas: nil, usage: usage, requests: requests, now: now) == MagpieUsage.offline, "no quotas")
     check(MagpieUsage.message(quotas: quotas, usage: Data("<html>".utf8), requests: requests, now: now) == MagpieUsage.offline, "not JSON")
     check(obj(MagpieUsage.offline).count == 2, "the offline message has two fields")
+}
+
+// ---- F21: an update counts only when the new firmware passed its self-test (13.11 U16) ----
+// Ways it goes wrong: the new version runs but never passes its self-test, and the next restart brings the old one back
+// (0.3.27 and 0.3.28, 2026-11-08); the device rolls back while the App waits; an older firmware has no "boot" field;
+// a field the App does not know; nothing read back.
+do {
+    func info(_ v: String, _ boot: String?) -> DeviceInfo? {
+        let b = boot.map { ",\"boot\":\"\($0)\"" } ?? ""
+        return DeviceInfo.parse(Data("{\"protocol\":1,\"device\":\"d\",\"firmware\":\"\(v)\",\"update_key\":\"\"\(b)}".utf8))
+    }
+    check(info("0.3.29", "pending")?.boot == "pending" && info("0.3.29", nil)?.boot == "", "the boot field, \"\" when missing")
+    check(BootReadBack.decide(target: "0.3.29", info: info("0.3.29", "pending")) == .waiting, "new version, self-test running: wait")
+    check(BootReadBack.decide(target: "0.3.29", info: info("0.3.29", "confirmed")) == .confirmed("0.3.29"), "new version, self-test passed: confirmed")
+    check(BootReadBack.decide(target: "0.3.29", info: info("0.3.29", nil)) == .confirmed("0.3.29"), "a firmware without the field: the version is all there is")
+    if case .failed(let why) = BootReadBack.decide(target: "0.3.29", info: info("0.3.28", "confirmed")) {
+        check(why.contains("0.3.28") && why.contains("0.3.29"), "rolled back: says both versions")
+    } else { check(false, "rolled back is a failure") }
+    if case .failed = BootReadBack.decide(target: "0.3.29", info: info("0.3.29", "maybe")) {} else { check(false, "an unknown boot state is a failure") }
+    if case .failed = BootReadBack.decide(target: "0.3.29", info: nil) {} else { check(false, "nothing read back is a failure") }
+    check(BootReadBack.verifySeconds >= 90, "waits long enough for the 60 s self-test")
 }
 
 if failures > 0 {
