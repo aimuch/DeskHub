@@ -55,18 +55,19 @@ struct DeskHubApp: App {
     @StateObject private var model = AppModel()
     @StateObject private var firmware = FirmwareModel()
     @StateObject private var magpie = MagpieFeed()
+    @StateObject private var todos = TodoFeed()
 
     var body: some Scene {
         MenuBarExtra {
             MenuView().environmentObject(model).environmentObject(model.link)
         } label: {
             Image(systemName: menuIcon)
-                .task { magpie.start(model.link); firmware.autoRun(model.link); Screenshots.runIfAsked(model: model, firmware: firmware, magpie: magpie) }   // the label is there from the start; the menu is made only when opened
+                .task { magpie.start(model.link); todos.start(model.link); firmware.autoRun(model.link); Screenshots.runIfAsked(model: model, firmware: firmware, magpie: magpie, todos: todos) }   // the label is there from the start; the menu is made only when opened
         }
         .menuBarExtraStyle(.window)
 
         Window("DeskHub 设置", id: "settings") {
-            SettingsView().environmentObject(model).environmentObject(model.link).environmentObject(firmware).environmentObject(magpie)
+            SettingsView().environmentObject(model).environmentObject(model.link).environmentObject(firmware).environmentObject(magpie).environmentObject(todos)
                 .onAppear { firmware.refreshPorts() }
         }
         .windowResizability(.contentSize)

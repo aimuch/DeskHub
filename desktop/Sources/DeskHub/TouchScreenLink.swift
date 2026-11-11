@@ -34,6 +34,8 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     var hasUpdateCharacteristic: Bool { updateChar != nil }
     var onUpdateLog: ((String) -> Void)?                     // the record of a run (the test hook writes it)
     var onRequest: ((SwitchRequest) -> Void)?
+    var onTodoAct: ((TodoAct) -> Void)?   // the to-do board (13.13): an action the person chose on the touch screen
+    var onTodoEdit: ((TodoEditRequest) -> Void)?   // 13.14: a change made on the edit page
     var sources: () -> [String] = { [] }   // the messages of the current source list (LinkProtocol.sourceMessages)
     var current: () -> String = { "" }     // the id of the input the monitor is on, "" when not known
 
@@ -99,6 +101,19 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         guard case .connected = state else { return }
         queue.removeAll { String(decoding: $0, as: UTF8.self).contains(#""op":"usage""#) }
         enqueue(message)
+    }
+
+    // The to-do board (13.13): a whole list. A list still waiting in the queue whose first message has not gone out is
+    // replaced; one that is half sent is left to finish (cutting it would make the device drop the next one too, L2).
+    func sendTodos(_ messages: [String]) {
+        guard case .connected = state else { return }
+        let ops = [#""op":"todos_begin""#, #""op":"todo""#, #""op":"todos_end""#, #""op":"todos_off""#, #""op":"todo_lists_begin""#, #""op":"todo_list""#, #""op":"todo_lists_end""#]
+        if let first = queue.firstIndex(where: { m in let t = String(decoding: m, as: UTF8.self); return t.contains(ops[0]) || t.contains(ops[3]) || t.contains(ops[4]) }) {
+            let tail = queue[first...].filter { m in let t = String(decoding: m, as: UTF8.self); return !ops.contains(where: { t.contains($0) }) }
+            queue.removeSubrange(first...)
+            queue.append(contentsOf: tail)
+        }
+        for m in messages { enqueue(m) }
     }
 
     // Sends the signed envelope and the app image (13.11). The caller has checked the key and the version.
@@ -288,6 +303,8 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         } else if ch.uuid == Self.events, let v = ch.value {
             if let e = UpdateEvent.parse(v) { handle(e) }
             else if let r = LinkProtocol.parseRequest(v) { onRequest?(r) }
+            else if let t = TodoBoard.parseAct(v) { onTodoAct?(t) }
+            else if let e = TodoBoard.parseEdit(v) { onTodoEdit?(e) }
         }
     }
     func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {

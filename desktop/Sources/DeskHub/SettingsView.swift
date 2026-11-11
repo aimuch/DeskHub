@@ -231,6 +231,7 @@ private struct DevicePage: View {
 private struct GeneralPage: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var magpie: MagpieFeed
+    @EnvironmentObject var todos: TodoFeed
     var body: some View {
         Text("通用").font(.title2.weight(.semibold))
         HStack {
@@ -243,6 +244,10 @@ private struct GeneralPage: View {
         // 13.12: the Usage page on the touch screen
         Toggle("在触摸屏上显示 Magpie 用量", isOn: $magpie.enabled)
         Text(magpie.note ?? "每 15 秒读一次这台 Mac 上的 Magpie（127.0.0.1:3425），把额度和今天的用量发给触摸屏。不发 API Key、账号和请求内容。在触摸屏的 设置 › 页面与首页 里打开“用量”。")
+            .font(.caption).foregroundStyle(.secondary)
+        // 13.13: the to-do board on the touch screen
+        Toggle("在触摸屏上显示待办（提醒事项）", isOn: $todos.enabled)
+        Text(todos.note ?? "把这台 Mac 的提醒事项里未完成的待办发给触摸屏，最多 30 条。在触摸屏上长按一条可以完成、推迟到明天或删除。在触摸屏的 设置 › 页面与首页 里打开“待办”。第一次会问提醒事项的权限。")
             .font(.caption).foregroundStyle(.secondary)
         Text("配置文件：\(model.configPath)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         Text("DDC 用的是系统私有接口（IOAVService），只支持 Apple 芯片；macOS 升级后可能失效。").font(.caption).foregroundStyle(.secondary)

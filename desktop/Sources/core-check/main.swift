@@ -56,6 +56,17 @@
 //     firmware wants: the provider with the most used window, its windows (not unlimited, with a number left) by length,
 //     at most 2; today only when the last bucket is today; errors never above calls; the latest model cut to 32 bytes on a
 //     character boundary; seconds to reset and the age from the ISO times. No answer, or not JSON: {"op":"usage","ok":false}.
+// F22 To-do board, the App's side (13.13 L7, L9, L13): reminders are grouped by the Mac's calendar (overdue: a time that
+//     has passed, or a day before today; today; tomorrow; later; no date) and sorted (overdue oldest first, then by due
+//     date, undated by creation), at most 30 sent with the total. The id is the first 12 hex digits of the SHA-256 of the
+//     reminder's own id. Titles cut to 96 bytes, lists to 32, on a character boundary, without control characters. The
+//     messages have exactly the firmware's fields. todo_act is read strictly. "Tomorrow" keeps the time, makes an all-day or
+//     undated one tomorrow all day, and says how far absolute alarms move.
+// F23 Changing a to-do, the App's side (13.14 M1, M3 to M6): a recurrence rule becomes "" / wd / d,w,m,y + 1..99, anything it cannot
+//     say (several rules, an end, chosen days, an interval over 99) "x", and back; the version changes with every field; the list of
+//     lists has exactly the firmware's fields, at most 16; todo_edit is read strictly (a real date or none, no ring without a time);
+//     an edit for a changed to-do (another version) or into a list that is gone is refused; the ring: off removes all, on adds one
+//     at the due time, kept on with a new date moves the absolute ones.
 import DeskHubCore
 import Foundation
 
@@ -597,6 +608,176 @@ do {
     if case .failed = BootReadBack.decide(target: "0.3.29", info: info("0.3.29", "maybe")) {} else { check(false, "an unknown boot state is a failure") }
     if case .failed = BootReadBack.decide(target: "0.3.29", info: nil) {} else { check(false, "nothing read back is a failure") }
     check(BootReadBack.verifySeconds >= 90, "waits long enough for the 60 s self-test")
+}
+
+// ---- F22: the to-do board ----
+// Ways it goes wrong: the device and the App disagree on a field; "today" is wrong around midnight or for an all-day one;
+// a timed one earlier today is not overdue; more than 30; a title over 96 bytes cut inside a character; the same id for two
+// reminders; the device acts on a reminder that changed; "tomorrow" loses the time or moves an all-day one to a time.
+do {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    func at(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> Date { cal.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: mi))! }
+    func day(_ y: Int, _ m: Int, _ d: Int) -> DateComponents { DateComponents(year: y, month: m, day: d) }
+    func time(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ mi: Int) -> DateComponents { DateComponents(year: y, month: m, day: d, hour: h, minute: mi) }
+    let now = at(2026, 11, 11, 10, 0)
+    check(TodoBoard.kind(due: time(2026, 11, 11, 9, 0), now: now, calendar: cal) == .overdue, "earlier today, with a time: overdue")
+    check(TodoBoard.kind(due: time(2026, 11, 11, 14, 30), now: now, calendar: cal) == .today, "later today: today")
+    check(TodoBoard.kind(due: day(2026, 11, 11), now: now, calendar: cal) == .today, "all day today: today, not overdue")
+    check(TodoBoard.kind(due: day(2026, 11, 10), now: now, calendar: cal) == .overdue, "all day yesterday: overdue")
+    check(TodoBoard.kind(due: time(2026, 11, 12, 0, 30), now: now, calendar: cal) == .tomorrow, "just after midnight: tomorrow")
+    check(TodoBoard.kind(due: day(2026, 11, 13), now: now, calendar: cal) == .later, "the day after tomorrow: later")
+    check(TodoBoard.kind(due: nil, now: now, calendar: cal) == .none, "no date")
+    check(TodoBoard.kind(due: time(2026, 11, 12, 9, 0), now: at(2026, 11, 11, 23, 59), calendar: cal) == .tomorrow, "around midnight")
+    check(TodoBoard.kind(due: time(2026, 11, 12, 9, 0), now: at(2026, 11, 12, 0, 1), calendar: cal) == .today, "after midnight it is today")
+    // the id
+    let h = TodoBoard.handle("x-apple-reminder://ABC")
+    check(h.count == 12 && h.allSatisfy { "0123456789abcdef".contains($0) }, "the id: 12 lowercase hex digits")
+    check(h == TodoBoard.handle("x-apple-reminder://ABC") && h != TodoBoard.handle("x-apple-reminder://ABD"), "the id: stable, and different for another reminder")
+    // grouping, order, the limit
+    let items = [
+        ReminderItem(key: "later", title: "交房租", list: "家", due: day(2026, 12, 1), created: at(2026, 1, 1)),
+        ReminderItem(key: "none2", title: "读完那本书", list: "", due: nil, created: at(2026, 3, 1)),
+        ReminderItem(key: "today-all", title: "给猫买粮", list: "家", due: day(2026, 11, 11), created: nil),
+        ReminderItem(key: "old", title: "续费域名", list: "", due: day(2026, 11, 8), created: nil),
+        ReminderItem(key: "today-1430", title: "回复设计评审", list: "工作", due: time(2026, 11, 11, 14, 30), created: nil),
+        ReminderItem(key: "tomorrow", title: "看牙", list: "工作", due: time(2026, 11, 12, 9, 0), created: nil),
+        ReminderItem(key: "none1", title: "学吉他", list: "", due: nil, created: at(2026, 2, 1)),
+        ReminderItem(key: "yesterday", title: "交季度报告", list: "工作", due: day(2026, 11, 10), created: nil),
+    ]
+    let board = TodoBoard.lines(items, now: now, calendar: cal)
+    check(board.total == 8 && board.lines.count == 8, "all eight, total eight")
+    check(board.lines.map(\.title) == ["续费域名", "交季度报告", "给猫买粮", "回复设计评审", "看牙", "交房租", "学吉他", "读完那本书"], "the order: \(board.lines.map(\.title))")
+    if board.lines.count == 8 {
+        let a = board.lines[3]
+        check(a.kind == .today && a.month == 11 && a.day == 11 && a.minute == 870 && a.list == "工作" && a.id == TodoBoard.handle("today-1430"), "a timed line")
+        check(board.lines[2].minute == -1 && board.lines[6].kind == .none && board.lines[6].month == 0 && board.lines[6].day == 0 && board.lines[6].minute == -1, "all day, and undated")
+    }
+    let many = (0..<45).map { ReminderItem(key: "k\($0)", title: "t\($0)", list: "", due: nil, created: at(2026, 1, 1, 0, $0)) }
+    let capped = TodoBoard.lines(many, now: now, calendar: cal)
+    check(capped.lines.count == 30 && capped.total == 45 && capped.lines.first?.title == "t0", "at most 30, the total says 45")
+    // cutting
+    let long = String(repeating: "龘", count: 40)   // 3 bytes each: 120
+    let cut = TodoBoard.lines([ReminderItem(key: "l", title: long + "\n", list: String(repeating: "清", count: 20), due: nil, created: nil)], now: now, calendar: cal).lines[0]
+    check(cut.title.utf8.count <= 96 && cut.title.utf8.count == 96 && cut.title.allSatisfy { $0 == "龘" }, "title cut to 96 bytes on a character")
+    check(cut.list.utf8.count <= 32 && cut.list.utf8.count == 30, "list cut to 32 bytes on a character")
+    let blank = TodoBoard.lines([ReminderItem(key: "b", title: "  ", list: "", due: nil, created: nil)], now: now, calendar: cal).lines[0]
+    check(!blank.title.isEmpty, "an empty title still sends something (the firmware wants 1 byte or more)")
+    // the messages
+    let msgs = TodoBoard.messages(board)
+    check(msgs.count == 10 && msgs.allSatisfy { $0.utf8.count <= 512 }, "begin, eight, end; each fits 512 bytes")
+    func obj(_ s: String) -> [String: Any] { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:] }
+    let b = obj(msgs[0])
+    check(Set(b.keys) == ["op", "n", "total"] && b["op"] as? String == "todos_begin" && b["n"] as? Int == 8 && b["total"] as? Int == 8, "todos_begin")
+    let t = obj(msgs[4])
+    check(Set(t.keys) == ["op", "i", "id", "t", "l", "k", "y", "m", "d", "hm", "r", "li", "a", "v"] && t["op"] as? String == "todo" && t["i"] as? Int == 3, "todo: exactly its fields")
+    check(t["k"] as? String == "t" && t["m"] as? Int == 11 && t["d"] as? Int == 11 && t["hm"] as? Int == 870 && t["t"] as? String == "回复设计评审", "todo: its values")
+    check(obj(msgs[1])["k"] as? String == "o" && obj(msgs[5])["k"] as? String == "m" && obj(msgs[6])["k"] as? String == "l" && obj(msgs[8])["k"] as? String == "n", "the kinds")
+    check(Set(obj(msgs[9]).keys) == ["op"] && obj(msgs[9])["op"] as? String == "todos_end", "todos_end")
+    check(obj(TodoBoard.offMessage(.access)) as NSDictionary == ["op": "todos_off", "why": "access"] as NSDictionary, "todos_off access")
+    check(obj(TodoBoard.offMessage(.setting)) as NSDictionary == ["op": "todos_off", "why": "setting"] as NSDictionary, "todos_off setting")
+    let r = obj(TodoBoard.resultMessage(req: 5, ok: false, detail: String(repeating: "长", count: 30) + "\u{7}"))
+    check(Set(r.keys) == ["op", "req", "ok", "detail"] && r["req"] as? Int == 5 && r["ok"] as? Bool == false, "todo_result")
+    check((r["detail"] as? String ?? "x").utf8.count <= 64 && !(r["detail"] as? String ?? "").contains("\u{7}"), "todo_result: detail cut to 64 bytes, no control characters")
+    // the action from the device
+    check(TodoBoard.parseAct(Data(#"{"op":"todo_act","req":5,"id":"9f2c4e1a0b7d","a":"done"}"#.utf8)) == TodoAct(req: 5, id: "9f2c4e1a0b7d", action: .done), "todo_act done")
+    check(TodoBoard.parseAct(Data(#"{"op":"todo_act","req":6,"id":"9f2c4e1a0b7d","a":"tomorrow"}"#.utf8))?.action == .tomorrow, "todo_act tomorrow")
+    check(TodoBoard.parseAct(Data(#"{"op":"todo_act","req":7,"id":"9f2c4e1a0b7d","a":"delete"}"#.utf8))?.action == .delete, "todo_act delete")
+    for bad in [#"{"op":"todo_act","req":5,"id":"9f2c4e1a0b7d"}"#, #"{"op":"todo_act","req":5,"id":"9f2c4e1a0b7d","a":"done","x":1}"#,
+                #"{"op":"todo_act","req":0,"id":"9f2c4e1a0b7d","a":"done"}"#, #"{"op":"todo_act","req":1.5,"id":"9f2c4e1a0b7d","a":"done"}"#,
+                #"{"op":"todo_act","req":5,"id":"9F2C4E1A0B7D","a":"done"}"#, #"{"op":"todo_act","req":5,"id":"9f2c","a":"done"}"#,
+                #"{"op":"todo_act","req":5,"id":"9f2c4e1a0b7d","a":"archive"}"#, #"{"op":"switch","req":5,"id":"9f2c4e1a0b7d"}"#, "nope"] {
+        check(TodoBoard.parseAct(Data(bad.utf8)) == nil, "refused: \(bad)")
+    }
+    check(LinkProtocol.parseRequest(Data(#"{"op":"todo_act","req":5,"id":"9f2c4e1a0b7d","a":"done"}"#.utf8)) == nil, "a to-do action is not a switch request")
+    // L13: tomorrow
+    let moved = TodoBoard.postponed(due: time(2026, 11, 10, 9, 15), now: now, calendar: cal)
+    check(moved.year == 2026 && moved.month == 11 && moved.day == 12 && moved.hour == 9 && moved.minute == 15, "a timed one keeps its time: tomorrow 09:15")
+    let allDay = TodoBoard.postponed(due: day(2026, 11, 11), now: now, calendar: cal)
+    check(allDay.day == 12 && allDay.hour == nil && allDay.minute == nil, "an all-day one: tomorrow all day")
+    let undated = TodoBoard.postponed(due: nil, now: now, calendar: cal)
+    check(undated.month == 11 && undated.day == 12 && undated.hour == nil, "an undated one: tomorrow all day")
+    let late = TodoBoard.postponed(due: time(2026, 11, 11, 23, 30), now: at(2026, 11, 11, 23, 40), calendar: cal)
+    check(late.day == 12 && late.hour == 23 && late.minute == 30, "tomorrow is the Mac's tomorrow")
+    let yearEnd = TodoBoard.postponed(due: day(2026, 12, 31), now: at(2026, 12, 31, 8, 0), calendar: cal)
+    check(yearEnd.year == 2027 && yearEnd.month == 1 && yearEnd.day == 1, "across the year")
+    check(TodoBoard.alarmShift(from: time(2026, 11, 10, 9, 15), to: moved, calendar: cal) == 2 * 86400, "absolute alarms move by the same days")
+    check(TodoBoard.alarmShift(from: nil, to: undated, calendar: cal) == nil, "no old date: alarms are left alone")
+}
+
+// ---- F23: changing a to-do ----
+do {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    // the repeat, both ways
+    check(TodoBoard.repeatCode(nil) == "", "no rule")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .daily, interval: 1)) == "d1", "daily")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .weekly, interval: 2)) == "w2", "every 2 weeks")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .monthly, interval: 12)) == "m12" && TodoBoard.repeatCode(RepeatSpec(frequency: .yearly, interval: 1)) == "y1", "monthly, yearly")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .weekly, interval: 1, weekdays: [2, 3, 4, 5, 6])) == "wd", "Monday to Friday: weekdays")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .weekly, interval: 1, weekdays: [2, 4, 6])) == "x", "chosen days: custom")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .daily, interval: 1, hasEnd: true)) == "x", "with an end: custom")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .daily, interval: 100)) == "x", "over 99: custom")
+    check(TodoBoard.repeatCode(RepeatSpec(frequency: .monthly, interval: 1, other: true)) == "x", "days of the month and the like: custom")
+    check(TodoBoard.repeatSpec("w2") == RepeatSpec(frequency: .weekly, interval: 2) && TodoBoard.repeatSpec("wd") == RepeatSpec(frequency: .weekly, interval: 1, weekdays: [2, 3, 4, 5, 6]), "back to a rule")
+    check(TodoBoard.repeatSpec("") == nil && TodoBoard.repeatSpec("x") == nil && TodoBoard.repeatSpec("w0") == nil, "none, custom, bad: no rule")
+    // the version
+    let due = DateComponents(year: 2026, month: 11, day: 12, hour: 14, minute: 30)
+    let base = ReminderItem(key: "k1", title: "回复设计评审", list: "工作", due: due, created: nil, listID: "L1", repeat: "w1", alarm: true, modified: Date(timeIntervalSince1970: 1000))
+    let v0 = TodoBoard.version(base)
+    check(v0.count == 8 && v0.allSatisfy { "0123456789abcdef".contains($0) }, "the version: 8 lowercase hex digits")
+    var other = base; other.title = "回复设计评审！"
+    var other2 = base; other2.repeat = "w2"
+    var other3 = base; other3.alarm = false
+    var other4 = base; other4.modified = Date(timeIntervalSince1970: 1001)
+    var other5 = base; other5.due = DateComponents(year: 2026, month: 11, day: 12, hour: 14, minute: 31)
+    check(Set([v0, TodoBoard.version(other), TodoBoard.version(other2), TodoBoard.version(other3), TodoBoard.version(other4), TodoBoard.version(other5)]).count == 6, "every field changes the version")
+    // the line carries the new fields; no ring without a time
+    let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 12, hour: 10))!
+    let line = TodoBoard.lines([base], now: now, calendar: cal).lines[0]
+    check(line.year == 2026 && line.repeat == "w1" && line.listID == TodoBoard.handle("L1") && line.alarm && line.version == v0, "the line: year, repeat, list, ring, version")
+    var allDay = base; allDay.due = DateComponents(year: 2026, month: 11, day: 12)
+    check(!TodoBoard.lines([allDay], now: now, calendar: cal).lines[0].alarm, "all day: the ring is not sent (the firmware refuses it)")
+    var undated = base; undated.due = nil
+    let u = TodoBoard.lines([undated], now: now, calendar: cal).lines[0]
+    check(u.year == 0 && !u.alarm, "undated: year 0, no ring")
+    // the list of lists
+    let lists = TodoBoard.listMessages((0..<20).map { (id: "cal\($0)", name: $0 == 3 ? "" : "清单\($0)") })
+    func obj(_ s: String) -> [String: Any] { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:] }
+    check(lists.count == 18 && obj(lists[0])["op"] as? String == "todo_lists_begin" && obj(lists[0])["n"] as? Int == 16, "at most 16 lists")
+    let l1 = obj(lists[1])
+    check(Set(l1.keys) == ["op", "i", "id", "name"] && l1["id"] as? String == TodoBoard.handle("cal0") && l1["name"] as? String == "清单0", "todo_list: exactly its fields")
+    check(!((obj(lists[4])["name"] as? String) ?? "").isEmpty, "an empty name still sends something")
+    check(Set(obj(lists[17]).keys) == ["op"] && obj(lists[17])["op"] as? String == "todo_lists_end", "todo_lists_end")
+    // todo_edit, strictly
+    let good = #"{"op":"todo_edit","req":6,"id":"9f2c4e1a0b7d","v":"0a1b2c3d","y":2026,"m":12,"d":3,"hm":545,"r":"w2","li":"a1b2c3d4e5f6","a":true}"#
+    let e = TodoBoard.parseEdit(Data(good.utf8))
+    check(e?.req == 6 && e?.id == "9f2c4e1a0b7d" && e?.version == "0a1b2c3d" && e?.repeat == "w2" && e?.listID == "a1b2c3d4e5f6" && e?.alarm == true, "todo_edit read")
+    check(e?.due == DateComponents(year: 2026, month: 12, day: 3, hour: 9, minute: 5), "todo_edit: the due time")
+    let none = TodoBoard.parseEdit(Data(#"{"op":"todo_edit","req":7,"id":"9f2c4e1a0b7d","v":"0a1b2c3d","y":0,"m":0,"d":0,"hm":-1,"r":"x","li":"a1b2c3d4e5f6","a":false}"#.utf8))
+    check(none != nil && none?.due == nil && none?.repeat == "x", "no date, custom repeat")
+    let day = TodoBoard.parseEdit(Data(#"{"op":"todo_edit","req":8,"id":"9f2c4e1a0b7d","v":"0a1b2c3d","y":2026,"m":2,"d":28,"hm":-1,"r":"","li":"a1b2c3d4e5f6","a":false}"#.utf8))
+    check(day?.due == DateComponents(year: 2026, month: 2, day: 28), "all day: no hour")
+    for bad in [good.replacingOccurrences(of: #""d":3"#, with: #""d":31"#).replacingOccurrences(of: #""m":12"#, with: #""m":11"#),
+                good.replacingOccurrences(of: #""hm":545"#, with: #""hm":-1"#),
+                good.replacingOccurrences(of: #""r":"w2""#, with: #""r":"w0""#),
+                good.replacingOccurrences(of: #""v":"0a1b2c3d""#, with: #""v":"0a1b""#),
+                good.replacingOccurrences(of: #""a":true}"#, with: #""a":true,"x":1}"#),
+                good.replacingOccurrences(of: #""y":2026"#, with: #""y":0"#),
+                good.replacingOccurrences(of: "todo_edit", with: "todo_act")] {
+        check(TodoBoard.parseEdit(Data(bad.utf8)) == nil, "refused: \(bad)")
+    }
+    // the checks before a change (M3, M4)
+    if let e {
+        check(TodoBoard.refusal(for: e, currentVersion: "0a1b2c3d", listIDs: ["a1b2c3d4e5f6"]) == nil, "the same version, a list that is there: go")
+        check(TodoBoard.refusal(for: e, currentVersion: "ffffffff", listIDs: ["a1b2c3d4e5f6"]) == "这条待办在 Mac 上改过了", "M3: changed on the Mac")
+        check(TodoBoard.refusal(for: e, currentVersion: "0a1b2c3d", listIDs: ["bbbbbbbbbbbb"]) == "这个清单不能用了", "M4: the list is gone or read-only")
+    }
+    // M6: the ring
+    check(TodoBoard.alarmPlan(had: true, want: false, dueChanged: false) == .removeAll, "off: remove them all")
+    check(TodoBoard.alarmPlan(had: false, want: true, dueChanged: false) == .addAtDue, "on: one at the due time")
+    check(TodoBoard.alarmPlan(had: true, want: true, dueChanged: true) == .shiftAbsolute, "kept on, a new date: move the absolute ones")
+    check(TodoBoard.alarmPlan(had: true, want: true, dueChanged: false) == .keep && TodoBoard.alarmPlan(had: false, want: false, dueChanged: true) == .keep, "nothing to do")
 }
 
 if failures > 0 {
