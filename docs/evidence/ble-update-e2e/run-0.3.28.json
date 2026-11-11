@@ -1,0 +1,22 @@
+{
+  "events" : [
+    {
+      "line" : "waiting for the touch screen",
+      "t" : 0
+    },
+    {
+      "line" : "waiting: link connected(\"DeskHub-c598\") | poweredOn remembered=05274B5E-AF58-5204-C4F8-69DBC49FECA6 retrieved=[\"05274B5E-AF58-5204-C4F8-69DBC49FECA6\"] connected=[]",
+      "t" : 10
+    },
+    {
+      "line" : "waiting: link connected(\"DeskHub-c598\") | poweredOn remembered=05274B5E-AF58-5204-C4F8-69DBC49FECA6 retrieved=[\"05274B5E-AF58-5204-C4F8-69DBC49FECA6\"] connected=[]",
+      "t" : 20
+    },
+    {
+      "line" : "blocked: 固件包 0.3.28 不比触摸屏上的 0.3.28 新。蓝牙只能升级；降级请用 USB。 | info deskhub-44bd8d60c598 0.3.28 key [db16904af6aeaf2edbf484bd93602c9b8e964ad65632ace616198b0134bb856d] | mine [db16904af6aeaf2edbf484bd93602c9b8e964ad65632ace616198b0134bb856d] | update characteristic true",
+      "t" : 21
+    }
+  ],
+  "package" : "deskhub-0.3.28-esp32s3.zip",
+  "tool" : "DeskHub --ble-update"
+}

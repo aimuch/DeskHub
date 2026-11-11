@@ -83,7 +83,9 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/components/core/`（`core.cpp`、`core.hpp`）、`firmware/components/management/`（`management.cpp`、`management.hpp`）、`firmware/main/app_main.cpp` | 蓝牙升级（0.3.22，docs/desktop-app-design.md 13.11）：core 只存更新公钥（`save_update_key`，同一个 NVS 位置）；management 对外给出“能不能升级”和签名清单核对（和 Agent 那条路同一套规则），蓝牙升级进行时 Agent 的升级等着；USB 新请求 `update_key`；main 把这些挂到蓝牙模块上 |
 | `firmware/tests/`（`ble_update_test.cpp`、`ble_protocol_test.cpp`、`CMakeLists.txt`） | 蓝牙升级 O1 到 O9；蓝牙信息里的公钥指纹 |
 | `firmware/tests/`（`ble_protocol_test.cpp`、`ui_model_test.cpp`、`CMakeLists.txt`、`ui_preview/harness.cpp`） | 用量页（0.3.28）：B7 消息解析；T28 第 5 个页面、T29 用量页文字；A42 用量页；旧测试改成 5 个页面 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.28，各两处 |
+| `firmware/components/management/`（`management.cpp`、`include/management.hpp`、`CMakeLists.txt`）、`firmware/main/app_main.cpp` | 0.3.29：开机自检不再依赖管理任务（13.11 U16、U17）。开机时在主任务里读“待确认”；电源任务每 250 毫秒调用 `management_tick()`，自检在 flash 工作任务上跑；管理任务建不成时打日志、在状态里说明；蓝牙 info 的 `boot` 字段由 `boot_pending()` 提供 |
+| `firmware/tests/ble_protocol_test.cpp` | info 消息多了 `boot` 字段（`pending` / `confirmed`）；0.3.30：`boot_pending_now` 的四种组合（钩子还没装上时按开机时读到的状态，13.11 U18） |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.30，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 

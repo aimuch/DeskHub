@@ -1,0 +1,45 @@
+{
+  "version": "0.3.30",
+  "date": "2026-11-11",
+  "device": "deskhub-44bd8d60c598",
+  "what": "蓝牙装上的固件能通过开机自检（docs/desktop-app-design.md 13.11 U16、U17、U18）的真机端到端，用桌面 App 0.4.1 自己的代码（DeskHub --ble-update，测试入口只是代替人点按钮）",
+  "user_approved": "2026-11-11 用户说“刷，按步骤验证”（0.3.29 的四步），之后说“已重启，刷 0.3.30”",
+  "before": "设备从 2026-11-08 起运行 0.3.28，一直“待确认”：跑自检的管理任务在蓝牙起来后建不成（U16）",
+  "steps": [
+    {
+      "step": "在 0.3.28 上升级到 0.3.29",
+      "record": "ble-update-e2e/run-0.3.29-from-0.3.28.json",
+      "result": "2.6 秒后设备回 UPDATE_BEGIN_FAILED：当前版本还在等确认，打不开新槽。和 U16 的判断一致"
+    },
+    {
+      "step": "用户在设备上点 设置 › 设备 › 重启设备",
+      "result": "下一次升级读到的版本是 0.3.26：没确认的 0.3.28 被引导程序回滚"
+    },
+    {
+      "step": "0.3.26 经蓝牙升级到 0.3.29",
+      "record": "ble-update-e2e/run-0.3.29.json",
+      "result": "写入 4,489,888 字节约 277 秒；重启后 3 秒 App 读回 0.3.29 并说 confirmed，没有经过“等自检”。这是竞态（U18）：info 在主任务装上 boot_pending 钩子以前就被读了，默认说 confirmed。这一条的“确认”不算证据"
+    },
+    {
+      "step": "用户再点重启设备",
+      "result": "下一次升级读到的版本仍是 0.3.29，而且升级被接受（没有 UPDATE_SELF_TEST_PENDING）：0.3.29 的自检真的跑了并标记有效，U16 的修法在真机上成立"
+    },
+    {
+      "step": "0.3.29 经蓝牙升级到 0.3.30（起点是蓝牙装上、自检通过的版本）",
+      "record": "ble-update-e2e/run-0.3.30.json",
+      "result": "写入 4,489,968 字节约 336 秒；重启后 3 秒读回 0.3.30，boot 为 pending，App 进入“等自检”；重启后 64 秒读到 confirmed（自检在开机 60 秒后跑，App 每 5 秒读一次）。U18 的修法在真机上成立"
+    }
+  ],
+  "checks_done": [
+    "主机测试 19 组全部通过（ble_protocol_test 新增 boot 字段和 boot_pending_now 四种组合，先写测试、先看到失败）",
+    "App core-check 全部通过（F21：BootReadBack 和 boot 字段解析）",
+    "0.3.30 和 0.3.29 的 sdkconfig 相同；包 dist/deskhub-0.3.30-esp32s3.zip，sha256 6b8536d51c091c04a6e274efe201abf1fdca0b274a40a4b2e9f26b32312d8fa5"
+  ],
+  "not_tested": [
+    "0.3.30 之后再复位一次（0.3.29 已经证明自检通过的版本复位后留下）",
+    "自检不过时的自动回滚（没有故意做一个起不来的版本）",
+    "UPDATE_SELF_TEST_PENDING 拒绝路径（U17）：0.3.30 等自检的 60 秒里没有再发起升级",
+    "同样用内部内存栈的 dh_agent、dh_pair、dh_wifi_change、dh_config 在蓝牙版固件上是否建得成",
+    "USB 串口从 2026-11-11 起有枚举、没有数据，原因没查；这次全程没开串口"
+  ]
+}

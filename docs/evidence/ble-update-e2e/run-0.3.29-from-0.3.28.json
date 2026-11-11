@@ -1,0 +1,30 @@
+{
+  "events" : [
+    {
+      "line" : "waiting for the touch screen",
+      "t" : 0
+    },
+    {
+      "line" : "info before: deskhub-44bd8d60c598 0.3.28 key db16904af6ae",
+      "t" : 2
+    },
+    {
+      "line" : "start 0.3.29 4489888 bytes, frame 253",
+      "t" : 2
+    },
+    {
+      "line" : "event failed(\"UPDATE_BEGIN_FAILED\")",
+      "t" : 2.6000000000000001
+    },
+    {
+      "line" : "end failed(\"设备说：UPDATE_BEGIN_FAILED\")",
+      "t" : 2.6000000000000001
+    },
+    {
+      "line" : "done: failed(\"设备说：UPDATE_BEGIN_FAILED\")",
+      "t" : 3
+    }
+  ],
+  "package" : "deskhub-0.3.29-esp32s3.zip",
+  "tool" : "DeskHub --ble-update"
+}
