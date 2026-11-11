@@ -40,6 +40,7 @@ struct UpdateHooks {
     bool (*allowed)(std::string &why) = nullptr;                                  // no other update, no self-test, power steady
     update::Checked (*verify)(const std::string &envelope, void *ctx) = nullptr;  // signature with update_key + the 8 fields
     void (*active)(bool on) = nullptr;                                            // a Bluetooth update runs: the Agent's waits
+    bool (*boot_pending)() = nullptr;                                             // self-test not passed yet; cheap (NimBLE task)
 };
 void set_update_hooks(const UpdateHooks &);
 // The fingerprint of the update key, for the info characteristic ("" when none). Computed by the caller, never in the

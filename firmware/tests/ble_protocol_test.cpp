@@ -167,7 +167,7 @@ static void b5_out() {
         cJSON_Delete(j);
     }
     const std::string fp(64, 'c');
-    const std::string i = info_json("deskhub-44bd8d60c598", "0.3.18", fp);
+    const std::string i = info_json("deskhub-44bd8d60c598", "0.3.18", fp, false);
     j = dh::parse_json_strict(i.c_str(), i.size());
     CHECK(j != nullptr);
     if (j) {
@@ -176,14 +176,23 @@ static void b5_out() {
         CHECK(std::string(cJSON_GetObjectItemCaseSensitive(j, "firmware")->valuestring) == "0.3.18");
         // 13.11: the fingerprint of the update key, so the App knows whether its own key is the one on the device
         CHECK(cJSON_IsString(cJSON_GetObjectItemCaseSensitive(j, "update_key")) && std::string(cJSON_GetObjectItemCaseSensitive(j, "update_key")->valuestring) == fp);
-        CHECK(cJSON_GetArraySize(j) == 4);
+        // 13.11 U16: whether the running firmware has passed its self-test. The App waits for "confirmed" after an update.
+        CHECK(cJSON_IsString(cJSON_GetObjectItemCaseSensitive(j, "boot")) && std::string(cJSON_GetObjectItemCaseSensitive(j, "boot")->valuestring) == "confirmed");
+        CHECK(cJSON_GetArraySize(j) == 5);
         cJSON_Delete(j);
     }
     {   // no key on the device: an empty string, never a missing field
-        const std::string n = info_json("deskhub-44bd8d60c598", "0.3.18", "");
+        const std::string n = info_json("deskhub-44bd8d60c598", "0.3.18", "", true);
         cJSON *k = dh::parse_json_strict(n.c_str(), n.size());
         CHECK(k && cJSON_IsString(cJSON_GetObjectItemCaseSensitive(k, "update_key")) && std::string(cJSON_GetObjectItemCaseSensitive(k, "update_key")->valuestring).empty());
+        CHECK(k && std::string(cJSON_GetObjectItemCaseSensitive(k, "boot")->valuestring) == "pending");   // still in its self-test
         cJSON_Delete(k);
+    }
+    {   // U16 on the device 2026-11-11: the App read the info 3 s after the restart, before main set the hook; it must not say "confirmed"
+        CHECK(boot_pending_now(nullptr, true));                       // no hook yet: the bootloader's state at start decides
+        CHECK(!boot_pending_now(nullptr, false));
+        CHECK(!boot_pending_now([] { return false; }, true));          // the hook exists: the self-test passed, it is confirmed now
+        CHECK(boot_pending_now([] { return true; }, false));
     }
     Result c; c.outcome = Outcome::Confirmed;
     CHECK(result_text(c, "MacBook M1") == "已切到 MacBook M1，已确认");

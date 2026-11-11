@@ -150,8 +150,12 @@ void writer_task(void *) {
                 size = session.manifest().size;
             }
             part = esp_ota_get_next_update_partition(nullptr);
-            const bool ok = part && flashed(ESP_FAIL, [&] { return esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &handle); }) == ESP_OK &&
-                            psa_hash_setup(&hash, PSA_ALG_SHA_256) == PSA_SUCCESS;
+            // Say which step failed: esp_ota_begin refuses while the running firmware has not passed its self-test (0.3.27).
+            const esp_err_t begun = part ? flashed(ESP_FAIL, [&] { return esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &handle); }) : ESP_ERR_NOT_FOUND;
+            const psa_status_t hashing = begun == ESP_OK ? psa_hash_setup(&hash, PSA_ALG_SHA_256) : PSA_SUCCESS;
+            if (begun != ESP_OK) ESP_LOGE(TAG, "update: esp_ota_begin: %s", esp_err_to_name(begun));
+            else if (hashing != PSA_SUCCESS) ESP_LOGE(TAG, "update: psa_hash_setup: %d", static_cast<int>(hashing));
+            const bool ok = begun == ESP_OK && hashing == PSA_SUCCESS;
             open = ok;
             if (ok && hooks.active) hooks.active(true);
             {
@@ -295,13 +299,17 @@ void drop_link_state_locked() {
     confirm_pending = false;
 }
 
+std::atomic<bool> pending_at_start{false};   // the bootloader says the running firmware waits for its self-test (read in start)
+
 int read_info(uint16_t, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
     std::string fp;
+    bool (*pending)() = nullptr;
     {
         std::lock_guard<std::mutex> lock(mu);
         fp = key_fingerprint;
+        pending = hooks.boot_pending;
     }
-    const std::string text = info_json(snapshot().device_id, VERSION, fp);
+    const std::string text = info_json(snapshot().device_id, VERSION, fp, boot_pending_now(pending, pending_at_start.load()));
     return os_mbuf_append(ctxt->om, text.data(), static_cast<uint16_t>(text.size())) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 int write_control(uint16_t handle, uint16_t, ble_gatt_access_ctxt *ctxt, void *) {
@@ -479,6 +487,9 @@ void tick(void *) {
 }  // namespace
 
 void start() {
+    esp_ota_img_states_t boot_state;   // on app_main's internal stack; before any App can read the info
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    pending_at_start = running && esp_ota_get_state_partition(running, &boot_state) == ESP_OK && boot_state == ESP_OTA_IMG_PENDING_VERIFY;
     if (nimble_port_init() != ESP_OK) { ESP_LOGE(TAG, "nimble init failed"); return; }
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_YES_NO;   // numeric comparison

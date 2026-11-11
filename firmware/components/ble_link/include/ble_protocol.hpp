@@ -108,7 +108,11 @@ bool accept_pairing(const PairingWindow &, int64_t now_ms, int64_t digits_shown_
 // The current input as the device shows it: `id` when it is in the list, else "" (not known).
 std::string current_in(const std::vector<Source> &, const std::string &id);
 std::string request_json(uint32_t req, const std::string &id);
-std::string info_json(const std::string &device_id, const std::string &firmware, const std::string &update_key);   // update_key: fingerprint, "" when none
+// update_key: fingerprint, "" when none. boot_pending: the running firmware has not passed its self-test yet (13.11 U16).
+std::string info_json(const std::string &device_id, const std::string &firmware, const std::string &update_key, bool boot_pending);
+// What "boot" says: the self-test hook once main has set it, else the bootloader's state read at start (13.11 U16:
+// the App can read the info before main sets the hook).
+inline bool boot_pending_now(bool (*hook)(), bool pending_at_start) { return hook ? hook() : pending_at_start; }
 // The line the device shows for a result: "已切到 MacBook M1，已确认" / "已发送到 …，未确认：…" / "没有切到 …：…".
 std::string result_text(const Result &, const std::string &name);
 }  // namespace dh::ble

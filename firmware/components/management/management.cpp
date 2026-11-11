@@ -6,6 +6,8 @@
 #include "board.hpp"
 #include "power_wire.hpp"
 #include "ui.hpp"
+#include "flash_worker.hpp"
+#include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
@@ -161,7 +163,7 @@ static bool image_header(const std::vector<unsigned char> &prefix,const UpdateMa
 }
 static void install_job(cJSON *job,const Secrets &s);
 static void install(cJSON *job,const Secrets &s){
-    if(bluetooth_update_active||!cJSON_IsObject(job))return;   // one update at a time (13.11 U5)
+    if(bluetooth_update_active||self_test_pending||!cJSON_IsObject(job))return;   // one update at a time (13.11 U5); the self-test owns the journal
     agent_update_active=true;install_job(job,s);agent_update_active=false;
 }
 static void install_job(cJSON *job,const Secrets &s){
@@ -250,8 +252,8 @@ static void self_test(){
     }
 }
 static void task(void *){
-    restore_journal();int64_t next=0;
-    for(;;){self_test();auto st=snapshot();auto s=secrets();
+    int64_t next=0;
+    for(;;){auto st=snapshot();auto s=secrets();
         if(network_owner()==NetworkOwner::None&&st.wifi_ready&&st.agent_ready&&st.time_valid&&s.ready()&&monotonic_ms()>=next){
             auto *request=report(s);auto *reply=post(s,request);cJSON_Delete(request);
             if(reply){apply(cJSON_GetObjectItemCaseSensitive(reply,"desired"),s);mutate_if_generation(s.generation,[](Snapshot &v,void*){v.management="管理台已连接";});install(cJSON_GetObjectItemCaseSensitive(reply,"update"),s);cJSON_Delete(reply);next=monotonic_ms()+10000;}
@@ -282,5 +284,19 @@ std::string update_key_fingerprint(const std::string &pem){
     if(open_key(pem,key)){int length=mbedtls_pk_write_pubkey_der(&key,encoded,sizeof(encoded));if(length>0&&sha(encoded+sizeof(encoded)-length,length,digest))result=hex(digest,32);}
     mbedtls_pk_free(&key);return result;
 }
-void management_start(){psa_crypto_init();uint8_t nonce[16];esp_fill_random(nonce,sizeof(nonce));boot_id="boot-"+hex(nonce,sizeof(nonce));xTaskCreate(task,"dh_management",16384,nullptr,3,nullptr);}
+void management_start(){psa_crypto_init();uint8_t nonce[16];esp_fill_random(nonce,sizeof(nonce));boot_id="boot-"+hex(nonce,sizeof(nonce));
+    restore_journal();   // here, on app_main's internal stack: NVS and otadata are read with the caches off
+    // 16 KB of internal stack: it writes flash. It often cannot start once Bluetooth is up (largest internal block 4 to 5 KB,
+    // docs/evidence/ble-memory.json). Then only the Agent's route stops; the self-test runs from management_tick.
+    if(xTaskCreate(task,"dh_management",16384,nullptr,3,nullptr)!=pdPASS){
+        ESP_LOGE("management","task dh_management did not start: the Agent's updates and reports are off");
+        mutate([](Snapshot &v,void*){v.management="管理任务没有启动（内部内存不够）";});
+    }
+}
+void management_tick(){
+    if(!self_test_pending||monotonic_ms()<self_test_deadline)return;
+    static bool said=false;
+    if(!flash_run([]{self_test();})&&!said){said=true;ESP_LOGE("management","self-test: no flash worker, the new firmware stays unconfirmed");}
+}
+bool boot_pending(){return self_test_pending;}
 } // namespace dh

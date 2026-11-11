@@ -176,6 +176,7 @@ void housekeeping(void *) {
     int64_t last_power=0;std::string time_quality;
     for(;;){auto now=dh::monotonic_ms();if(now-last_power>=2000){dh::board_sample_power();last_power=now;}
         dh::charge::tick();   // charge protection: one step with the newest sample; the only code that writes the charge switch
+        dh::management_tick();   // the boot self-test: confirms a new firmware 60 s after its first start, or rolls it back
         auto s=dh::snapshot();if(s.time_valid&&s.time_quality!=time_quality){if(!dh::board_rtc_write(time(nullptr)))dh::mutate([](dh::Snapshot &v,void*){v.error="RTC_WRITE_FAILED：当前系统时间仍有效";});time_quality=s.time_quality;}
         // Power sampling continues during OTA. The charge switch is written only by charge protection, and restored first.
         vTaskDelay(pdMS_TO_TICKS(250));
@@ -209,6 +210,7 @@ extern "C" void app_main() {
             if(dh::verify_update_envelope(envelope,m,c.why)){c.ok=true;c.version=m.version;c.sha256=m.hash;c.size=m.size;c.why.clear();}
             return c;};
         h.active=[](bool on){dh::external_update(on);};
+        h.boot_pending=[]{return dh::boot_pending();};
         dh::ble::set_update_hooks(h);
         dh::ble::set_update_key(dh::update_key_fingerprint(dh::secrets().update_public_key_pem));   // here, not in the NimBLE task
     }
