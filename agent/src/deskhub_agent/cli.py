@@ -20,7 +20,7 @@ import httpx
 from . import __version__
 from .backend import Backend
 from .config import initialize, load_settings, private_write
-from .models import CommandRequest, SCOPES, Settings, stamp, utcnow
+from .models import CommandRequest, SCOPES, Settings, utcnow
 from .storage import Store
 
 

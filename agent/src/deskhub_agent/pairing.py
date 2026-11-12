@@ -27,7 +27,7 @@ from pydantic import Field, field_validator, model_validator
 
 from .errors import AgentError
 from .management_models import StrictModel
-from .models import Identifier, SCOPES, stamp, utcnow, valid_public_url
+from .models import Identifier, stamp, utcnow, valid_public_url
 
 PREFIX = "DHP2."
 VERSION = 2

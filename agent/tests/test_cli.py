@@ -1,5 +1,4 @@
 import json
-import os
 
 from deskhub_agent.cli import main
 from deskhub_agent.config import load_settings

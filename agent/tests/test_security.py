@@ -1,12 +1,10 @@
-import json
 import os
 import time
 
 import pytest
-from fastapi.testclient import TestClient
 
 from deskhub_agent.app import create_app
-from deskhub_agent.models import CommandRequest, Settings
+from deskhub_agent.models import Settings
 from deskhub_agent.storage import Store
 from conftest import TestBackend, complete, payload
 

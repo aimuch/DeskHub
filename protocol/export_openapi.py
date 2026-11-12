@@ -153,7 +153,7 @@ def exported() -> dict[Path, dict[str, Any]]:
 
 
 def validate_examples() -> int:
-    from deskhub_agent.models import CommandRequest, CommandResult, ErrorResponse, HostsResponse, Metric, Status
+    from deskhub_agent.models import CommandRequest, CommandResult, ErrorResponse, Metric, Status
     from deskhub_agent.management_models import DeviceConfiguration, DeviceReport
     from provision import valid_utc
 

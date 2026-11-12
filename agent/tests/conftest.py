@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from pathlib import Path
 from uuid import uuid4
 
 import pytest

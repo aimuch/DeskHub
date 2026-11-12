@@ -1,6 +1,4 @@
 import json
-import os
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

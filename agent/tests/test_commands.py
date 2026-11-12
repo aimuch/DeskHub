@@ -1,8 +1,6 @@
 from datetime import timedelta
-import json
-import time
 
-from deskhub_agent.models import CommandRequest, stamp, utcnow
+from deskhub_agent.models import stamp, utcnow
 from conftest import complete, payload
 
 

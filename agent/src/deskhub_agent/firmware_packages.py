@@ -107,7 +107,6 @@ def validate_package(raw: bytes, public_key_path: str | None) -> tuple[dict, dic
         raise AgentError("FIRMWARE_HASH_MISMATCH", "Application size or hash does not match the signed manifest", 400)
     if image_version(image) != payload["version"]:
         raise AgentError("FIRMWARE_VERSION_MISMATCH", "Application descriptor and signed version do not match", 400)
-    package_id = payload["image_sha256"]
     return payload, envelope, image, key_fingerprint(key)
 
 

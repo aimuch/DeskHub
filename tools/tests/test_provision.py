@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
-from copy import deepcopy
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace

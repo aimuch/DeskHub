@@ -11,13 +11,13 @@ from contextlib import contextmanager
 from uuid import uuid4
 
 from fastapi import Depends, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from .admin_auth import AdminAuth, PolicyError
 from .errors import AgentError
-from .firmware_packages import MAX_PACKAGE_BYTES, key_fingerprint, trusted_key, validate_package, write_image
+from .firmware_packages import key_fingerprint, trusted_key, validate_package, write_image
 from .management_models import AdminLogin, ConfigurationWrite, DeviceConfiguration, DeviceReport, PasswordLogin, PasswordWrite, PowerReport, TERMINAL_UPDATE_STATES, UpdateCreate
 from .models import stamp, utcnow
 

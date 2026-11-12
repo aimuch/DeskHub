@@ -38,8 +38,8 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"   # a job container does not run the image entrypoint: cmake comes from here
           cmake -S firmware/tests/ui_preview -B build-preview -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-preview --target deskhub_ui_preview --parallel
-          build-preview/deskhub_ui_preview
+          cmake --build build-preview --parallel
+          ctest --test-dir build-preview --output-on-failure   # the UI checks and the touch-orientation regression
       - name: Package
         shell: bash
         run: |
@@ -51,6 +51,27 @@ jobs:
           path: dist/deskhub-*-esp32s3.zip
           if-no-files-found: error
 
+  python:
+    # The Agent route (docs/agent-setup.md), the USB tools and the protocol contracts. The console E2E run needs Chrome and
+    # stays a manual step (docs/development.md).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Environment (agent/uv.lock, as agent/README.md)
+        run: |
+          python -m pip install --quiet uv==0.5.31
+          uv venv --python "$(command -v python)" .venv
+          UV_PROJECT_ENVIRONMENT=../.venv uv sync --project agent --frozen --extra test
+          uv pip install --python .venv/bin/python -r tools/requirements.txt
+      - name: Agent tests
+        run: .venv/bin/python -m pytest agent/tests -q
+      - name: USB tool tests
+        run: .venv/bin/python -m unittest discover -s tools/tests
+      - name: Protocol contracts
+        run: .venv/bin/python protocol/export_openapi.py --check
   desktop:
     runs-on: macos-15   # Apple silicon
     steps:
@@ -70,7 +91,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [firmware, desktop]
+    needs: [firmware, python, desktop]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

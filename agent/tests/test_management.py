@@ -6,7 +6,6 @@ from datetime import timedelta
 import hashlib
 from io import BytesIO
 import json
-from pathlib import Path
 import struct
 import zipfile
 
@@ -17,7 +16,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from deskhub_agent.app import create_app
-from deskhub_agent.management_models import DeviceConfiguration, DeviceReport, FirmwarePayload
+from deskhub_agent.management_models import DeviceConfiguration, DeviceReport
 from deskhub_agent.models import stamp, utcnow
 from deskhub_agent.storage import Store
 from conftest import PASSWORD
@@ -370,7 +369,7 @@ def test_expired_job_and_credential_revocation_prevent_late_transport(management
     assert sync(client, token, report).json()["update"] is None
     assert client.get("/api/v1/admin/devices/terminal-one").json()["update"]["error_code"] == "UPDATE_EXPIRED"
     report["update"] = None
-    next_job = client.post("/api/v1/admin/devices/terminal-one/updates", json=body, headers=headers).json()
+    client.post("/api/v1/admin/devices/terminal-one/updates", json=body, headers=headers)
     store.revoke("terminal-one")
     assert sync(client, token, report).status_code == 401
     assert client.get("/api/v1/admin/devices/terminal-one").json()["update"]["state"] == "failed"

@@ -5,7 +5,6 @@ from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 import fcntl
 import ipaddress
-import json
 import logging
 import os
 from pathlib import Path
