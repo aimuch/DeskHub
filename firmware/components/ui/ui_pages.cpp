@@ -644,7 +644,7 @@ lv_obj_t *wheel(lv_obj_t *parent, int which, const std::string &options, int sel
 std::string numbers(int from, int to, bool two_digits) {
     std::string out;
     for (int i = from; i <= to; ++i) {
-        char b[8];
+        char b[12];   // any int: GCC's -Wformat-truncation on Linux wants room for "-2147483648"
         snprintf(b, sizeof(b), two_digits ? "%02d" : "%d", i);
         out += (i == from ? "" : "\n") + std::string(b);
     }
