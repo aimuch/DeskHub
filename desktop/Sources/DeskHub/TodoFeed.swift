@@ -15,8 +15,10 @@ final class TodoFeed: ObservableObject {
     @Published private(set) var note: String?   // what the last read found, for the settings page
     private let store = EKEventStore()
     private weak var link: TouchScreenLink?
+    private weak var gateway: GatewayLink?
     private var timer: Timer?
     private var watch: AnyCancellable?
+    private var watchGateway: AnyCancellable?
     private var changes: NSObjectProtocol?
     private var shown: [String: String] = [:]   // the ids on the touch screen -> the reminders' own ids (L9, L10)
     private var asked = false
@@ -26,10 +28,15 @@ final class TodoFeed: ObservableObject {
         enabled = UserDefaults.standard.object(forKey: Self.key) as? Bool ?? true
     }
 
-    func start(_ link: TouchScreenLink) {
+    func start(_ link: TouchScreenLink, _ gateway: GatewayLink) {
         guard self.link == nil else { return }
         self.link = link
-        link.onTodoAct = { [weak self] act in self?.perform(act) }
+        self.gateway = gateway
+        link.onTodoAct = { [weak self, weak link] act in self?.perform(act) { link?.sendResult($0) } }
+        gateway.onTodoAct = { [weak self, weak gateway] act in self?.perform(act) { gateway?.sendResult($0) } }
+        watchGateway = gateway.$state.sink { [weak self] state in
+            if state == .connected { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self?.tick() } }
+        }
         link.onTodoEdit = { [weak self] edit in self?.apply(edit) }
         timer = Timer.scheduledTimer(withTimeInterval: TodoBoard.resendSeconds, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
         watch = link.$state.sink { [weak self] state in
@@ -46,9 +53,18 @@ final class TodoFeed: ObservableObject {
         return s == .authorized
     }
 
+    // To the touch screen and the 小麦 gateway alike (each one ignores it while it is not connected).
+    private func send(_ messages: [String]) {
+        link?.sendTodos(messages)
+        gateway?.sendTodos(messages)
+    }
+
     func tick() {
-        guard let link, case .connected = link.state, !busy else { return }
-        guard enabled else { link.sendTodos([TodoBoard.offMessage(.setting)]); note = nil; return }
+        guard let link, !busy else { return }
+        let ble: Bool
+        if case .connected = link.state { ble = true } else { ble = false }
+        guard ble || gateway?.isLive == true else { return }
+        guard enabled else { send([TodoBoard.offMessage(.setting)]); note = nil; return }
         if !allowed {
             if EKEventStore.authorizationStatus(for: .reminder) == .notDetermined && !asked {
                 asked = true
@@ -57,7 +73,7 @@ final class TodoFeed: ObservableObject {
                 else { store.requestAccess(to: .reminder, completion: done) }
                 return
             }
-            link.sendTodos([TodoBoard.offMessage(.access)])
+            send([TodoBoard.offMessage(.access)])
             note = "DeskHub 没有读提醒事项的权限：在 系统设置 › 隐私与安全性 › 提醒事项 里打开 DeskHub。"
             return
         }
@@ -70,9 +86,9 @@ final class TodoFeed: ObservableObject {
                 self.busy = false
                 let board = TodoBoard.lines(items, now: Date(), calendar: .current)
                 self.shown = Dictionary(board.lines.map { ($0.id, $0.key) }, uniquingKeysWith: { a, _ in a })
-                self.note = "触摸屏上显示 \(board.lines.count) 条（一共 \(board.total) 条未完成）；提醒事项一变就发，另外每 30 秒一次"
+                self.note = "显示 \(board.lines.count) 条（一共 \(board.total) 条未完成）；提醒事项一变就发，另外每 30 秒一次"
                 let lists = self.writableLists().map { (id: $0.calendarIdentifier, name: $0.title) }
-                self.link?.sendTodos(TodoBoard.listMessages(lists) + TodoBoard.messages(board))
+                self.send(TodoBoard.listMessages(lists) + TodoBoard.messages(board))
             }
         }
     }
@@ -161,10 +177,9 @@ final class TodoFeed: ObservableObject {
     }
 
     // L9, L12, L13: the reminder must still be the one the touch screen shows, and unfinished; then change it, and say so.
-    private func perform(_ act: TodoAct) {
-        guard let link else { return }
+    private func perform(_ act: TodoAct, reply: @escaping (String) -> Void) {
         func answer(_ ok: Bool, _ detail: String) {
-            link.sendResult(TodoBoard.resultMessage(req: act.req, ok: ok, detail: detail))
+            reply(TodoBoard.resultMessage(req: act.req, ok: ok, detail: detail))
             tick()
         }
         guard enabled, allowed else { answer(false, "Mac 上的 DeskHub 现在不能改提醒事项"); return }

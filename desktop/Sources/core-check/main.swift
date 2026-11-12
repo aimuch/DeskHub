@@ -780,6 +780,28 @@ do {
     check(TodoBoard.alarmPlan(had: true, want: true, dueChanged: false) == .keep && TodoBoard.alarmPlan(had: false, want: false, dueChanged: true) == .keep, "nothing to do")
 }
 
+// F24 The 小麦 gateway (GatewayProtocol): only an http(s) address with a host and nothing else; a pass phrase of at least 12
+//     characters without spaces; the push body carries the touch screen's messages as they are; the commands of a wait
+//     answer are strings of at most 512 bytes, at most 20, and go through the touch screen's own parsers.
+do {
+    check(GatewayProtocol.baseURL("10.10.10.224:16688")?.absoluteString == "http://10.10.10.224:16688", "a bare address gets http")
+    check(GatewayProtocol.baseURL(" https://hub.local:16688/ ")?.absoluteString == "https://hub.local:16688", "spaces and the last / go")
+    for bad in ["", "ftp://x", "http://", "http://a/b", "http://a?q=1", "http://u:p@a"] {
+        check(GatewayProtocol.baseURL(bad) == nil, "refused address: \(bad)")
+    }
+    check(GatewayProtocol.tokenOK("desk-pass-1234") && !GatewayProtocol.tokenOK("short") && !GatewayProtocol.tokenOK("has a space 123"), "pass phrase rules")
+    let body = GatewayProtocol.pushBody(name: "Mac\nmini", messages: [#"{"op":"current","id":"m"}"#, ""], allowTodo: false)
+    let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+    check(o?["name"] as? String == "Macmini" && (o?["messages"] as? [String]) == [#"{"op":"current","id":"m"}"#] && o?["allow_todo"] as? Bool == false, "the push body")
+    let wait = Data(#"{"ok":true,"commands":["{\"op\":\"switch\",\"req\":7,\"id\":\"hdmi\"}","{\"op\":\"todo_act\",\"req\":8,\"id\":\"a1b2c3d4e5f6\",\"a\":\"done\"}",3]}"#.utf8)
+    let cmds = GatewayProtocol.commands(wait)
+    check(cmds.count == 2, "two string commands")
+    check(cmds.first.flatMap(LinkProtocol.parseRequest) == SwitchRequest(req: 7, id: "hdmi"), "a switch, by the touch screen's parser")
+    check(cmds.last.flatMap(TodoBoard.parseAct) == TodoAct(req: 8, id: "a1b2c3d4e5f6", action: .done), "a done, by the to-do parser")
+    check(GatewayProtocol.commands(Data("[]".utf8)).isEmpty && GatewayProtocol.commands(Data(#"{"commands":["\#(String(repeating: "x", count: 600))"]}"#.utf8)).isEmpty, "nothing odd gets through")
+    check(GatewayProtocol.problem(status: 401) == "口令不对（网关回 401）" && GatewayProtocol.problem(status: 200) == nil, "what a status says")
+}
+
 if failures > 0 {
     print("core-check: \(failures) check(s) failed")
     exit(1)

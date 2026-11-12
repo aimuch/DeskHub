@@ -20,7 +20,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var ddcProblem: String?
     @Published private(set) var match: BindingMatch = .notBound
     @Published private(set) var currentValue: UInt16? {     // the input read back from the bound display; nil when not known
-        didSet { link.sendCurrent(currentInputID(config, readBack: currentValue)) }   // the touch screen marks it (A39)
+        didSet {
+            link.sendCurrent(currentInputID(config, readBack: currentValue))   // the touch screen marks it (A39)
+            gateway.sendCurrent(currentInputID(config, readBack: currentValue))
+        }
     }
     @Published private(set) var busyID: String?              // the input being switched or tried
     @Published private(set) var trialStatus: [String: String] = [:]
@@ -39,8 +42,13 @@ final class AppModel: ObservableObject {
         config = c
         configProblem = problem
         link.sources = { [weak self] in self.map { LinkProtocol.sourceMessages(menuEntries($0.config)) } ?? [] }
-        link.onRequest = { [weak self] r in self?.remoteSwitch(r) }
+        link.onRequest = { [weak self] r in self?.remoteSwitch(r, from: "touch") { self?.link.sendResult($0) } }
         link.current = { [weak self] in self.map { currentInputID($0.config, readBack: $0.currentValue) } ?? "" }
+        // the 小麦 gateway (GatewayLink): the same list, the same current input, the same switch path
+        gateway.sources = { [weak self] in self.map { LinkProtocol.sourceMessages(menuEntries($0.config)) } ?? [] }
+        gateway.current = { [weak self] in self.map { currentInputID($0.config, readBack: $0.currentValue) } ?? "" }
+        gateway.onRequest = { [weak self] r in self?.remoteSwitch(r, from: "gateway") { self?.gateway.sendResult($0) } }
+        gateway.inputName = { [weak self] id in self?.config.inputs.first { $0.id == id }?.name ?? id }
         refresh()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -52,7 +60,8 @@ final class AppModel: ObservableObject {
         // with the monitor's own buttons shows up on the touch screen too.
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, case .connected = self.link.state else { return }
+                guard let self else { return }
+                if case .connected = self.link.state {} else if !self.gateway.isLive { return }
                 self.readCurrent()
             }
         }
@@ -117,7 +126,7 @@ final class AppModel: ObservableObject {
         busyID = id
         work.async {
             let r = performSwitch(d, to: input.value)
-            SwitchLog.write(["kind": from == "menu" ? "switch" : "touch", "input": input.name, "value": Int(input.value)], r)
+            SwitchLog.write(["kind": from == "menu" ? "switch" : from, "input": input.name, "value": Int(input.value)], r)
             DispatchQueue.main.async {
                 self.last = LastResult(name: input.name, result: r, at: Date())
                 self.currentValue = r.readBack
@@ -129,16 +138,18 @@ final class AppModel: ObservableObject {
         return nil
     }
 
-    // ---- the touch screen (Bluetooth) ----
+    // ---- the touch screen (Bluetooth) and the 小麦 gateway (HTTP) ----
     let link = TouchScreenLink()
+    let gateway = GatewayLink()
 
-    // A request from the touch screen: the same white list and the same switch as the menu. Exactly one result goes back.
-    private func remoteSwitch(_ r: SwitchRequest) {
-        if let refused = startSwitch(r.id, from: "touch", done: { [weak self] result in
-            self?.link.sendResult(LinkProtocol.resultMessage(req: r.req, result: result))
+    // A request from the touch screen or the gateway: the same white list and the same switch as the menu. Exactly one
+    // result goes back, to the one that asked.
+    private func remoteSwitch(_ r: SwitchRequest, from: String, reply: @escaping (String) -> Void) {
+        if let refused = startSwitch(r.id, from: from, done: { result in
+            reply(LinkProtocol.resultMessage(req: r.req, result: result))
         }) {
-            SwitchLog.write(["kind": "touch_refused", "input": r.id, "value": 0], refused)
-            link.sendResult(LinkProtocol.resultMessage(req: r.req, result: refused))
+            SwitchLog.write(["kind": from + "_refused", "input": r.id, "value": 0], refused)
+            reply(LinkProtocol.resultMessage(req: r.req, result: refused))
         }
     }
 
@@ -288,7 +299,7 @@ final class AppModel: ObservableObject {
             config = c
             saveProblem = nil
             match = matchBinding(c.binding, among: displays)
-            if menuEntries(c) != menuBefore { link.resendSources() }   // the touch screen shows what the menu shows
+            if menuEntries(c) != menuBefore { link.resendSources(); gateway.resendSources() }   // the touch screen shows what the menu shows
         } catch {
             saveProblem = "没有保存：\(error.localizedDescription)"
         }

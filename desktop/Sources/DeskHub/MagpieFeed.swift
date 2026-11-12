@@ -13,17 +13,23 @@ final class MagpieFeed: ObservableObject {
     }
     @Published private(set) var note: String?          // what the last read found, for the settings page
     private weak var link: TouchScreenLink?
+    private weak var gateway: GatewayLink?
     private var timer: Timer?
     private var watch: AnyCancellable?
+    private var watchGateway: AnyCancellable?
     private var busy = false
 
     init() {
         enabled = UserDefaults.standard.object(forKey: Self.key) as? Bool ?? true
     }
 
-    func start(_ link: TouchScreenLink) {
+    func start(_ link: TouchScreenLink, _ gateway: GatewayLink) {
         guard self.link == nil else { return }
         self.link = link
+        self.gateway = gateway
+        watchGateway = gateway.$state.sink { [weak self] state in
+            if state == .connected { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.tick() } }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
         watch = link.$state.sink { [weak self] state in
             if case .connected = state { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.tick() } }
@@ -31,7 +37,10 @@ final class MagpieFeed: ObservableObject {
     }
 
     func tick() {
-        guard enabled, !busy, let link, case .connected = link.state else { return }
+        guard enabled, !busy, let link else { return }
+        let ble: Bool
+        if case .connected = link.state { ble = true } else { ble = false }
+        guard ble || gateway?.isLive == true else { return }   // the touch screen or the 小麦 gateway is listening
         busy = true
         Task.detached {
             async let q = Self.fetch(MagpieUsage.paths[0])
@@ -40,8 +49,9 @@ final class MagpieFeed: ObservableObject {
             let message = MagpieUsage.message(quotas: await q, usage: await u, requests: await r, now: Date())
             await MainActor.run {
                 self.busy = false
-                self.note = message == MagpieUsage.offline ? "Magpie 没有运行（127.0.0.1:3425 没有回应）" : "Magpie 已连上，每 15 秒发给触摸屏"
+                self.note = message == MagpieUsage.offline ? "Magpie 没有运行（127.0.0.1:3425 没有回应）" : "Magpie 已连上，每 15 秒发一次"
                 link.sendUsage(message)
+                self.gateway?.sendUsage(message)
             }
         }
     }

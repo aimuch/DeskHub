@@ -62,12 +62,12 @@ struct DeskHubApp: App {
             MenuView().environmentObject(model).environmentObject(model.link)
         } label: {
             Image(systemName: menuIcon)
-                .task { magpie.start(model.link); todos.start(model.link); firmware.autoRun(model.link); Screenshots.runIfAsked(model: model, firmware: firmware, magpie: magpie, todos: todos) }   // the label is there from the start; the menu is made only when opened
+                .task { magpie.start(model.link, model.gateway); todos.start(model.link, model.gateway); firmware.autoRun(model.link); Screenshots.runIfAsked(model: model, firmware: firmware, magpie: magpie, todos: todos) }   // the label is there from the start; the menu is made only when opened
         }
         .menuBarExtraStyle(.window)
 
         Window("DeskHub 设置", id: "settings") {
-            SettingsView().environmentObject(model).environmentObject(model.link).environmentObject(firmware).environmentObject(magpie).environmentObject(todos)
+            SettingsView().environmentObject(model).environmentObject(model.link).environmentObject(model.gateway).environmentObject(firmware).environmentObject(magpie).environmentObject(todos)
                 .onAppear { firmware.refreshPorts() }
         }
         .windowResizability(.contentSize)

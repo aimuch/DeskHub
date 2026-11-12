@@ -3,7 +3,7 @@ import DeskHubCore
 import SwiftUI
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case displays = "显示器", inputs = "输入源", device = "触摸屏", firmware = "固件", general = "通用"
+    case displays = "显示器", inputs = "输入源", device = "触摸屏", gateway = "小麦网关", firmware = "固件", general = "通用"
     var id: String { rawValue }
 }
 
@@ -34,6 +34,7 @@ struct SettingsView: View {
                     case .displays: DisplaysPage()
                     case .inputs: InputsPage()
                     case .device: DevicePage()
+                    case .gateway: GatewayPage()
                     case .firmware: FirmwarePage()
                     case .general: GeneralPage()
                     }
@@ -223,6 +224,94 @@ private struct DevicePage: View {
         case .searching: return "在触摸屏上点“配对电脑”"
         case .notPaired: return "配对一次，以后自动连接"
         case .unavailable: return "蓝牙不能用"
+        }
+    }
+}
+
+// ---- the 小麦 gateway (GatewayLink; ThinkSmartView design canvas board 39) ----
+final class GatewayForm: ObservableObject {
+    @Published var address = ""
+    @Published var token = ""
+    @Published var problem: String?
+}
+
+private struct GatewayPage: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var gateway: GatewayLink
+    @StateObject private var form = GatewayForm()
+    var body: some View {
+        Text("小麦网关").font(.title2.weight(.semibold))
+        Text("把输入源、AI 用量和提醒事项交给家里的小麦网关，书房的 ThinkSmart 屏上能看、能点、能用语音切显示器。切源照样只走菜单里试切过的输入源，切完读回确认。不用蓝牙，也不用 DeskHub 触摸屏；Mac 主动连网关，不开端口。")
+            .font(.caption).foregroundStyle(.secondary)
+        Card(highlight: gateway.isLive) {
+            HStack {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.title2).foregroundStyle(stateColor)
+                VStack(alignment: .leading) {
+                    Text(title).font(.headline)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if gateway.enabled { Button("断开") { gateway.disconnect() } }
+            }
+        }
+        Card {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                GridRow {
+                    Text("网关地址").gridColumnAlignment(.trailing)
+                    TextField("10.10.10.224:16688", text: $form.address).textFieldStyle(.roundedBorder)
+                }
+                GridRow {
+                    Text("连接口令")
+                    SecureField(gateway.hasToken ? "已存在钥匙串里，留空表示不改" : "和网关后台里填的一样", text: $form.token).textFieldStyle(.roundedBorder)
+                }
+            }
+            HStack {
+                if let p = form.problem { Text(p).font(.caption).foregroundStyle(badColor) }
+                Spacer()
+                Button(gateway.enabled ? "保存并重连" : "连接") {
+                    form.problem = gateway.connect(address: form.address, token: form.token)
+                    if form.problem == nil { form.token = "" }
+                }.buttonStyle(.borderedProminent).tint(accent)
+            }
+            Text("口令在网关后台 意图识别 › 插件 › 桌面（DeskHub）› 设置 里填，这里填同一串。地址是网关的局域网 IP 加 16688 端口。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Card {
+            Toggle("允许在屏上完成待办", isOn: $gateway.allowTodo)
+            Text("关掉后屏上的待办只能看。输入源和 AI 用量跟着「触摸屏」「通用」里的开关：通用里关掉的，网关也收不到。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        if !gateway.log.isEmpty {
+            Card {
+                Text("屏上和语音发来的请求").font(.headline)
+                ForEach(gateway.log, id: \.self) { Text($0).font(.caption.monospaced()) }
+            }
+        }
+        Color.clear.frame(height: 0).onAppear { if form.address.isEmpty { form.address = gateway.address } }
+    }
+    private var title: String {
+        switch gateway.state {
+        case .off: return "没连"
+        case .connecting: return "正在连…"
+        case .connected: return "已连接 · \(GatewayProtocol.baseURL(gateway.address)?.host ?? gateway.address)"
+        case .failed(let why): return why
+        }
+    }
+    private var detail: String {
+        switch gateway.state {
+        case .off: return "填好地址和口令，点「连接」"
+        case .connecting: return "每 5 秒交一次"
+        case .connected:
+            let ago = gateway.lastPush.map { max(0, Int(Date().timeIntervalSince($0))) } ?? 0
+            return "\(ago) 秒前交过一次 · \(menuEntries(model.config).count) 个输入源"
+        case .failed: return "每 5 秒重试一次"
+        }
+    }
+    private var stateColor: Color {
+        switch gateway.state {
+        case .connected: return okColor
+        case .failed: return badColor
+        default: return .secondary
         }
     }
 }

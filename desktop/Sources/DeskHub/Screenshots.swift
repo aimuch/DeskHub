@@ -19,9 +19,9 @@ enum Screenshots {
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
             NSApp.appearance = NSAppearance(named: .darkAqua)
             firmware.refreshPorts()
-            let heights: [SettingsPage: CGFloat] = [.displays: 470, .inputs: 400, .device: 260, .firmware: 560, .general: 240]
+            let heights: [SettingsPage: CGFloat] = [.displays: 470, .inputs: 400, .device: 260, .gateway: 560, .firmware: 560, .general: 240]
             for p in SettingsPage.allCases {
-                let view = SettingsView(page: p).environmentObject(model).environmentObject(model.link).environmentObject(firmware).environmentObject(magpie).environmentObject(todos)
+                let view = SettingsView(page: p).environmentObject(model).environmentObject(model.link).environmentObject(model.gateway).environmentObject(firmware).environmentObject(magpie).environmentObject(todos)
                 write(view, width: 900, height: heights[p] ?? 600, to: dir.appendingPathComponent("settings-\(file(p)).png"))
             }
             write(MenuView().environmentObject(model).environmentObject(model.link), width: 340, height: nil, to: dir.appendingPathComponent("menu.png"))
@@ -34,6 +34,7 @@ enum Screenshots {
         case .displays: return "displays"
         case .inputs: return "inputs"
         case .device: return "device"
+        case .gateway: return "gateway"
         case .firmware: return "firmware"
         case .general: return "general"
         }
