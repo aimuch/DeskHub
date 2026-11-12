@@ -49,7 +49,6 @@ struct ConfigDraft {
     DisplayConfig value;
     uint64_t generation = 0;
 };
-ConfigDraft config_draft();
 esp_err_t save_config(DisplayConfig);
 esp_err_t save_config(const ConfigDraft &);
 esp_err_t save_managed_config(DisplayConfig, uint64_t generation);
@@ -68,20 +67,6 @@ esp_err_t save_wifi_credentials(const std::string &ssid, const std::string &pass
 void network_trial_reset();
 int network_disconnect_reason();
 esp_err_t reset_config();
-esp_err_t reset_config(const ConfigDraft &);
-enum class ConfigJobState { Unknown, Pending, Succeeded, Failed };
-struct ConfigJobResult {
-    uint32_t ticket = 0;
-    ConfigJobState state = ConfigJobState::Unknown;
-    esp_err_t error = ESP_OK;
-    uint32_t revision = 0;
-};
-// ESP_OK acknowledges enqueueing only. One unfinished job is allowed; busy
-// returns ESP_ERR_TIMEOUT and ticket=0. Poll the ticket for durable completion.
-esp_err_t queue_config_save(ConfigDraft, uint32_t &ticket);
-esp_err_t queue_config_reset(ConfigDraft, uint32_t &ticket);
-ConfigJobResult config_job_result(uint32_t ticket);
-void config_jobs_init();
 bool parse_utc(const char *, time_t &);
 bool set_time_utc(const char *, const char *quality);
 std::string utc_now();

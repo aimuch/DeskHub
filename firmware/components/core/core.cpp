@@ -120,7 +120,6 @@ void core_init() {
     lock = xSemaphoreCreateMutex();
     storage_lock = xSemaphoreCreateMutex();
     radio_lock = xSemaphoreCreateMutex();
-    config_jobs_init();
     apply_time_zone(kDefaultTzMinutes);
     uint8_t mac[6]{}; esp_read_mac(mac, ESP_MAC_WIFI_STA);
     char id[32]; snprintf(id, sizeof(id), "deskhub-%02x%02x%02x%02x%02x%02x", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
@@ -173,7 +172,6 @@ uint64_t config_generation(){Guard g;return credential_generation;}
 esp_err_t with_generation(uint64_t expected,esp_err_t (*fn)(void *),void *ctx){Guard g;if(expected!=credential_generation)return ESP_ERR_INVALID_STATE;return fn(ctx);}
 Secrets secrets() { Guard g; auto s=credentials;s.generation=credential_generation;return s; }
 DisplayConfig config() { Guard g; return display_cfg; }
-ConfigDraft config_draft() { Guard g; return {display_cfg, credential_generation}; }
 static esp_err_t persist_config(const DisplayConfig &c) {
     auto *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o,"schema",c.schema); cJSON_AddNumberToObject(o,"revision",c.revision);
@@ -299,12 +297,6 @@ static esp_err_t reset_config_locked() {
 esp_err_t reset_config() {
     StorageGuard storage;
     Guard g;
-    return reset_config_locked();
-}
-esp_err_t reset_config(const ConfigDraft &draft) {
-    StorageGuard storage;
-    Guard g;
-    if(draft.generation!=credential_generation||draft.value.revision!=display_cfg.revision)return ESP_ERR_INVALID_STATE;
     return reset_config_locked();
 }
 bool parse_utc(const char *s, time_t &out) {
