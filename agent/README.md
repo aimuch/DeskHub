@@ -45,7 +45,7 @@ Token 由 `secrets.token_urlsafe(32)` 生成；SQLite 只存 SHA-256，文件权
 
 打开这个 0600 私有文件，把 token 复制到管理台登录框。不要放入 URL、命令参数或 localStorage。管理会话使用 HttpOnly / SameSite=Strict cookie，有效期 30 分钟，HTTPS 时设置 Secure；管理员写请求还需要同源 Origin 与独立 CSRF token。`revoke browser-admin` 立即使原会话失效，`admin-token --replace --output NEW_FILE` 轮换凭据。
 
-管理台提供真实已配对终端列表、最近上报、设备吊销、显示设置与 desk/clock/focus 预设布局、动作卡片顺序、签名固件上传与更新进度，以及只读的主机指标、显示器与动作配置、命令记录（接口见 [管理契约](../docs/management-contract.md)；显示器绑定标识不会通过网页返回）。没有设备上报时显示未上报/离线，不添加演示设备。配置保存先成为待下发版本，只有设备校验并持久化后的对应 revision / configuration 上报才显示已应用。固件本地修改造成差异时如实显示。
+管理台提供真实已配对终端列表、最近上报、设备吊销、显示设置与 desk/clock/focus 预设布局、动作卡片顺序、签名固件上传与更新进度，以及只读的主机指标、显示器与动作配置、命令记录（接口见 [协议说明](../protocol/README.md)；显示器绑定标识不会通过网页返回）。没有设备上报时显示未上报/离线，不添加演示设备。配置保存先成为待下发版本，只有设备校验并持久化后的对应 revision / configuration 上报才显示已应用。固件本地修改造成差异时如实显示。
 
 新固件每 10 秒通过 `device:sync` 身份报告状态，在线判断为最近 30 秒。Agent 重启后旧报告仍保留，但设备重新上报前保持离线。普通终端凭据不能访问管理 API，管理凭据也不能冒充终端同步或下载镜像。
 

@@ -87,7 +87,10 @@ git diff --stat archive/v0.2 main -- tools protocol firmware/components/core fir
 | `firmware/tests/ble_protocol_test.cpp` | info 消息多了 `boot` 字段（`pending` / `confirmed`）；0.3.30：`boot_pending_now` 的四种组合（钩子还没装上时按开机时读到的状态，13.11 U18） |
 | `firmware/tests/ble_protocol_test.cpp`、`firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/harness.cpp` | 0.3.31 待办看板（13.13）：B8 到 B10（消息、成批收、一次一个操作）；T30 到 T32（第 6 个页面和旧设置的迁移、列表的文字、字库没有的字），旧的页面设置期望值多了 `T-`；A43（选中、长按、删除确认和自动取消、过期、关掉、英文），界面矩阵多一页；角上小标记的检查和文字一样，跳过滚出主体的部分 |
 | `firmware/tests/ble_protocol_test.cpp`、`firmware/tests/ui_model_test.cpp`、`firmware/tests/audio_test.cpp`、`firmware/tests/ui_preview/harness.cpp` | 0.3.32 待办的更改和响铃（13.14）：B11、B12（新字段、清单、`todo_edit`）；T33、T34（重复的文字、月份波轮、草稿、响铃的判断）；S7（三声的响铃）；A44（更改页、波轮、重复、清单、保存和取消、响铃页、10 分钟后再响、夜间不响），界面测试可以设墙上时间 |
-| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.32，各两处 |
+| `firmware/tests/ui_model_test.cpp`、`firmware/tests/ui_preview/harness.cpp` | 0.3.33 设计评审以后（13.15）：T35（星期几、到期页标题、响铃页下面一行）；A45（完成后 5 秒可撤销 N1 到 N13）；A43、A44 的“完成”改成 5 秒后才发 |
+| `firmware/components/core/`（删 `config_jobs.cpp`；`core.cpp`、`core.hpp`、`CMakeLists.txt`） | 代码评审（2026-11-12）：配置写入的后台任务从来没人用（`queue_config_save`、`queue_config_reset`、`config_job_result`、`config_draft`、带草稿的 `reset_config` 都没有调用方），却在开机时建一个 6 KB 内部内存栈的 `dh_config` 任务。删掉，内部内存留给蓝牙。从 v0.2 归档原样带来的 |
+| `firmware/components/board_support/`（删 `touch_input.cpp`、`touch_input.hpp`、`touch_sample_queue.hpp`；`CMakeLists.txt`） | 代码评审（2026-11-12）：自己的触摸采样模块，`touch_input_start()` 从来没被调用（触摸走 BSP 的 LVGL 输入设备），因为 `WHOLE_ARCHIVE` 仍然链接进固件。删掉。从 v0.2 归档原样带来的 |
+| `firmware/CMakeLists.txt` | 版本号改为 0.3.5 到 0.3.33，各两处 |
 
 `firmware/tests/` 下新增的 `ui_model_test.cpp` 和 `ui_preview/` 是新界面自己的测试，归档里没有，所以上面的命令也不含它们。
 

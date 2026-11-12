@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>响铃页上撤销完成</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div role="alertdialog" aria-label="到时间了" style="width: 480px; height: 480px; position: relative; overflow: hidden; border-radius: 72px; background-color: #000000; background-image: radial-gradient(circle at 50% 30%, rgba(47,216,255,0.16), rgba(0,0,0,0) 60%); font-family: 'Noto Sans SC', 'Montserrat', sans-serif; color: #e8f3f7">
+  <div style="position: absolute; left: 60px; right: 60px; top: 50px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="响铃"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg>
+    <span style="font-size: 15px; color: {{accent}}">已完成 · 5 秒后告诉 Mac</span>
+    <span style="font-size: 22px; line-height: 1.35; font-weight: 500; color: #7f97a3; text-decoration: line-through">回复设计评审的意见，附上新的截图和改过的流程</span>
+    <span style="font-size: 14px; color: #9fb4be">工作 · 每周</span>
+  </div>
+  <div style="position: absolute; left: 64px; right: 64px; top: 286px; display: flex; flex-direction: column; gap: 10px">
+    <button type="button" style="all: unset; box-sizing: border-box; height: 56px; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 500; color: {{accent}}; background: #101b24; box-shadow: inset 0 0 0 1.5px {{accent}}; position: relative; overflow: hidden">撤销<span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; height: 3px; width: 62%; background: {{accent}}"></span></button>
+  </div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; font-size: 12px; color: #7f97a3">撤销回到上一步；不点就算完成</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2fd8ff","options":["#2fd8ff","#5ee6b8","#ff9e4a"]},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2fd8ff' };
+  }
+}
+</script>
+</body>
+</html>

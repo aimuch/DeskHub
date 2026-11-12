@@ -54,8 +54,12 @@ DeskHub 是放在电脑桌上的一块圆角触摸屏，加上 Mac 菜单栏里�
 | <img src="docs/images/device/appearance.png" width="220"> | <img src="docs/images/device/power.png" width="220"> | <img src="docs/images/device/connect.png" width="220"> |
 | **输入源的名字和图标** | **日期与时间** | **屏幕键盘（更换 Wi-Fi）** |
 | <img src="docs/images/device/sources.png" width="220"> | <img src="docs/images/device/time.png" width="220"> | <img src="docs/images/device/wifi-keyboard.png" width="220"> |
-| **用量（Magpie）** | **用量：数据过期** | |
-| <img src="docs/images/device/usage.png" width="220"> | <img src="docs/images/device/usage-stale.png" width="220"> | |
+| **用量（Magpie）** | **用量：数据过期** | **待办：提醒事项** |
+| <img src="docs/images/device/usage.png" width="220"> | <img src="docs/images/device/usage-stale.png" width="220"> | <img src="docs/images/device/todo.png" width="220"> |
+| **待办：长按** | **待办：完成后 5 秒内可撤销** | **待办：更改** |
+| <img src="docs/images/device/todo-menu.png" width="220"> | <img src="docs/images/device/todo-undo.png" width="220"> | <img src="docs/images/device/todo-edit.png" width="220"> |
+| **待办：改到期（波轮）** | **待办：到时间响铃** | |
+| <img src="docs/images/device/todo-when.png" width="220"> | <img src="docs/images/device/todo-ring.png" width="220"> | |
 | **主题：深海蓝** | **主题：暖橙** | **English，大字号** |
 | <img src="docs/images/device/theme-ocean.png" width="220"> | <img src="docs/images/device/theme-amber.png" width="220"> | <img src="docs/images/device/english.png" width="220"> |
 
@@ -361,7 +365,7 @@ flowchart LR
 
 ## 现在能用什么
 
-截至 2026-11-07，触摸屏固件 0.3.27，桌面 App 0.3.0。
+截至 2026-11-12，触摸屏固件 0.3.33（设备上），桌面 App 0.4.3。
 
 | 功能 | 状态 |
 | --- | --- |
@@ -370,8 +374,9 @@ flowchart LR
 | App 用 USB 刷固件 | 真机上用同一段代码刷过 0.3.21 到 0.3.26，每次读回确认。 |
 | App 用蓝牙升级固件 | 真机上写入、重启、读回都成功（约 4 分钟）；中途断开时旧固件照常运行。**但 0.3.28 以前，从蓝牙装上的版本从来没通过开机自检，下次复位就回到旧版本**（原因和修法见设计文档 13.11 U16）。0.3.29 修了自检；0.3.30 再修一个竞态：重启后马上读 info 会误报“已确认”（U18）。2026-11-11 真机验证：0.3.29 复位后留下，0.3.29 → 0.3.30 的蓝牙升级里 App 等了 64 秒才读到“自检通过”（`docs/evidence/firmware-0.3.30.json`）。签名不对、版本不新等拒绝路径只在主机测试里测过。 |
 | 用量页（Magpie） | 固件 0.3.28、App 0.4.0：主机测试、界面测试、变异检查都过了；**还没在真机上看过**。 |
-| 待办看板（提醒事项） | 固件 0.3.31、App 0.4.2 在真机上：列表显示、长按弹出操作。“完成”是否改到 Mac 还没试。 |
-| 待办：更改和响铃 | 固件 0.3.32、App 0.4.3：主机测试、界面测试、App 检查都过了；**还没在真机上看过**。 |
+| 待办看板（提醒事项） | 固件 0.3.31、App 0.4.2 在真机上：列表显示、长按弹出操作；0.3.32 上“完成”改到了 Mac（`docs/evidence/firmware-0.3.32.json`）。 |
+| 待办：更改和响铃 | 固件 0.3.32、App 0.4.3 在真机上：更改、响铃、Mac 上改了同步过来，都试过。夜间只亮屏、多于 30 条、先在 Mac 上改再在触摸屏上保存，还没有一一试。 |
+| 待办：完成可以撤销，到期页、响铃页按设计稿补齐 | 固件 0.3.33：蓝牙装上并通过自检（`docs/evidence/firmware-0.3.33.json`）；界面**还没在真机上看过**。 |
 | 触摸屏界面（总览、切源、时钟、设置、外观、电源、连接、声音、时间） | 已在设备上。0.3.21 起总览是大圆环；秒和表针可选（0.3.19）。 |
 | 屏幕键盘更换 Wi-Fi | 0.3.13 起在设备上，USB 读回 Wi-Fi 已连接；失败回退没有完整验证。 |
 | 充电保护（实验功能，默认关） | 0.3.6 在真机上停过一次充；**降到回充线以下再恢复充电，还没有验证**。 |

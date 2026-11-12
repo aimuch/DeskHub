@@ -1,0 +1,25 @@
+{
+  "version": "0.3.33",
+  "app": "0.4.3",
+  "date": "2026-11-12",
+  "device": "deskhub-44bd8d60c598",
+  "what": "设计评审以后的前三项：完成可以撤销、列表底部渐隐、按设计稿补齐到期页、响铃页、更改页（docs/desktop-app-design.md 13.15）",
+  "user_approved": "2026-11-12 用户说“改前三项”，改完以后说“刷”",
+  "updates": [
+    {
+      "record": "ble-update-e2e/run-0.3.33.json",
+      "result": "0.3.32 → 0.3.33 写入约 267 秒、重启，64 秒后读到 confirmed，留下来了"
+    }
+  ],
+  "build": "espressif/idf:v6.0.2 容器里构建（和 CI 一样，只用 sdkconfig.defaults）；本机 ESP-IDF 的 Python 虚拟环境不在，没有用本机构建",
+  "checks_done": [
+    "主机测试 19 组全部通过（本机 clang）；CI 镜像里 Linux GCC 13 也通过（T35）",
+    "界面流程全部通过（A45：N1 到 N13；A43、A44 改成 5 秒后才发）",
+    "scripts/check_stack.py：全部在上限以内，update() 6560 / 6656",
+    "包 dist/deskhub-0.3.33-esp32s3.zip，sha256 1fd16b386feab155a7a40fb74b8659595c3658b455685f9fe161f81bfa4c064b"
+  ],
+  "on_the_device": [],
+  "not_tested": [
+    "撤销、渐隐、到期页、响铃页、更改页还没有在真机上看"
+  ]
+}
