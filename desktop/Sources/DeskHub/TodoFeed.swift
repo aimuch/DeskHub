@@ -189,6 +189,7 @@ final class TodoFeed: ObservableObject {
             }
             answer(true, "")
         } catch {
+            store.reset()   // as in apply(): the reminder changed in memory must not stay half changed after a failed save
             answer(false, error.localizedDescription)
         }
     }

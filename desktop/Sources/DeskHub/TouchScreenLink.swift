@@ -51,6 +51,7 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     private var upTimer: Timer?
     private var queue: [Data] = []
     private var writing = false
+    private var retryAfterError = false   // the encrypted read of a known device failed: drop the link, try again in 5 s
     private var remembered: UUID? {
         get { UserDefaults.standard.string(forKey: Self.rememberKey).flatMap(UUID.init(uuidString:)) }
         set { UserDefaults.standard.set(newValue?.uuidString, forKey: Self.rememberKey) }
@@ -78,6 +79,7 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
     }
     // Forgets the device here. The bond in macOS stays until it is removed in System Settings › Bluetooth.
     func forget() {
+        retryAfterError = false
         if let p = peripheral { central.cancelPeripheralConnection(p) }
         peripheral = nil
         remembered = nil
@@ -245,7 +247,16 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         case .manifest, .waitingReady, .sending, .finishing: finishUpdate(.failed("中途断开了。旧固件照常运行，可以再试一次。"))
         default: break
         }
-        if remembered == p.identifier { connect(p) }   // reconnect by itself
+        if remembered == p.identifier {   // reconnect by itself; after a failed read, not at once (no tight loop)
+            if retryAfterError {
+                retryAfterError = false
+                state = .connecting
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    guard let self, self.remembered == p.identifier, self.peripheral?.identifier == p.identifier, p.state == .disconnected else { return }
+                    self.connect(p)
+                }
+            } else { connect(p) }
+        }
         else if state != .searching { state = .notPaired }
     }
     // The touch screen said its table changed (every secure connection since 0.3.23): look again, so a characteristic a
@@ -270,6 +281,9 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
             if let error {
                 problem = "配对没有完成：\(error.localizedDescription)"
                 if remembered == nil { central.cancelPeripheralConnection(p); state = .notPaired }
+                // A device known here whose read fails (its bond was removed on the touch screen, say) left the link half
+                // open and the state at "connecting" for good. Drop it and come back; the problem stays on the page.
+                else { retryAfterError = true; central.cancelPeripheralConnection(p) }
                 return
             }
             // The link is encrypted and authenticated: remember the device, listen, send the list.
@@ -328,3 +342,6 @@ final class TouchScreenLink: NSObject, ObservableObject, CBCentralManagerDelegat
         p.writeValue(queue.removeFirst(), for: c, type: .withResponse)
     }
 }
+// Every use is on the main queue (the central manager's queue is .main), so the link may be captured by main-actor
+// closures such as the update test hook's timer.
+extension TouchScreenLink: @unchecked Sendable {}
