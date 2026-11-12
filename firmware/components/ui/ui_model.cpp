@@ -403,7 +403,6 @@ std::vector<SourceView> make_sources(Lang l, const Snapshot &s, const SourceName
 bool power_fresh(const PowerState &p, int64_t now_ms) {
     return p.observed_ms > 0 && now_ms >= p.observed_ms && now_ms - p.observed_ms <= kPowerStaleMs;
 }
-bool metrics_fresh(const Snapshot &s, int64_t now_ms) { return s.sampled_ms != 0 && now_ms < s.metrics_expires_ms; }
 
 // ---- header and ring ----
 HeaderView make_header(const Snapshot &s, const PowerState &p, int64_t now_ms, bool show_percent) {
@@ -930,6 +929,21 @@ std::string draft_when_text(Lang l, const TodoDraft &d, int now_year) {
     else date = year ? fmt("%d年%d月%d日", d.year, d.month, day) : fmt("%d月%d日", d.month, day);
     std::string when = d.when == TodoDraft::When::Timed ? fmt("%02d:%02d", d.minute / 60, d.minute % 60) : T(l, Str::TodoAllDay);
     return date + " " + when;
+}
+int weekday_of(int y, int m, int d) {   // Sakamoto's method on the Gregorian calendar
+    static const int k[12] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    if (m < 3) y -= 1;
+    return (y + y / 4 - y / 100 + y / 400 + k[(m + 11) % 12] + d) % 7;
+}
+std::string draft_when_head(Lang l, const TodoDraft &d) {
+    if (d.when == TodoDraft::When::None) return T(l, Str::TodoDue);
+    const int day = std::clamp(d.day, 1, std::max(1, ble::days_in_month(d.year, d.month)));
+    return fmt(tr(l, Str::TodoDueWeek), weekday_name(l, weekday_of(d.year, d.month, day)));
+}
+std::string todo_ring_line(Lang l, const ble::Todo &t) {
+    const std::string repeat = t.repeat.empty() ? "" : repeat_text(l, t.repeat);
+    if (t.list.empty()) return repeat;
+    return repeat.empty() ? t.list : t.list + T(l, Str::Sep) + repeat;
 }
 namespace {
 std::string ring_key(const ble::Todo &t) { return t.id + fmt("%04d%02d%02d%04d", t.year, t.month, t.day, t.minute); }

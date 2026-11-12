@@ -50,6 +50,9 @@
 //     gives an edit the protocol accepts; the "when" in words.
 // T34 Ringing (M7 to M9, M12): only a to-do with a ring, a time, today's date and this minute; not when the time is not known;
 //     once per to-do and due time; one at a time in the list's order; "again in 10 minutes" rings once more, 10 minutes later.
+// T35 After the design review (13.15): the weekday of a date (Gregorian, leap years); the head of the due page says the
+//     weekday of the chosen date, the day kept inside its month ("到期 · 周四", "Due | Thu"), and only "到期" without a date;
+//     the line under the title of the ring page is the list and the repeat ("工作 · 每周"), each only when there is one.
 // T26 The night theme: the tokens of docs/design/README.md (v2), pure black, readable like the others (T1, T4).
 // T27 Input sources: the port of an input id is read from its words (hdmi, dp/displayport, usbc/usb-c/type-c/thunderbolt,
 //     with or without a number), never from a part of a word; anything else is a plain display, with no port tag.
@@ -1518,7 +1521,37 @@ static void t34_ringing() {
     list[0].minute = 870;
     CHECK(r.due(list, true, 2026, 11, 12, 870, 0).has_value());                       // after a restart it may ring once more
 }
+// ---- T35 ----
+static void t35_review() {
+    CHECK(weekday_of(2026, 11, 12) == 4);                                   // a Thursday
+    CHECK(weekday_of(2000, 2, 29) == 2);                                    // a leap day, a Tuesday
+    CHECK(weekday_of(2027, 1, 3) == 0);                                     // a Sunday, across the year
+    CHECK(weekday_of(2100, 3, 1) == 1);                                     // 2100 is not a leap year: a Monday
+    TodoDraft d;
+    d.when = TodoDraft::When::Timed; d.year = 2026; d.month = 11; d.day = 12; d.minute = 870;
+    CHECK(draft_when_head(Lang::ZhCN, d) == "到期 · 周四");
+    CHECK(draft_when_head(Lang::EnUS, d) == "Due | Thu");
+    d.when = TodoDraft::When::AllDay; d.year = 2027; d.month = 1; d.day = 3;
+    CHECK(draft_when_head(Lang::ZhCN, d) == "到期 · 周日");
+    d.year = 2026; d.month = 2; d.day = 31;                                 // kept inside February: the 28th, a Saturday
+    CHECK(draft_when_head(Lang::ZhCN, d) == "到期 · 周六");
+    d.when = TodoDraft::When::None;
+    CHECK(draft_when_head(Lang::ZhCN, d) == "到期");
+    CHECK(draft_when_head(Lang::EnUS, d) == "Due");
+    ble::Todo t = td("000000000001", "回复设计评审", ble::TodoKind::Today, 11, 12, 870);
+    t.repeat = "w1";
+    CHECK(todo_ring_line(Lang::ZhCN, t) == "工作 · 每周");
+    t.list = "Work";
+    CHECK(todo_ring_line(Lang::EnUS, t) == "Work | Weekly");
+    t.list = ""; t.repeat = "d3";
+    CHECK(todo_ring_line(Lang::ZhCN, t) == "每 3 天");
+    t.list = "家"; t.repeat = "";
+    CHECK(todo_ring_line(Lang::ZhCN, t) == "家");
+    t.list = "";
+    CHECK(todo_ring_line(Lang::ZhCN, t).empty());
+}
 int main() {
+    t35_review();
     t33_todo_edit();
     t34_ringing();
     t30_todo_page_order();

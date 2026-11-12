@@ -261,7 +261,6 @@ void wifi_close() {
     redact(); editor.clear(); delete_due=0; wc::cancel(); closing=true; request_update();
 }
 bool wifi_opened() { return opened; }
-lv_obj_t *wifi_reveal_object() { return eye; }
 void wifi_reset() {
     redact(); editor.clear(); ssid.clear();
     if (root) lv_obj_delete(root);

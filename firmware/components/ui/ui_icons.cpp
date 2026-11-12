@@ -127,9 +127,6 @@ lv_obj_t *source_icon(lv_obj_t *parent, SourceIcon icon, int size, uint32_t rgb,
     lv_obj_add_event_cb(o, draw_icon, LV_EVENT_DRAW_MAIN, nullptr);
     return o;
 }
-void source_icon_ink(lv_obj_t *o, uint32_t rgb) {
-    if (o && !lv_color_eq(lv_obj_get_style_line_color(o, LV_PART_MAIN), hex(rgb))) lv_obj_set_style_line_color(o, hex(rgb), 0);
-}
 SourceIcon source_icon_of(lv_obj_t *o) {
     if (!o || !lv_obj_has_flag(o, LV_OBJ_FLAG_USER_1)) return SourceIcon::Auto;
     return static_cast<SourceIcon>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(o)));

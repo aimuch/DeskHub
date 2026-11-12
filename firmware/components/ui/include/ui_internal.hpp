@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <vector>
 
 LV_FONT_DECLARE(btr_ui_16);
 LV_FONT_DECLARE(btr_ui_20);
@@ -75,6 +76,10 @@ struct Frame {
     bool confirm_forget = false;          // "forget computers" was tapped once
     ble::TodoState todos;                 // the to-do board (13.13)
     std::string todo_selected;            // the id of the selected row; "" when none
+    std::string todo_undo;                // 13.15: the row whose "done" waits its 5 s ("undo" in its place); "" when none
+    int todo_undo_left_ms = 0;            // what is left of those 5 s
+    std::vector<std::string> todo_struck; // rows whose "done" is on its way: struck through, no long press
+    std::string todo_note;                // N6: "not done" when the link was down at the end of the 5 s; "" when none
 };
 
 // ---- ui_kit.cpp: equality-guarded setters (LVGL 9.4 invalidates even when a style is set to its current value) ----
@@ -83,7 +88,6 @@ void set_optional_text(lv_obj_t *, const std::string &);  // hidden while empty
 void set_bg(lv_obj_t *, uint32_t rgb);
 void set_border(lv_obj_t *, uint32_t rgb);
 void set_ink(lv_obj_t *, uint32_t rgb);
-void set_font(lv_obj_t *, const lv_font_t *);
 void set_translate(lv_obj_t *, int x, int y);
 void set_hidden(lv_obj_t *, bool);
 uint32_t tone_color(Tone);
@@ -99,7 +103,6 @@ lv_obj_t *arc_segment(lv_obj_t *parent, int size, int start, int end, uint32_t r
 lv_obj_t *gauge(lv_obj_t *parent, int size, int width, uint32_t rgb);
 // ---- ui_icons.cpp: the icons of the input sources, drawn as strokes on a 24 grid (docs/design v2 SourceEdit) ----
 lv_obj_t *source_icon(lv_obj_t *parent, SourceIcon, int size, uint32_t rgb, int stroke);
-void source_icon_ink(lv_obj_t *, uint32_t rgb);
 SourceIcon source_icon_of(lv_obj_t *);   // what an icon object draws; Auto for anything else
 // The 60 ticks of the clock page: the five-minute ones longer and in `major`.
 lv_obj_t *tick_ring(lv_obj_t *parent, int size, uint32_t minor, uint32_t major);
@@ -171,7 +174,8 @@ void request_todo_repeat(int preset);         // 0 none, 1 daily, 2 weekdays, 3 
 void request_todo_list_pick(int index);
 void request_todo_sub(bool ok);               // "OK" or "Back" on the pages of the due time, the repeat and the list
 void request_todo_edit_done(bool save);       // "Save" or "Cancel"
-void request_todo_ring_choice(int choice);    // the ring page: 0 OK, 1 done, 2 again in 10 minutes
+void request_todo_ring_choice(int choice);    // the ring page: 0 OK, 1 done, 2 again in 10 minutes, 3 undo the done
+void request_todo_undo();                     // 13.15: the "undo" of the row whose "done" waits
 struct TodoEditView {
     int page = 3;
     std::string title;
@@ -182,14 +186,13 @@ struct TodoEditView {
     int now_year = 0;
 };
 lv_obj_t *build_todo_edit(lv_obj_t *layer, const TodoEditView &);
-lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act);
+lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act, bool undo);
 lv_obj_t *build_ble_pairing(lv_obj_t *layer, const ble::Status &);   // the waiting page or the digits
 void refresh_ble_pairing(const ble::Status &);
 void wifi_close();
 bool wifi_opened();
 void wifi_tick(lv_obj_t *screen, int64_t now, bool blocked, bool pairing);
 void wifi_reset();
-lv_obj_t *wifi_reveal_object();
 void note_activity();
 void user_screen_off();
 void schedule_brightness(int percent);
@@ -256,6 +259,10 @@ int todo_ring_selected();            // the ring switch of the edit page: 0 off,
 bool todo_ring_shown();              // the "due now" page is up
 void set_wall_for_test(time_t t);    // the wall clock the UI reads; 0: the real one
 int todo_dialog_mode();              // 0 none, 1 the actions, 2 the delete question
+std::string todo_undo_id();          // 13.15: the to-do whose "done" waits its 5 s of undo, "" when none
+bool todo_ring_undo();               // the ring page shows "done" and "undo"
+bool scroll_hint_shown();            // the down mark over the bottom of the body
+bool scroll_fade_shown();            // the fade under it
 bool rename_open();
 void rename_back();
 void rename_erase();

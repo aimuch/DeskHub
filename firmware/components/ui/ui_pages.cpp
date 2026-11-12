@@ -9,6 +9,7 @@
 #include "esp_system.h"
 
 namespace dh::ui::detail {
+void countdown_line(lv_obj_t *parent, int width, int ms, int total_ms);
 namespace {
 int lh(const lv_font_t *f) { return lv_font_get_line_height(f) + 1; }
 const Palette &P() { return look.palette; }
@@ -23,7 +24,7 @@ lv_obj_t *g_body = nullptr;
 int g_scroll = 0;
 
 struct Shell {
-    lv_obj_t *left{}, *right{}, *wifi{}, *pc{}, *pc_screen{}, *pc_neck{}, *pc_base{}, *usb{}, *bolt{}, *box{}, *body{}, *tip{}, *fill{}, *digits{}, *nav{}, *hint{};
+    lv_obj_t *left{}, *right{}, *wifi{}, *pc{}, *pc_screen{}, *pc_neck{}, *pc_base{}, *usb{}, *bolt{}, *box{}, *body{}, *tip{}, *fill{}, *digits{}, *nav{}, *hint{}, *fade{};
     int bolt_ink_w = 0, bolt_ofs_x = 0;   // the bolt glyph: width of its ink and where the ink starts in its box
     std::array<lv_obj_t *, 2> wifi_cut{}, pc_cut{}, bat_cut{};  // the slash: a line in the colour of the background under a thin one
     std::array<lv_obj_t *, 5> nav_btn{}, nav_label{};
@@ -451,16 +452,49 @@ void on_todo_long(lv_event_t *e) {
     const size_t i = static_cast<size_t>(data_of(e));
     if (i < tw.ids.size()) request_todo_menu(tw.ids[i]);
 }
-std::string todo_signature(const TodoView &v, const std::string &selected) {
+std::string todo_signature(const TodoView &v, const Frame &f) {
     const bool list = v.state == TodoView::State::Fresh || v.state == TodoView::State::Stale;   // their line is set, not rebuilt
-    std::string s = std::to_string(static_cast<int>(v.state)) + (v.dim ? "d" : "") + "|" + v.count + "|" + (list ? "" : v.status) + "|" + v.hint + "|" + v.more + "|" + selected;
+    std::string s = std::to_string(static_cast<int>(v.state)) + (v.dim ? "d" : "") + "|" + v.count + "|" + (list ? "" : v.status) + "|" + v.hint + "|" + v.more + "|" + f.todo_selected +
+                    "|u" + f.todo_undo;
+    for (const auto &id : f.todo_struck) s += "|x" + id;
     for (const auto &g : v.groups) {
         s += "#" + g.title;
         for (const auto &r : g.rows) s += "/" + r.id + "=" + r.title + "@" + r.when + "@" + r.detail;
     }
     return s;
 }
-void fill_todo(lv_obj_t *body, const TodoView &v, const std::string &selected) {
+void on_todo_undo(lv_event_t *) { request_todo_undo(); }
+// 13.15 N1, N9: the row whose "done" waits its 5 s, in its own place: a tick, the title struck through, "undo", the line of the
+// time that is left. Not a button itself: only "undo" takes a touch, so a long press there opens nothing.
+lv_obj_t *undo_row(lv_obj_t *body, const TodoRow &r, int left_ms) {
+    constexpr int kUndoW = 96;
+    auto *row = panel(body, kContentW, kTodoMinH, P().card, P().accent, 14);
+    lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_clip_corner(row, true, 0);
+    lv_obj_set_style_border_width(row, 2, 0);   // children sit inside the border: "undo" is placed back over it to fill the row's height
+    auto *mark = lv_obj_create(row);
+    lv_obj_remove_style_all(mark);
+    lv_obj_set_size(mark, kTodoMark, kTodoMark);
+    lv_obj_set_pos(mark, kTodoPad - 2, (kTodoMinH - kTodoMark) / 2 - 2);
+    lv_obj_set_style_radius(mark, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(mark, hex(P().accent), 0);
+    lv_obj_set_style_bg_opa(mark, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(mark, LV_OBJ_FLAG_CLICKABLE);
+    const int title_w = kContentW - 2 * kTodoPad - kTodoMark - 12 - kUndoW;
+    auto *t = label_at(row, fit_text(displayable(r.title, todo_glyph), look.body, title_w, 1), kTodoPad + kTodoMark + 10, (kTodoMinH - lh(look.body)) / 2 - 2, title_w, look.body, P().muted);
+    lv_obj_set_style_text_decor(t, LV_TEXT_DECOR_STRIKETHROUGH, 0);
+    auto *b = button(row, on_todo_undo, nullptr, kUndoW, kTodoMinH);
+    lv_obj_set_pos(b, kContentW - kUndoW - 2, -2);
+    lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(b, 0, 0);
+    auto *l = label(b, T(Str::TodoUndo), kUndoW - 8, look.body, P().accent);
+    centered(l);
+    lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
+    countdown_line(row, kContentW - 4, left_ms, 5000);
+    return row;
+}
+void fill_todo(lv_obj_t *body, const TodoView &v, const Frame &f) {
+    const std::string &selected = f.todo_selected;
     tw.rows.clear();
     tw.ids.clear();
     const int cap = lh(look.caption);
@@ -496,6 +530,12 @@ void fill_todo(lv_obj_t *body, const TodoView &v, const std::string &selected) {
         auto *head = label(body, g.title, kContentW - 12, look.caption, tone);
         lv_obj_set_style_margin_left(head, 6, 0);
         for (const auto &r : g.rows) {
+            if (r.id == f.todo_undo) {
+                tw.rows.push_back(undo_row(body, r, f.todo_undo_left_ms));
+                tw.ids.push_back(r.id);
+                continue;
+            }
+            const bool struck = std::find(f.todo_struck.begin(), f.todo_struck.end(), r.id) != f.todo_struck.end();   // on its way to the Mac
             const bool sel = r.id == selected;
             const std::string title = displayable(r.title, todo_glyph);
             const std::string shown = fit_text(title, look.body, title_w, sel ? kTodoLines : 1);
@@ -507,7 +547,7 @@ void fill_todo(lv_obj_t *body, const TodoView &v, const std::string &selected) {
             auto *row = button(body, [](lv_event_t *) {}, nullptr, kContentW, h);
             lv_obj_set_style_radius(row, 14, 0);
             lv_obj_add_event_cb(row, on_todo_tap, LV_EVENT_SHORT_CLICKED, data(static_cast<int>(index)));
-            lv_obj_add_event_cb(row, on_todo_long, LV_EVENT_LONG_PRESSED, data(static_cast<int>(index)));
+            if (!struck) lv_obj_add_event_cb(row, on_todo_long, LV_EVENT_LONG_PRESSED, data(static_cast<int>(index)));
             if (sel) select(row, true, false);
             if (v.dim) lv_obj_set_style_opa(row, LV_OPA_50, 0);
             const int first = sel ? 10 : (h - lh(look.body)) / 2;
@@ -519,8 +559,9 @@ void fill_todo(lv_obj_t *body, const TodoView &v, const std::string &selected) {
             lv_obj_set_style_border_width(mark, 2, 0);
             lv_obj_set_style_border_color(mark, hex(tone == P().muted ? P().edge : tone), 0);
             lv_obj_remove_flag(mark, LV_OBJ_FLAG_CLICKABLE);
-            auto *t = label_at(row, shown, kTodoPad + kTodoMark + 12, first, title_w, look.body, P().ink);
+            auto *t = label_at(row, shown, kTodoPad + kTodoMark + 12, first, title_w, look.body, struck ? P().muted : P().ink);
             lv_obj_remove_flag(t, LV_OBJ_FLAG_CLICKABLE);
+            if (struck) lv_obj_set_style_text_decor(t, LV_TEXT_DECOR_STRIKETHROUGH, 0);
             if (!r.when.empty()) {
                 if (r.tag) {
                     auto *tag = pill(row, r.when, P().bg, P().accent, P().accent, look.caption);
@@ -550,12 +591,12 @@ void build_todo(lv_obj_t *, const Frame &) { tw = TodoWidgets{}; }
 void refresh_todo(const Frame &f) {
     if (!g_body) return;
     const TodoView v = make_todos(look.lang, f.todos.has_list ? &f.todos.list : nullptr, f.todos.off_why, f.todos.age_ms, f.ble.secure);
-    const std::string sig = todo_signature(v, f.todo_selected);
+    const std::string sig = todo_signature(v, f);
     if (sig != tw.sig || !tw.count) {
         const int y = tw.state == static_cast<int>(v.state) ? lv_obj_get_scroll_y(g_body) : 0;
         lv_obj_clean(g_body);
         tw = TodoWidgets{};
-        fill_todo(g_body, v, f.todo_selected);
+        fill_todo(g_body, v, f);
         tw.sig = sig;
         tw.state = static_cast<int>(v.state);
         lv_obj_update_layout(g_body);
@@ -570,6 +611,7 @@ void refresh_todo(const Frame &f) {
     std::string line;
     uint32_t ink = P().accent;
     if (f.todos.waiting) line = T(Str::TodoWorking);
+    else if (!f.todo_note.empty()) { line = f.todo_note; ink = P().power; }   // N6
     else if (f.todos.has_outcome && f.todos.outcome_age_ms < 8000) {
         const auto &o = f.todos.outcome;
         line = o.timeout ? todo_timeout_text(look.lang) : todo_result_text(look.lang, o.action, o.ok, displayable(o.title, todo_glyph), o.detail);
@@ -616,14 +658,16 @@ void edit_bottom(lv_obj_t *root, Str left, Str right, lv_event_cb_t cb) {   // d
     auto *b = edit_button(root, T(right), cb, 1, 64 + w + 12, y, w, P().bg, P().accent);
     lv_obj_set_style_radius(b, 28, 0);
 }
-lv_obj_t *wheel(lv_obj_t *parent, int which, const std::string &options, int selected, int x, int y, int w, bool enabled) {
+// rows: how many show; pitch: px from one row to the next (0: the font's own line height). The height follows from both.
+lv_obj_t *wheel(lv_obj_t *parent, int which, const std::string &options, int selected, int x, int y, int w, bool enabled, int rows = 3, int pitch = 0) {
     auto *r = lv_roller_create(parent);
     lv_roller_set_options(r, options.c_str(), which == 3 || which == 2 ? LV_ROLLER_MODE_INFINITE : LV_ROLLER_MODE_NORMAL);
-    lv_roller_set_visible_row_count(r, 3);
-    lv_obj_set_width(r, w);
-    lv_obj_set_pos(r, x, y);
     lv_obj_set_style_text_font(r, look.body, 0);
     lv_obj_set_style_text_font(r, look.body, LV_PART_SELECTED);
+    if (pitch > lh(look.body)) lv_obj_set_style_text_line_space(r, pitch - lh(look.body), 0);
+    lv_roller_set_visible_row_count(r, static_cast<uint32_t>(rows));
+    lv_obj_set_width(r, w);
+    lv_obj_set_pos(r, x, y);
     lv_obj_set_style_bg_opa(r, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(r, 0, 0);
     lv_obj_set_style_text_color(r, hex(P().muted), 0);
@@ -662,9 +706,11 @@ void build_edit_main(lv_obj_t *root, const TodoEditView &v) {
         lv_obj_set_style_radius(b, 16, 0);
         auto *n = label_at(b, T(rows[i].first), 18, (kMinTarget - lh(look.caption)) / 2, 90, look.caption, P().muted);
         (void)n;
-        auto *val = label_at(b, fit_text(displayable(rows[i].second, todo_glyph), look.body, w - 150, 1), 110, (kMinTarget - lh(look.body)) / 2, w - 140, look.body,
+        auto *val = label_at(b, fit_text(displayable(rows[i].second, todo_glyph), look.body, w - 160, 1), 110, (kMinTarget - lh(look.body)) / 2, w - 150, look.body,
                              i == 0 ? P().accent : P().ink);
         lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_RIGHT, 0);
+        auto *more = label_at(b, LV_SYMBOL_RIGHT, w - 32, (kMinTarget - lh(&lv_font_montserrat_14)) / 2, 16, &lv_font_montserrat_14, P().muted);   // 13.15: it opens a page
+        lv_obj_remove_flag(more, LV_OBJ_FLAG_CLICKABLE);
     }
     // the ring: off / on; without a time it cannot be on, and the row says why
     const int y = 112 + 3 * 64;
@@ -689,7 +735,7 @@ void build_edit_main(lv_obj_t *root, const TodoEditView &v) {
     edit_bottom(root, Str::Cancel, Str::TodoSave, [](lv_event_t *e) { request_todo_edit_done(data_of(e) == 1); });
 }
 void build_edit_when(lv_obj_t *root, const TodoEditView &v) {
-    edit_head(root, T(Str::TodoDue));
+    edit_head(root, draft_when_head(look.lang, v.draft));   // 13.15: the weekday of the chosen date
     const Str names[3] = {Str::TodoTimed, Str::TodoAllDay, Str::TodoNoDate};
     const int w = (kScreen - 88 - 16) / 3;
     const int chosen = v.draft.when == TodoDraft::When::Timed ? 0 : v.draft.when == TodoDraft::When::AllDay ? 1 : 2;
@@ -701,13 +747,22 @@ void build_edit_when(lv_obj_t *root, const TodoEditView &v) {
         if (v.months[i].year == v.draft.year && v.months[i].month == v.draft.month) month_index = static_cast<int>(i);
     }
     const bool dated = chosen != 2, timed = chosen == 0;
-    const int top = 132;
-    wheel(root, 0, months, month_index, 40, top, 150, dated);
-    wheel(root, 1, numbers(1, std::max(1, ble::days_in_month(v.draft.year, v.draft.month)), false), v.draft.day - 1, 194, top, 70, dated);
-    wheel(root, 2, numbers(0, 23, true), v.draft.minute / 60, 284, top, 70, timed);
-    auto *colon = label_at(root, ":", 354, top + 40, 16, look.title, timed ? P().muted : P().edge);
+    // 13.15 N13: five rows when they fit between the choices and the line under them, else three (an odd count keeps the chosen
+    // row in the middle)
+    const int top = 120, how_y = kScreen - 44 - kMinTarget - 8 - lh(&btr_ui_16), room = how_y - 6 - top;
+    const int pitch = std::max(lh(look.body) + 6, 44);
+    const int rows = room >= 5 * pitch ? 5 : 3;
+    wheel(root, 0, months, month_index, 40, top, 140, dated, rows, pitch);
+    auto *d = wheel(root, 1, numbers(1, std::max(1, ble::days_in_month(v.draft.year, v.draft.month)), false), v.draft.day - 1, 184, top, 64, dated, rows, pitch);
+    lv_obj_update_layout(d);
+    const int mid = top + lv_obj_get_height(d) / 2;
+    if (look.lang != Lang::EnUS) label_at(root, T(Str::TodoDayWord), 250, mid - lh(look.caption) / 2, 26, look.caption, dated ? P().muted : P().edge);
+    wheel(root, 2, numbers(0, 23, true), v.draft.minute / 60, 284, top, 70, timed, rows, pitch);
+    auto *colon = label_at(root, ":", 354, mid - lh(look.title) / 2, 16, look.title, timed ? P().muted : P().edge);
     centered(colon);
-    wheel(root, 3, numbers(0, 59, true), v.draft.minute % 60, 370, top, 70, timed);
+    wheel(root, 3, numbers(0, 59, true), v.draft.minute % 60, 370, top, 70, timed, rows, pitch);
+    auto *how = label_at(root, T(Str::TodoRollHow), 40, how_y, kScreen - 80, &btr_ui_16, P().muted);
+    centered(how);
     edit_bottom(root, Str::TodoBack, Str::TodoOk, [](lv_event_t *e) { request_todo_sub(data_of(e) == 1); });
 }
 void build_edit_repeat(lv_obj_t *root, const TodoEditView &v) {
@@ -1657,7 +1712,25 @@ void build_shell(lv_obj_t *screen) {
         lv_obj_align(l, LV_ALIGN_CENTER, 0, 0);
         sh.nav_label[k] = l;
     }
+    {   // 13.15 N12: more below fades the bottom of the body into the screen's own gradient, and the down mark sits on the fade
+        constexpr int kFadeH = 34;
+        const int top = kBodyTop + kBodyH - kFadeH, bottom = kBodyTop + kBodyH;
+        auto at = [&](int y) { return lv_color_mix(lv_color_hex(p.bg2), lv_color_hex(p.bg), static_cast<uint8_t>(255 * y / (kScreen - 1))); };
+        sh.fade = lv_obj_create(screen);
+        lv_obj_remove_style_all(sh.fade);
+        lv_obj_set_size(sh.fade, kContentW, kFadeH);
+        lv_obj_set_pos(sh.fade, kMargin, top);
+        lv_obj_set_style_bg_color(sh.fade, at(top), 0);
+        lv_obj_set_style_bg_grad_color(sh.fade, at(bottom), 0);
+        lv_obj_set_style_bg_grad_dir(sh.fade, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_bg_opa(sh.fade, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_main_opa(sh.fade, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_grad_opa(sh.fade, LV_OPA_COVER, 0);
+        lv_obj_remove_flag(sh.fade, LV_OBJ_FLAG_CLICKABLE);   // a touch goes through to the row under it
+        lv_obj_add_flag(sh.fade, LV_OBJ_FLAG_HIDDEN);
+    }
     sh.hint = label_at(screen, LV_SYMBOL_DOWN, 230, 386, 20, &lv_font_montserrat_14, p.accent);
+    lv_obj_remove_flag(sh.hint, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(sh.hint, LV_OBJ_FLAG_HIDDEN);
 }
 void refresh_shell(const Frame &f, Page page, bool pairing_active) {
@@ -1716,7 +1789,7 @@ void refresh_shell(const Frame &f, Page page, bool pairing_active) {
         set_ink(sh.nav_label[static_cast<size_t>(i)], on ? p.accent : p.muted);
     }
     for (auto *o : {sh.left, sh.right, sh.nav}) set_hidden(o, pairing_active);
-    if (pairing_active) set_hidden(sh.hint, true);
+    if (pairing_active) { set_hidden(sh.hint, true); set_hidden(sh.fade, true); }
     // Burn-in protection shifts the header with the clock page; ui.cpp passes the shift through translate on the body.
 }
 void shift_shell(int dx) {
@@ -1798,27 +1871,61 @@ lv_obj_t *build_todo_edit(lv_obj_t *layer, const TodoEditView &v) {
     }
     return root;
 }
-// The ring (docs/design v2 TodoRing): the whole screen, so it is seen across the room.
-lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act) {
+// A thin line along the bottom of `parent` that runs out in `ms` (13.15: what is left of the 5 s of undo). An LVGL animation:
+// nothing has to set it on each tick.
+void countdown_line(lv_obj_t *parent, int width, int ms, int total_ms) {
+    auto *bar = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar);
+    lv_obj_remove_flag(bar, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(bar, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_style_bg_color(bar, hex(P().accent), 0);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+    const int start = std::max(0, width * std::clamp(ms, 0, total_ms) / std::max(1, total_ms));
+    lv_obj_set_size(bar, start, 3);
+    lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    if (start <= 0 || ms <= 0) return;
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, bar);
+    lv_anim_set_values(&a, start, 0);
+    lv_anim_set_duration(&a, static_cast<uint32_t>(ms));
+    lv_anim_set_exec_cb(&a, [](void *o, int32_t v) { lv_obj_set_width(static_cast<lv_obj_t *>(o), v); });
+    lv_anim_start(&a);
+}
+// The ring (docs/design v2 TodoRing, TodoRingUndo): the whole screen, so it is seen across the room. `undo`: after "done",
+// the same page says so and offers only "undo" (13.15 N10).
+lv_obj_t *build_todo_ring(lv_obj_t *layer, const std::string &head, const std::string &title, const std::string &detail, bool can_act, bool undo) {
     auto *root = edit_screen(layer);
-    auto *h = label_at(root, head, 60, 64, kScreen - 120, look.body, P().accent);
+    auto *bell = label_at(root, LV_SYMBOL_BELL, kScreen / 2 - 20, 40, 40, &lv_font_montserrat_24, P().accent);
+    centered(bell);
+    auto *h = label_at(root, head, 60, 76, kScreen - 120, look.body, P().accent);
     centered(h);
-    auto *t = label_at(root, fit_text(displayable(title, todo_glyph), look.title, kScreen - 120, 3), 60, 64 + lh(look.body) + 10, kScreen - 120, look.title, P().ink);
+    auto *t = label_at(root, fit_text(displayable(title, todo_glyph), look.title, kScreen - 120, 3), 60, 76 + lh(look.body) + 8, kScreen - 120, look.title, undo ? P().muted : P().ink);
     centered(t);
+    if (undo) lv_obj_set_style_text_decor(t, LV_TEXT_DECOR_STRIKETHROUGH, 0);
     lv_obj_update_layout(t);
     if (!detail.empty()) {
         auto *d = label_at(root, fit_text(displayable(detail, todo_glyph), look.caption, kScreen - 120, 1), 60, lv_obj_get_y(t) + lv_obj_get_height(t) + 8, kScreen - 120, look.caption, P().muted);
         centered(d);
     }
     const int w = kScreen - 128, half = (w - 10) / 2;
-    auto *done = edit_button(root, T(Str::TodoActDone), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 1, 64, 284, w, P().bg, P().accent);
-    lv_obj_set_style_radius(done, 28, 0);
-    if (!can_act) { lv_obj_set_style_opa(done, LV_OPA_40, 0); lv_obj_remove_flag(done, LV_OBJ_FLAG_CLICKABLE); }
-    auto *snooze = edit_button(root, T(Str::TodoSnooze), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 2, 64, 350, half, P().ink, P().card);
-    lv_obj_set_style_radius(snooze, 28, 0);
-    auto *ok = edit_button(root, T(Str::TodoGotIt), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 0, 64 + half + 10, 350, half, P().muted, P().card);
-    lv_obj_set_style_radius(ok, 28, 0);
-    auto *foot = label_at(root, T(can_act ? Str::TodoRingAuto : Str::TodoCannotAct), 90, 414, kScreen - 180, &btr_ui_16, P().muted);
+    if (undo) {
+        auto *b = edit_button(root, T(Str::TodoUndo), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 3, 64, 284, w, P().accent, P().card);
+        lv_obj_set_style_radius(b, 28, 0);
+        lv_obj_set_style_border_color(b, hex(P().accent), 0);
+        lv_obj_set_style_border_width(b, 2, 0);
+        lv_obj_set_style_clip_corner(b, true, 0);
+        countdown_line(b, w, 5000, 5000);
+    } else {
+        auto *done = edit_button(root, T(Str::TodoActDone), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 1, 64, 284, w, P().bg, P().accent);
+        lv_obj_set_style_radius(done, 28, 0);
+        if (!can_act) { lv_obj_set_style_opa(done, LV_OPA_40, 0); lv_obj_remove_flag(done, LV_OBJ_FLAG_CLICKABLE); }
+        auto *snooze = edit_button(root, T(Str::TodoSnooze), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 2, 64, 350, half, P().ink, P().card);
+        lv_obj_set_style_radius(snooze, 28, 0);
+        auto *ok = edit_button(root, T(Str::TodoGotIt), [](lv_event_t *e) { request_todo_ring_choice(data_of(e)); }, 0, 64 + half + 10, 350, half, P().muted, P().card);
+        lv_obj_set_style_radius(ok, 28, 0);
+    }
+    auto *foot = label_at(root, T(undo ? Str::TodoUndoFoot : can_act ? Str::TodoRingAuto : Str::TodoCannotAct), 90, 414, kScreen - 180, &btr_ui_16, P().muted);
     centered(foot);
     return root;
 }
@@ -1878,6 +1985,7 @@ void refresh_page(Page page, PowerTab tab, const Frame &f) {
     }
     const bool more = page != Page::Home && page != Page::Clock && g_body && lv_obj_get_scroll_bottom(g_body) > 3;
     set_hidden(sh.hint, !more);
+    set_hidden(sh.fade, !more);
 }
 
 // ---------------------------------------------------------------- state pages
@@ -2240,6 +2348,8 @@ std::string home_first_action_label() {
     }
     return "";
 }
+bool scroll_hint_shown() { return sh.hint && !lv_obj_has_flag(sh.hint, LV_OBJ_FLAG_HIDDEN); }
+bool scroll_fade_shown() { return sh.fade && !lv_obj_has_flag(sh.fade, LV_OBJ_FLAG_HIDDEN); }
 int todo_row_count() { return static_cast<int>(tw.rows.size()); }
 lv_obj_t *todo_roller(int which) {
     if (which < 0 || which > 5) return nullptr;

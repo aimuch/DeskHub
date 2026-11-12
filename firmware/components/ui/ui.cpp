@@ -42,6 +42,13 @@ lv_obj_t *ring_view = nullptr;
 ble::Todo ring_item;
 int64_t ring_at = 0;
 constexpr int64_t kRingShowMs = 60000;       // the ring page closes by itself
+// 13.15: "done" waits 5 s for an "undo" before it goes; then the done ones go one at a time, in order (N1 to N8)
+constexpr int64_t kUndoMs = 5000, kNoteMs = 8000;
+struct UndoDone { std::string id; int64_t at = 0; bool ring = false; } undo_done;   // id "": nothing waits
+std::vector<std::string> todo_outbox;   // done, not sent yet
+std::string todo_sending;               // sent; the App has not answered yet
+int64_t todo_note_at = -1;              // N6: when a done could not go
+struct RingShown { std::string head, title, detail; bool can_act = false; } ring_shown;
 time_t test_wall = 0;
 time_t wall_now() { return test_wall ? test_wall : time(nullptr); }
 std::string fmt_ring_head(const char *hhmm) { char b[96]; snprintf(b, sizeof(b), tr(look.lang, Str::TodoRingNow), hhmm); return b; }
@@ -107,9 +114,10 @@ void overlay_ble(Snapshot &s) {
 bool own_error(Page p) { return p == Page::Appearance || p == Page::Pages || p == Page::Sources || p == Page::SourceEdit; }
 Page home_page() { return page_of(home_view(appearance.pages)); }
 
-// Everything the pages read, taken once per tick.
-Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool want_paired) {
-    Frame f;
+// Everything the pages read, taken once per tick. It lives here, not on the LVGL task's stack: update() and the page code
+// under it are the deepest calls of that task (scripts/check_stack.py). Every field is set on each tick.
+Frame frame_now;
+void fill_frame(Frame &f, const Snapshot &s, const DisplayConfig &c, int64_t now, bool want_paired) {
     f.s = ordered(s, c);
     f.c = c;
     f.power = board_power();
@@ -117,6 +125,8 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.charge_error = charge_error;
     f.now_ms = now;
     f.wall = wall_now();
+    f.paired = false;
+    f.wifi_name.clear();
     if (want_paired) { const auto stored = secrets(); f.paired = stored.ready(); f.wifi_name = stored.ssid; }
     f.command_changed_ms = command_changed_ms;
     f.config_pending = config_due != 0;
@@ -134,7 +144,11 @@ Frame make_frame(const Snapshot &s, const DisplayConfig &c, int64_t now, bool wa
     f.has_usage = ble::usage(f.usage, f.usage_age_ms);
     f.todos = ble::todos();
     f.todo_selected = todo_sel;
-    return f;
+    f.todo_undo = undo_done.id;
+    f.todo_undo_left_ms = undo_done.id.empty() ? 0 : static_cast<int>(std::max<int64_t>(0, kUndoMs - (now - undo_done.at)));
+    f.todo_struck = todo_outbox;
+    if (!todo_sending.empty()) f.todo_struck.push_back(todo_sending);
+    f.todo_note = todo_note_at >= 0 && now - todo_note_at < kNoteMs ? tr(look.lang, Str::TodoNotDone) : "";
 }
 
 void rebuild_shell() {
@@ -156,9 +170,46 @@ void rebuild_shell() {
     lv_obj_move_background(body);
 }
 
+void close_ring() {   // also from the ring page's own buttons: hidden now, deleted after the event
+    if (!ring_view) return;
+    lv_obj_add_flag(ring_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_delete_async(ring_view);
+    ring_view = nullptr;
+}
+void show_ring(bool undo) {   // N10: the same page, as "due now" with its three choices or as "done" with "undo"
+    close_ring();
+    ring_view = build_todo_ring(lv_layer_top(), undo ? std::string(tr(look.lang, Str::TodoUndoHead)) : ring_shown.head, ring_shown.title, ring_shown.detail,
+                                ring_shown.can_act, undo);
+}
+void undo_start(const std::string &id, bool ring) {
+    if (!undo_done.id.empty()) todo_outbox.push_back(undo_done.id);   // N3: the one before goes now
+    undo_done = {id, monotonic_ms(), ring};
+}
+// N2 to N6: at the end of its 5 s a done joins the outbox; the outbox sends one at a time, only while nothing waits.
+void flush_done(const ble::TodoState &t, int64_t now) {
+    if (!undo_done.id.empty() && now - undo_done.at >= kUndoMs) {
+        todo_outbox.push_back(undo_done.id);
+        if (undo_done.ring) close_ring();
+        undo_done = {};
+    }
+    if (!t.waiting) todo_sending.clear();
+    while (!todo_outbox.empty()) {
+        const std::string id = todo_outbox.front();
+        bool there = false;
+        if (t.has_list) for (const auto &x : t.list.items) there = there || x.id == id;
+        if (!there) { todo_outbox.erase(todo_outbox.begin()); continue; }   // N5: done or deleted on the Mac
+        if (t.waiting || !todo_sending.empty()) return;                     // N4: after the one that waits
+        todo_outbox.erase(todo_outbox.begin());
+        if (ble::todo_act(id, ble::TodoAction::Done)) todo_sending = id;
+        else todo_note_at = now;                                            // N6: the link, the list or the setting is off
+        return;
+    }
+}
+
 // The to-do dialogs, the edit pages and the ring (13.13, 13.14). A function of its own, not inlined into update(): its strings and
 // views take stack only while it runs (update() runs on the LVGL task every tick).
 __attribute__((noinline)) void todo_overlays(const Frame &f, int64_t now, const DisplayConfig &c, const Snapshot &s, const struct tm &t, bool pairing_now) {
+    flush_done(f.todos, now);
     {   // the to-do dialog: only on the to-do page, only while the list can still act; the delete question times out
         if (todo_dialog) {
             const TodoView tv = make_todos(look.lang, f.todos.has_list ? &f.todos.list : nullptr, f.todos.off_why, f.todos.age_ms, f.ble.secure);
@@ -196,17 +247,16 @@ __attribute__((noinline)) void todo_overlays(const Frame &f, int64_t now, const 
         if (todo_view) policy.last_activity_ms = now;
     }
     {   // 13.14: a to-do with a ring at this minute (the device's own clock and list); one page at a time
-        if (ring_view && now - ring_at >= kRingShowMs) { lv_obj_delete(ring_view); ring_view = nullptr; }
+        if (ring_view && now - ring_at >= kRingShowMs && !(undo_done.ring && !undo_done.id.empty())) close_ring();   // N10: not inside the 5 s
         if (!ring_view && !todo_view && !pairing_now && !wifi_opened() && !rename_opened() && f.todos.has_list && f.todos.off_why.empty()) {
             if (auto due = ringer.due(f.todos.list.items, s.time_valid, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour * 60 + t.tm_min, now)) {
                 ring_item = *due;
                 ring_at = now;
                 const TodoView tv = make_todos(look.lang, &f.todos.list, "", f.todos.age_ms, f.ble.secure);
-                std::string detail;
-                for (const auto &g : tv.groups) for (const auto &r : g.rows) if (r.id == due->id) detail = r.detail;
                 char head[48];
                 snprintf(head, sizeof(head), "%02d:%02d", due->minute / 60, due->minute % 60);
-                ring_view = build_todo_ring(lv_layer_top(), fmt_ring_head(head), due->title, detail, tv.can_act && !f.todos.waiting);
+                ring_shown = {fmt_ring_head(head), due->title, todo_ring_line(look.lang, *due), tv.can_act && !f.todos.waiting};   // 13.15: the list and the repeat
+                show_ring(false);
                 audio::ring(quiet_hours(c, s.time_valid, static_cast<uint16_t>(t.tm_hour * 60 + t.tm_min)));
             }
         }
@@ -308,7 +358,8 @@ void update() {
     const bool need_build = page != desired || tab != desired_tab || rebuilding || rendered_revision != c.revision ||
                             ((page == Page::Actions || page == Page::Sources || page == Page::SourceEdit) && actions_changed) ||
                             (page == Page::Actions && ble::current() != built_current) || !built || built_agent != s.agent_ready;
-    Frame f = make_frame(s, c, now, desired == Page::Connect);
+    fill_frame(frame_now, s, c, now, desired == Page::Connect);
+    Frame &f = frame_now;
     if (need_build) {
         const bool same = page == desired;
         if (same && body_scroll_y() >= 0) remember_scroll(body_scroll_y());   // after a new look the body is gone: keep what rebuild_shell remembered
@@ -385,6 +436,7 @@ void request_todo_menu(const std::string &id) {
     const ble::TodoState t = ble::todos();
     const TodoView v = make_todos(look.lang, t.has_list ? &t.list : nullptr, t.off_why, t.age_ms, ble::status().secure);
     if (!v.can_act || t.waiting || todo_dialog) return;   // L4, L5, L10: nothing to do; the page says why
+    if (id == undo_done.id || id == todo_sending || std::find(todo_outbox.begin(), todo_outbox.end(), id) != todo_outbox.end()) return;   // N9
     todo_dialog_id = id;
     todo_dialog = 1;
     request_update();
@@ -407,9 +459,10 @@ void request_todo_choice(int choice) {
         return;
     }
     if (choice == 3 && todo_dialog == 1) { todo_dialog = 2; todo_dialog_at = monotonic_ms(); request_update(); return; }   // L14: ask again
-    const bool send = (choice == 1 || choice == 2) ? todo_dialog == 1 : choice == 4 ? todo_dialog == 2 : false;
+    if (choice == 1 && todo_dialog == 1) { todo_dialog = 0; undo_start(id, false); request_update(); return; }   // 13.15: it waits its 5 s
+    const bool send = choice == 2 ? todo_dialog == 1 : choice == 4 ? todo_dialog == 2 : false;
     todo_dialog = 0;
-    if (send) ble::todo_act(id, choice == 1 ? ble::TodoAction::Done : choice == 2 ? ble::TodoAction::Tomorrow : ble::TodoAction::Delete);
+    if (send) ble::todo_act(id, choice == 2 ? ble::TodoAction::Tomorrow : ble::TodoAction::Delete);
     request_update();
 }
 void note_activity() { policy.last_activity_ms = monotonic_ms(); }
@@ -745,16 +798,26 @@ void request_todo_edit_done(bool save) {
 void request_todo_ring_choice(int choice) {
     note_activity();
     if (!ring_view) return;
-    if (choice == 1) ble::todo_act(ring_item.id, ble::TodoAction::Done);
+    const bool mine = undo_done.ring && undo_done.id == ring_item.id;
+    if (choice == 1 && !mine) { undo_start(ring_item.id, true); show_ring(true); request_update(); return; }   // N10
+    if (choice == 3 && mine) { undo_done = {}; ring_at = monotonic_ms(); show_ring(false); request_update(); return; }   // back to the choices, a new minute
     if (choice == 2) ringer.snooze(ring_item, monotonic_ms());
-    lv_obj_add_flag(ring_view, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_delete_async(ring_view);
-    ring_view = nullptr;
+    close_ring();
+    request_update();
+}
+void request_todo_undo() {   // N1: nothing goes
+    note_activity();
+    if (undo_done.id.empty()) return;
+    const bool ring = undo_done.ring;
+    undo_done = {};
+    if (ring && ring_view) { ring_at = monotonic_ms(); show_ring(false); }
     request_update();
 }
 Page current_page() { return page; }
 std::string todo_selected() { return todo_sel; }
 int todo_dialog_mode() { return todo_dialog_built; }
+std::string todo_undo_id() { return undo_done.id; }
+bool todo_ring_undo() { return ring_view && undo_done.ring && !undo_done.id.empty(); }
 bool todo_ring_shown() { return ring_view != nullptr; }
 void set_wall_for_test(time_t t) { test_wall = t; }
 PowerTab current_power_tab() { return tab; }
@@ -792,6 +855,7 @@ void reset_for_test() {
     todo_rev = 0; todo_rev_built = -1;
     ringer.reset();
     ring_view = nullptr;
+    undo_done = {}; todo_outbox.clear(); todo_sending.clear(); todo_note_at = -1; ring_shown = {};
     ring_at = 0;
     rename_reset();
     look = make_look(appearance);

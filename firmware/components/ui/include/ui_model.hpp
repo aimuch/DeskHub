@@ -84,7 +84,6 @@ std::vector<SourceView> make_sources(Lang, const Snapshot &, const SourceNames &
 enum class Tone { Ok, Info, Warn, Danger, Off };
 constexpr int64_t kPowerStaleMs = 6000;
 bool power_fresh(const PowerState &, int64_t now_ms);  // a sample older than 6 s, from the future, or never taken is stale
-bool metrics_fresh(const Snapshot &, int64_t now_ms);
 
 // ---- header: icons only (the words are on the Connect and Power pages) ----
 enum class LinkIcon { Ok, Busy, Off };  // Off is drawn with a slash; Busy blinks
@@ -187,6 +186,10 @@ struct TodoDraft {
 TodoDraft todo_draft(const ble::Todo &, bool time_valid, int now_year, int now_month, int now_day);
 ble::TodoEdit todo_edit_of(const ble::Todo &, const TodoDraft &);   // the day kept inside its month; no ring without a time
 std::string draft_when_text(Lang, const TodoDraft &, int now_year);  // "11月12日 14:30", "2027年1月3日 全天", "没有日期"
+// ---- after the design review (13.15) ----
+int weekday_of(int year, int month, int day);                   // 0 Sunday .. 6 Saturday
+std::string draft_when_head(Lang, const TodoDraft &);           // "到期 · 周四", "Due | Thu"; "到期" without a date
+std::string todo_ring_line(Lang, const ble::Todo &);            // "工作 · 每周": the list and the repeat, each when there is one
 class TodoRinger {
 public:
     static constexpr int64_t kSnoozeMs = 600000;

@@ -5,7 +5,7 @@
 and write_control kept two of them and a 513-byte buffer on the NimBLE host task's 4 KB stack. This compiles the files again
 with -fstack-usage, using the commands of a firmware build, and fails when a frame on those paths is over its budget.
 
-    python3 scripts/check_stack.py firmware/build-0.3.32
+    python3 scripts/check_stack.py firmware/build
 """
 import json
 import os
@@ -24,7 +24,9 @@ BUDGETS = [
     ("ble_link.cpp", "read_info", 2048),
     # the LVGL task: 12 KB in PSRAM; update() runs every tick and calls the pages. 6496 in 0.3.32 after the to-do overlays moved
     # out of it (6816 before); what earlier versions used was not measured. The budget keeps it from growing unseen.
-    ("ui.cpp", "{anonymous}::update()", 6656),
+    # 6560 after the undo of "done" (13.15). 3904 once the per-tick Frame moved to static storage (code review, 2026-11-12):
+    # the budget follows it down, so the 2.6 KB it gave back stay free for the page code under update().
+    ("ui.cpp", "{anonymous}::update()", 4352),
     ("ui.cpp", "todo_overlays", 4096),
 ]
 WANT = {"ble_link.cpp", "ble_protocol.cpp", "ui.cpp"}
@@ -35,7 +37,8 @@ def main() -> int:
         print(__doc__)
         return 2
     build = os.path.abspath(sys.argv[1])
-    commands = json.load(open(os.path.join(build, "compile_commands.json")))
+    with open(os.path.join(build, "compile_commands.json")) as f:
+        commands = json.load(f)
     out = tempfile.mkdtemp(prefix="stack-")
     found = {}
     for e in commands:
@@ -51,9 +54,10 @@ def main() -> int:
         if r.returncode != 0:
             print(f"{name}: does not compile\n{r.stderr[-2000:]}")
             return 1
-        for line in open(os.path.join(out, name + ".su")):
-            where, size, _ = line.rstrip("\n").split("\t")
-            found.setdefault(name, []).append((where, int(size)))
+        with open(os.path.join(out, name + ".su")) as su:
+            for line in su:
+                where, size, _ = line.rstrip("\n").split("\t")
+                found.setdefault(name, []).append((where, int(size)))
     bad = 0
     for name, part, budget in BUDGETS:
         sizes = [(w, n) for w, n in found.get(name, []) if part in w]

@@ -42,9 +42,6 @@ void set_border(lv_obj_t *o, uint32_t rgb) {
 void set_ink(lv_obj_t *o, uint32_t rgb) {
     if (o && !lv_color_eq(lv_obj_get_style_text_color(o, LV_PART_MAIN), hex(rgb))) lv_obj_set_style_text_color(o, hex(rgb), 0);
 }
-void set_font(lv_obj_t *o, const lv_font_t *font) {
-    if (o && lv_obj_get_style_text_font(o, LV_PART_MAIN) != font) lv_obj_set_style_text_font(o, font, 0);
-}
 void set_translate(lv_obj_t *o, int x, int y) {
     if (!o) return;
     if (lv_obj_get_style_translate_x(o, LV_PART_MAIN) != x) lv_obj_set_style_translate_x(o, x, 0);
