@@ -3,11 +3,121 @@
 // link over HTTP instead of Bluetooth: the same messages go out, the same requests come in, the same white list decides.
 // The pass phrase is kept in the Keychain; the address and the switches in the defaults.
 import DeskHubCore
+import Combine
 import Foundation
 import Security
 
+// The 控制终端 (ThinkSmartView design canvas board 70): one App, several 小麦 gateways (the study's, the office's, …) and the
+// touch screen over Bluetooth. Each gateway gets the same inputs, usage and reminders; a request comes back from one of
+// them and its answer goes back to that one only. The list is in the defaults, each pass phrase in the Keychain under the
+// terminal's id. A Mac that had one gateway (App 0.4.4) keeps it as the first terminal.
 @MainActor
 final class GatewayLink: ObservableObject {
+    @Published private(set) var terminals: [GatewayTerminal] = []
+    @Published private(set) var state: GatewayTerminal.State = .off    // .connected when any terminal is
+
+    var onRequest: ((SwitchRequest) -> Void)?
+    var onTodoAct: ((TodoAct) -> Void)?
+    var sources: () -> [String] = { [] }
+    var current: () -> String = { "" }
+    var inputName: (String) -> String = { $0 }
+
+    private var asked: [UInt32: GatewayTerminal] = [:]        // req -> the terminal it came from
+    private var watches: [AnyCancellable] = []
+
+    init() {
+        if let list = UserDefaults.standard.array(forKey: "gatewayTerminals") as? [[String: Any]] {
+            terminals = list.compactMap { d in
+                guard let id = d["id"] as? String else { return nil }
+                return GatewayTerminal(id: id, name: d["name"] as? String ?? "小麦网关", address: d["address"] as? String ?? "",
+                                       enabled: d["enabled"] as? Bool ?? false, allowTodo: d["allowTodo"] as? Bool ?? true)
+            }
+        } else if let old = UserDefaults.standard.string(forKey: "gatewayAddress"), !old.isEmpty {
+            // App 0.4.4 had one gateway: its pass phrase stays where it was (Keychain account "gateway")
+            terminals = [GatewayTerminal(id: "gateway", name: "小麦网关", address: old, enabled: UserDefaults.standard.bool(forKey: "gatewayOn"),
+                                         allowTodo: UserDefaults.standard.object(forKey: "gatewayAllowTodo") as? Bool ?? true)]
+        }
+        terminals.forEach(adopt)
+        save()
+        terminals.forEach { $0.begin() }
+        recount()
+    }
+
+    var isLive: Bool { terminals.contains { $0.isLive } }
+
+    // ---- the settings page ----
+    @discardableResult
+    func add() -> GatewayTerminal {
+        let t = GatewayTerminal(id: UUID().uuidString, name: terminals.isEmpty ? "小麦网关" : "小麦网关 \(terminals.count + 1)",
+                                address: "", enabled: false, allowTodo: true)
+        adopt(t)
+        terminals.append(t)
+        save()
+        return t
+    }
+    func remove(_ t: GatewayTerminal) {
+        t.forget()
+        terminals.removeAll { $0 === t }
+        asked = asked.filter { $0.value !== t }
+        save()
+        rewatch()
+        recount()
+    }
+
+    // ---- the same calls as TouchScreenLink, to every terminal ----
+    func sendCurrent(_ id: String) { terminals.forEach { $0.sendCurrent(id) } }
+    func resendSources() { terminals.forEach { $0.resendSources() } }
+    func sendUsage(_ message: String) { terminals.forEach { $0.sendUsage(message) } }
+    func sendTodos(_ messages: [String]) { terminals.forEach { $0.sendTodos(messages) } }
+    // an answer: to the terminal that asked (by its req), or to all when it is not known any more
+    func sendResult(_ message: String) {
+        let req = ((try? JSONSerialization.jsonObject(with: Data(message.utf8))) as? [String: Any])?["req"] as? NSNumber
+        if let r = req?.uint32Value, let t = asked.removeValue(forKey: r) {
+            t.sendResult(message)
+        } else {
+            terminals.forEach { $0.sendResult(message) }
+        }
+    }
+
+    private func adopt(_ t: GatewayTerminal) {
+        t.save = { [weak self] in self?.save() }
+        t.sources = { [weak self] in self?.sources() ?? [] }
+        t.current = { [weak self] in self?.current() ?? "" }
+        t.inputName = { [weak self] id in self?.inputName(id) ?? id }
+        t.onRequest = { [weak self, weak t] r in
+            guard let self, let t else { return }
+            self.asked[r.req] = t
+            self.onRequest?(r)
+        }
+        t.onTodoAct = { [weak self, weak t] a in
+            guard let self, let t else { return }
+            self.asked[a.req] = t
+            self.onTodoAct?(a)
+        }
+        rewatch(adding: t)
+    }
+    private func rewatch(adding: GatewayTerminal? = nil) {
+        if adding == nil { watches = [] }
+        for t in adding.map({ [$0] }) ?? terminals {
+            watches.append(t.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
+            watches.append(t.$state.sink { [weak self] _ in DispatchQueue.main.async { self?.recount() } })
+        }
+    }
+    private func recount() {
+        let states = terminals.map(\.state)
+        let next: GatewayTerminal.State = states.contains(.connected) ? .connected
+            : states.contains(.connecting) ? .connecting
+            : states.first { if case .failed = $0 { return true } else { return false } } ?? .off
+        if next != state { state = next }
+    }
+    private func save() {
+        UserDefaults.standard.set(terminals.map(\.saved), forKey: "gatewayTerminals")
+    }
+}
+
+// One 控制终端: one 小麦 gateway this Mac pushes to and takes requests from (the screens on that gateway use it).
+@MainActor
+final class GatewayTerminal: ObservableObject, Identifiable {
     enum State: Equatable {
         case off
         case connecting
@@ -18,9 +128,12 @@ final class GatewayLink: ObservableObject {
     @Published private(set) var state: State = .off
     @Published private(set) var lastPush: Date?
     @Published private(set) var log: [String] = []          // the requests from the screen and their results, newest first
-    @Published var address: String { didSet { UserDefaults.standard.set(address, forKey: "gatewayAddress") } }
-    @Published var allowTodo: Bool { didSet { UserDefaults.standard.set(allowTodo, forKey: "gatewayAllowTodo"); push() } }
+    let id: String
+    @Published var name: String { didSet { save() } }
+    @Published var address: String { didSet { save() } }
+    @Published var allowTodo: Bool { didSet { save(); push() } }
     @Published private(set) var enabled: Bool
+    var save: () -> Void = {}                                 // the list (GatewayLink) keeps the terminals in the defaults
 
     var onRequest: ((SwitchRequest) -> Void)?
     var onTodoAct: ((TodoAct) -> Void)?
@@ -35,15 +148,18 @@ final class GatewayLink: ObservableObject {
     private var pushing = false
     private var labels: [UInt32: String] = [:]               // req -> what was asked, for the log
 
-    init() {
-        address = UserDefaults.standard.string(forKey: "gatewayAddress") ?? ""
-        allowTodo = UserDefaults.standard.object(forKey: "gatewayAllowTodo") as? Bool ?? true
-        enabled = UserDefaults.standard.bool(forKey: "gatewayOn")
-        if enabled { start() }
+    init(id: String, name: String, address: String, enabled: Bool, allowTodo: Bool) {
+        self.id = id
+        self.name = name
+        self.address = address
+        self.allowTodo = allowTodo
+        self.enabled = enabled
     }
+    func begin() { if enabled { start() } }
+    var saved: [String: Any] { ["id": id, "name": name, "address": address, "enabled": enabled, "allowTodo": allowTodo] }
 
     var isLive: Bool { state == .connected }
-    var hasToken: Bool { Keychain.read() != nil }
+    var hasToken: Bool { Keychain.read(id) != nil }
 
     // ---- what the settings page asks ----
     func connect(address text: String, token: String) -> String? {
@@ -51,20 +167,24 @@ final class GatewayLink: ObservableObject {
         let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
         if !t.isEmpty {
             guard GatewayProtocol.tokenOK(t) else { return "口令至少 \(GatewayProtocol.minToken) 个字符，不能有空格" }
-            guard Keychain.write(t) else { return "口令没能存进钥匙串" }
+            guard Keychain.write(id, t) else { return "口令没能存进钥匙串" }
         } else if !hasToken { return "要填连接口令" }
         address = url.absoluteString
         enabled = true
-        UserDefaults.standard.set(true, forKey: "gatewayOn")
+        save()
         stop()
         start()
         return nil
     }
     func disconnect() {
         enabled = false
-        UserDefaults.standard.set(false, forKey: "gatewayOn")
+        save()
         stop()
         state = .off
+    }
+    func forget() {           // removed from the list: stop, and the pass phrase leaves the Keychain
+        disconnect()
+        Keychain.delete(id)
     }
 
     // ---- the same calls as TouchScreenLink ----
@@ -152,7 +272,7 @@ final class GatewayLink: ObservableObject {
 
     // ---- HTTP ----
     private func request(_ path: String, timeout: TimeInterval) -> URLRequest? {
-        guard let base = GatewayProtocol.baseURL(address), let url = URL(string: base.absoluteString + path), let token = Keychain.read() else { return nil }
+        guard let base = GatewayProtocol.baseURL(address), let url = URL(string: base.absoluteString + path), let token = Keychain.read(id) else { return nil }
         var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -169,23 +289,28 @@ final class GatewayLink: ObservableObject {
     }
 }
 
-// The pass phrase in the login Keychain (a generic password of this App).
+// The pass phrases in the login Keychain (generic passwords of this App), one per terminal: the account is the terminal's id
+// ("gateway" for the one App 0.4.4 had).
 enum Keychain {
-    private static let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                               kSecAttrService as String: "DeskHub 小麦网关", kSecAttrAccount as String: "gateway"]
-    static func read() -> String? {
-        var q = query
+    private static func query(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "DeskHub 小麦网关", kSecAttrAccount as String: account]
+    }
+    static func read(_ account: String) -> String? {
+        var q = query(account)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
         return String(data: d, encoding: .utf8)
     }
-    static func write(_ value: String) -> Bool {
-        SecItemDelete(query as CFDictionary)
-        var q = query
+    static func write(_ account: String, _ value: String) -> Bool {
+        SecItemDelete(query(account) as CFDictionary)
+        var q = query(account)
         q[kSecValueData as String] = Data(value.utf8)
         q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+    }
+    static func delete(_ account: String) {
+        SecItemDelete(query(account) as CFDictionary)
     }
 }
