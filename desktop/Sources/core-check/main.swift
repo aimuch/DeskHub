@@ -587,6 +587,32 @@ do {
     check(MagpieUsage.message(quotas: nil, usage: usage, requests: requests, now: now) == MagpieUsage.offline, "no quotas")
     check(MagpieUsage.message(quotas: quotas, usage: Data("<html>".utf8), requests: requests, now: now) == MagpieUsage.offline, "not JSON")
     check(obj(MagpieUsage.offline).count == 2, "the offline message has two fields")
+    // every provider, for the 小麦 gateway (ThinkSmartView 设计画布第 92 块)
+    let allQuotas = Data("""
+    {"object":"list","data":[
+      {"provider":"Codex","name":"Codex","plan":"Plus","user":"someone@example.com","windows":[
+        {"name":"7 days","remaining":37,"resetsAt":"2026-11-11T22:20:00Z"},{"name":"5 hours","remaining":100,"resetsAt":"2026-11-08T10:52:00Z"},
+        {"name":"daily","remaining":80},{"name":"monthly","remaining":70}]},
+      {"provider":"claude","name":"Claude","plan":"max","windows":[{"name":"5 hours","remaining":23.4}]},
+      {"provider":"copilot","name":"Copilot","windows":[],"error":"GitHub refused the sign-in of someone@example.com; sign in again"},
+      {"provider":"codex","name":"dup","windows":[]},
+      {"provider":"","name":"no id","windows":[]}
+    ]}
+    """.utf8)
+    let allText = MagpieUsage.all(quotas: allQuotas, usage: usage, requests: requests, now: now, calendar: cal)
+    let a = obj(allText ?? "")
+    check(a["op"] as? String == "usage_all" && a["ok"] as? Bool == true && a["p"] == nil && a["w"] == nil, "op usage_all, no single provider fields")
+    check(a["c"] as? Int == 128 && a["t"] as? Int == 1_234_567 && a["lm"] as? String == "gpt-6.1-sol", "the same today and latest as the one message")
+    let ps = a["ps"] as? [[String: Any]] ?? []
+    check(ps.map { $0["id"] as? String ?? "" } == ["codex", "claude", "copilot"], "every provider once, in Magpie's order, none without an id: \(ps.map { $0["id"] ?? "" })")
+    check((ps[0]["w"] as? [[String: Any]])?.map { $0["m"] as? Int ?? 0 } == [300, 1440, 10080] && ps[0]["n"] as? String == "Codex" && ps[0]["plan"] as? String == "plus", "up to 3 windows by length, the shown name, the plan")
+    check((ps[1]["w"] as? [[String: Any]])?.first?["r"] as? Int == 23, "left rounded")
+    check((ps[2]["w"] as? [Any])?.isEmpty == true && (ps[2]["x"] as? String)?.contains("sign in again") == true, "no number: why")
+    check(!(allText ?? "").contains("example.com") && !(allText ?? "").contains("someone"), "no account goes out, not even inside an error")
+    check((allText ?? "").utf8.count <= MagpieUsage.maxAll, "within the size")
+    let many = Data(("{\"data\":[" + (0..<20).map { "{\"provider\":\"p\($0)\",\"windows\":[]}" }.joined(separator: ",") + "]}").utf8)
+    check((obj(MagpieUsage.all(quotas: many, usage: usage, requests: nil, now: now) ?? "")["ps"] as? [Any])?.count == MagpieUsage.maxProviders, "at most maxProviders")
+    check(MagpieUsage.all(quotas: nil, usage: usage, requests: nil, now: now) == nil && MagpieUsage.all(quotas: allQuotas, usage: Data("x".utf8), requests: nil, now: now) == nil, "Magpie silent: nil")
 }
 
 // ---- F21: an update counts only when the new firmware passed its self-test (13.11 U16) ----

@@ -1,5 +1,6 @@
 // The Usage page's feed (docs/desktop-app-design.md 13.12): every 15 s, and at once when the touch screen connects, the
-// App reads the local Magpie (127.0.0.1 only) and sends one "usage" message over Bluetooth. Only while the touch screen is
+// App reads the local Magpie (127.0.0.1 only) and sends one "usage" message over Bluetooth (and to the 小麦 gateways, with a
+// "usage_all" message of every provider next to it). Only while the touch screen is
 // connected and the switch in Settings > General is on.
 import Combine
 import DeskHubCore
@@ -46,12 +47,14 @@ final class MagpieFeed: ObservableObject {
             async let q = Self.fetch(MagpieUsage.paths[0])
             async let u = Self.fetch(MagpieUsage.paths[1])
             async let r = Self.fetch(MagpieUsage.paths[2] + "?limit=1")
-            let message = MagpieUsage.message(quotas: await q, usage: await u, requests: await r, now: Date())
+            let (quotas, usage, requests, now) = (await q, await u, await r, Date())
+            let message = MagpieUsage.message(quotas: quotas, usage: usage, requests: requests, now: now)
+            let all = MagpieUsage.all(quotas: quotas, usage: usage, requests: requests, now: now)
             await MainActor.run {
                 self.busy = false
                 self.note = message == MagpieUsage.offline ? "Magpie 没有运行（127.0.0.1:3425 没有回应）" : "Magpie 已连上，每 15 秒发一次"
                 link.sendUsage(message)
-                self.gateway?.sendUsage(message)
+                self.gateway?.sendUsage(message, all: all)
             }
         }
     }

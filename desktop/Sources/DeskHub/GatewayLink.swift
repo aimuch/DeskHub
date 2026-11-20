@@ -67,7 +67,8 @@ final class GatewayLink: ObservableObject {
     // ---- the same calls as TouchScreenLink, to every terminal ----
     func sendCurrent(_ id: String) { terminals.forEach { $0.sendCurrent(id) } }
     func resendSources() { terminals.forEach { $0.resendSources() } }
-    func sendUsage(_ message: String) { terminals.forEach { $0.sendUsage(message) } }
+    // usage: the one message the touch screen also gets; all: every provider (MagpieUsage.all), only to the gateways
+    func sendUsage(_ message: String, all: String? = nil) { terminals.forEach { $0.sendUsage(message, all: all) } }
     func sendTodos(_ messages: [String]) { terminals.forEach { $0.sendTodos(messages) } }
     // an answer: to the terminal that asked (by its req), or to all when it is not known any more
     func sendResult(_ message: String) {
@@ -142,6 +143,7 @@ final class GatewayTerminal: ObservableObject, Identifiable {
     var inputName: (String) -> String = { $0 }               // an input's id -> its name in the menu (for the log)
 
     private var usage: String?
+    private var usageAll: String?          // every provider: newer gateways show them all, older ones ignore it
     private var todos: [String] = []
     private var timer: Timer?
     private var waiting: Task<Void, Never>?
@@ -190,7 +192,7 @@ final class GatewayTerminal: ObservableObject, Identifiable {
     // ---- the same calls as TouchScreenLink ----
     func sendCurrent(_ id: String) { push() }
     func resendSources() { push() }
-    func sendUsage(_ message: String) { usage = message }
+    func sendUsage(_ message: String, all: String? = nil) { usage = message; usageAll = all }
     func sendTodos(_ messages: [String]) { todos = messages }
     func sendResult(_ message: String) {
         if let o = (try? JSONSerialization.jsonObject(with: Data(message.utf8))) as? [String: Any], let req = (o["req"] as? NSNumber)?.uint32Value {
@@ -221,7 +223,7 @@ final class GatewayTerminal: ObservableObject, Identifiable {
     func push() {
         guard enabled, !pushing else { return }
         pushing = true
-        let messages = sources() + [LinkProtocol.currentMessage(current())] + (usage.map { [$0] } ?? []) + todos
+        let messages = sources() + [LinkProtocol.currentMessage(current())] + (usage.map { [$0] } ?? []) + (usageAll.map { [$0] } ?? []) + todos
         let body = GatewayProtocol.pushBody(name: Host.current().localizedName ?? "Mac", messages: messages, allowTodo: allowTodo)
         Task {
             let status = await post(GatewayProtocol.pushPath, body)

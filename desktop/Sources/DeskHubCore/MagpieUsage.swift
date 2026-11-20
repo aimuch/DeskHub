@@ -14,12 +14,7 @@ public enum MagpieUsage {
         // G9: the provider whose window is used the most; its windows (not unlimited, with a number left), by length, at most 2
         var best: (provider: [String: Any], windows: [(m: Int, r: Int, s: Int)], low: Int)?
         for case let provider as [String: Any] in q["data"] as? [Any] ?? [] {
-            var windows: [(m: Int, r: Int, s: Int)] = []
-            for case let w as [String: Any] in provider["windows"] as? [Any] ?? [] {
-                guard (w["unlimited"] as? Bool) != true, let left = number(w["remaining"]), let m = minutes(w["name"] as? String ?? "") else { continue }
-                let reset = (w["resetsAt"] as? String).flatMap(date).map { Int($0.timeIntervalSince(now)) } ?? 0
-                windows.append((m, clamp(Int(left.rounded()), 0, 100), clamp(reset, 0, 31_536_000)))
-            }
+            let windows = windowsOf(provider, now: now)
             let low = windows.map(\.r).min() ?? 101
             if best == nil || low < best!.low { best = (provider, windows, low) }
         }
@@ -49,6 +44,48 @@ public enum MagpieUsage {
             "c": calls, "e": errors, "t": tokens, "f": ttft, "lm": model, "ls": status, "lms": ms, "la": age,
         ]
         guard let d = try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes]), d.count <= 512 else { return offline }
+        return String(decoding: d, as: UTF8.self)
+    }
+
+    // A provider's windows: not unlimited, with a number left, a known length; seconds to reset from the ISO time
+    static func windowsOf(_ provider: [String: Any], now: Date) -> [(m: Int, r: Int, s: Int)] {
+        var windows: [(m: Int, r: Int, s: Int)] = []
+        for case let w as [String: Any] in provider["windows"] as? [Any] ?? [] {
+            guard (w["unlimited"] as? Bool) != true, let left = number(w["remaining"]), let m = minutes(w["name"] as? String ?? "") else { continue }
+            let reset = (w["resetsAt"] as? String).flatMap(date).map { Int($0.timeIntervalSince(now)) } ?? 0
+            windows.append((m, clamp(Int(left.rounded()), 0, 100), clamp(reset, 0, 31_536_000)))
+        }
+        return windows
+    }
+
+    // Every provider, for the 小麦 gateway only (its push takes 64 KB; the touch screen keeps the one message above, 512 bytes):
+    // the same today and latest fields, and "ps": [{"id", "n" (the name Magpie shows), "plan", "w": up to 3 windows by length,
+    // "x": why there is no number (Magpie's error, with anything like an e-mail taken out)}], at most maxProviders.
+    // nil: Magpie did not answer.
+    public static let maxProviders = 8, maxAll = 8192
+    public static func all(quotas: Data?, usage: Data?, requests: Data?, now: Date, calendar: Calendar = .current) -> String? {
+        guard let q = json(quotas), json(usage) != nil else { return nil }
+        guard var o = json(Data(message(quotas: quotas, usage: usage, requests: requests, now: now, calendar: calendar).utf8)),
+              o["ok"] as? Bool == true else { return nil }
+        var providers: [[String: Any]] = []
+        var seen = Set<String>()
+        for case let provider as [String: Any] in q["data"] as? [Any] ?? [] {
+            if providers.count >= maxProviders { break }
+            let id = name(provider["provider"] as? String ?? "")
+            guard !id.isEmpty, seen.insert(id).inserted else { continue }
+            let windows = windowsOf(provider, now: now).sorted { $0.m < $1.m }.prefix(3)
+            var p: [String: Any] = ["id": id, "n": cut(provider["name"] as? String ?? id, bytes: 32),
+                                    "plan": name(provider["plan"] as? String ?? ""), "w": windows.map { ["m": $0.m, "r": $0.r, "s": $0.s] }]
+            if windows.isEmpty, let e = provider["error"] as? String, !e.isEmpty {
+                let clean = e.replacingOccurrences(of: #"\S+@\S+"#, with: "…", options: .regularExpression)
+                p["x"] = cut(clean, bytes: 120)
+            }
+            providers.append(p)
+        }
+        o["op"] = "usage_all"
+        o["ps"] = providers
+        o.removeValue(forKey: "p"); o.removeValue(forKey: "plan"); o.removeValue(forKey: "w")
+        guard let d = try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes]), d.count <= maxAll else { return nil }
         return String(decoding: d, as: UTF8.self)
     }
 
